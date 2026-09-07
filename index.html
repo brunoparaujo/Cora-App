@@ -12,385 +12,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
   <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            rose: {
-              50: '#fff1f2',
-              100: '#ffe4e6',
-              200: '#fecdd3',
-              300: '#fda4af',
-              400: '#fb7185',
-              500: '#f43f5e',
-              600: '#e11d48',
-              700: '#be123c',
-            },
-            terracota: {
-              50: '#fdf8f6',
-              100: '#f2e8e5',
-              200: '#e4d1cb',
-              300: '#d0b2a7',
-              400: '#b88c7d',
-              500: '#a36d5e',
-              600: '#8c5345',
-              700: '#724035',
-            },
-            sage: {
-              50: '#f4f7f4',
-              100: '#e3ebe3',
-              200: '#c7d7c7',
-              300: '#a3be9e',
-              400: '#7fa27a',
-              500: '#62865c',
-            }
-          },
-          fontFamily: {
-            sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
-          }
-        }
-      }
-    }
-  </script>
-  <style>
-    /* Estilos personalizados de rolagem e UI */
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    body { -webkit-tap-highlight-color: transparent; }
-    .glass-card {
-      background: rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-    }
-  </style>
-</head>
-<body class="bg-[#FBF8F6] text-gray-800 font-sans pb-24 min-h-screen">
-
-  <!-- TOP HEADER -->
-  <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-rose-100 px-4 py-3 shadow-sm">
-    <div class="max-w-md mx-auto flex items-center justify-between">
-      <div class="flex items-center space-x-2">
-        <div class="w-9 h-9 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 font-bold text-lg">
-          👶
-        </div>
-        <div>
-          <h1 class="text-lg font-bold text-gray-900 leading-tight">Enxoval da Cora</h1>
-          <p class="text-xs text-rose-600 font-medium">DPP: 21/Fev • Niterói, RJ</p>
-        </div>
-      </div>
-      <div class="flex items-center space-x-2">
-        <button onclick="openSettingsModal()" aria-label="Configurações" class="p-2 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
-          <i data-lucide="sliders-horizontal" class="w-5 h-5"></i>
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <main class="max-w-md mx-auto px-4 pt-4 space-y-4">
-
-    <!-- DASHBOARD PROGRESS CARD -->
-    <div class="bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-100 rounded-2xl p-4 shadow-xs">
-      <div class="flex justify-between items-center mb-2">
-        <div>
-          <span id="progressPercentText" class="text-2xl font-extrabold text-rose-600">0%</span>
-          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider ml-1">concluído</span>
-        </div>
-        <div class="text-right">
-          <p id="progressItemsCount" class="text-xs font-bold text-gray-700">0 de 0 peças</p>
-          <p id="financeTotalSpent" class="text-xs text-rose-700 font-semibold">Gasto: R$ 0,00</p>
-        </div>
-      </div>
-      
-      <div class="w-full bg-rose-200/60 rounded-full h-2.5 overflow-hidden mb-3">
-        <div id="progressBar" class="bg-rose-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
-      </div>
-
-      <!-- WIDGET CLIMA & DP -->
-      <div class="bg-white/80 rounded-xl p-3 border border-rose-100 text-xs">
-        <div class="flex items-center justify-between text-gray-600 mb-2 font-medium">
-          <span class="flex items-center gap-1"><i data-lucide="sun-medium" class="w-3.5 h-3.5 text-amber-500"></i> Estações do Crescimento (RJ):</span>
-          <span id="seasonTip" class="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full font-semibold">Análise Ativa</span>
-        </div>
-        <div class="grid grid-cols-4 gap-1 text-center font-medium">
-          <div class="p-1.5 rounded-lg bg-orange-50 border border-orange-100">
-            <span class="block text-[10px] text-gray-500 font-bold">RN (Fev)</span>
-            <span class="block text-xs font-bold text-orange-600">☀️ 28°C</span>
-            <span class="text-[9px] text-gray-400">Verão / Ar</span>
-          </div>
-          <div class="p-1.5 rounded-lg bg-amber-50 border border-amber-100">
-            <span class="block text-[10px] text-gray-500 font-bold">P (Mar-Mai)</span>
-            <span class="block text-xs font-bold text-amber-600">⛅ 25°C</span>
-            <span class="text-[9px] text-gray-400">Transição</span>
-          </div>
-          <div class="p-1.5 rounded-lg bg-blue-50 border border-blue-100">
-            <span class="block text-[10px] text-gray-500 font-bold">M (Mai-Ago)</span>
-            <span class="block text-xs font-bold text-blue-600">🌤️ 21°C</span>
-            <span class="text-[9px] text-gray-400">Inverno RJ</span>
-          </div>
-          <div class="p-1.5 rounded-lg bg-green-50 border border-green-100">
-            <span class="block text-[10px] text-gray-500 font-bold">G (Ago-Nov)</span>
-            <span class="block text-xs font-bold text-green-600">☀️ 26°C</span>
-            <span class="text-[9px] text-gray-400">Primavera</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- SEÇÃO: ENXOVAL PRINCIPAL -->
-    <div id="sectionEnxoval" class="space-y-4">
-      
-      <!-- CARROSSEL DE CATEGORIAS (ESTILO CARDS DO PRINT) -->
-      <div class="grid grid-cols-3 gap-2">
-        <button onclick="filterCategory('vestuario')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-1 text-xl">👚</div>
-          <span class="text-xs font-bold text-gray-800">Vestuário</span>
-          <span id="catBadgeVestuario" class="text-[10px] text-gray-400 font-medium">0/0</span>
-        </button>
-        <button onclick="filterCategory('quarto')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mb-1 text-xl">🛏️</div>
-          <span class="text-xs font-bold text-gray-800">Quarto</span>
-          <span id="catBadgeQuarto" class="text-[10px] text-gray-400 font-medium">0/0</span>
-        </button>
-        <button onclick="filterCategory('higiene')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-1 text-xl">🛁</div>
-          <span class="text-xs font-bold text-gray-800">Higiene</span>
-          <span id="catBadgeHigiene" class="text-[10px] text-gray-400 font-medium">0/0</span>
-        </button>
-        <button onclick="filterCategory('alimentacao')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mb-1 text-xl">🍼</div>
-          <span class="text-xs font-bold text-gray-800">Alimentação</span>
-          <span id="catBadgeAlimentacao" class="text-[10px] text-gray-400 font-medium">0/0</span>
-        </button>
-        <button onclick="filterCategory('passeio')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div class="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mb-1 text-xl">👶</div>
-          <span class="text-xs font-bold text-gray-800">Passeio</span>
-          <span id="catBadgePasseio" class="text-[10px] text-gray-400 font-medium">0/0</span>
-        </button>
-        <button onclick="filterCategory('mamae')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div class="w-10 h-10 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center mb-1 text-xl">🤰</div>
-          <span class="text-xs font-bold text-gray-800">Mamãe</span>
-          <span id="catBadgeMamae" class="text-[10px] text-gray-400 font-medium">0/0</span>
-        </button>
-      </div>
-
-      <!-- FILTROS SECUNDÁRIOS & BUSCA -->
-      <div class="flex items-center space-x-2">
-        <div class="relative flex-1">
-          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-gray-400"></i>
-          <input type="text" id="searchInput" onkeyup="renderItems()" placeholder="Buscar item ou marca..." class="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-400">
-        </div>
-        <select id="filterStatus" onchange="renderItems()" class="bg-white border border-gray-200 text-xs rounded-xl px-2 py-1.5 focus:outline-none font-medium text-gray-600">
-          <option value="todos">Todos os Itens</option>
-          <option value="faltam">🚨 O que falta</option>
-          <option value="completos">✅ Comprados / OK</option>
-          <option value="essenciais">⭐ Essenciais</option>
-        </select>
-      </div>
-
-      <!-- DICA DA CATEGORIA SELECCIONADA -->
-      <div id="categoryTipBox" class="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 flex items-start gap-2">
-        <i data-lucide="lightbulb" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
-        <p id="categoryTipText">Para o RJ em Fev: Dê prioridade a tecidos 100% algodão bem leves para o dia e manga longa fina para o ar-condicionado.</p>
-      </div>
-
-      <!-- LISTA DINÂMICA DE ITENS (CARDS COM STEPPER POR TAMANHO) -->
-      <div id="itemsContainer" class="space-y-4">
-        <!-- Renderizado via JavaScript -->
-      </div>
-    </div>
-
-    <!-- SEÇÃO: MALA DA MATERNIDADE -->
-    <div id="sectionMaternidade" class="hidden space-y-4">
-      <div class="bg-white rounded-2xl border border-rose-100 p-4 shadow-xs">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="font-bold text-gray-900 flex items-center gap-2">
-            <i data-lucide="backpack" class="w-5 h-5 text-rose-500"></i> Checklist da Maternidade
-          </h2>
-          <span id="maternidadeProgress" class="text-xs bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded-full">0/0</span>
-        </div>
-        <p class="text-xs text-gray-500 mb-4">Recomendado deixar a mala pronta até a 34ª-36ª semana de gestação.</p>
-
-        <!-- SUB-ABAS MATERNIDADE -->
-        <div class="space-y-4" id="maternidadeChecklistContainer">
-          <!-- Renderizado via JS -->
-        </div>
-      </div>
-    </div>
-
-    <!-- SEÇÃO: RESUMO FINANCEIRO -->
-    <div id="sectionResumo" class="hidden space-y-4">
-      <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-xs space-y-4">
-        <h2 class="font-bold text-gray-900 flex items-center gap-2">
-          <i data-lucide="coins" class="w-5 h-5 text-emerald-600"></i> Orçamento & Presentes
-        </h2>
-
-        <div class="grid grid-cols-2 gap-2 text-center">
-          <div class="p-3 rounded-xl bg-gray-50 border border-gray-200">
-            <span class="text-[10px] text-gray-500 uppercase font-semibold">Total pago (Bolso)</span>
-            <p id="resumoGastoReal" class="text-lg font-extrabold text-gray-900">R$ 0,00</p>
-          </div>
-          <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-            <span class="text-[10px] text-emerald-700 uppercase font-semibold">Valor estimado em presentes</span>
-            <p id="resumoEconomiaPresentes" class="text-lg font-extrabold text-emerald-700">R$ 0,00</p>
-          </div>
-        </div>
-
-        <div>
-          <h3 class="text-xs font-bold text-gray-700 mb-2">Itens adquiridos com detalhe de valor</h3>
-          <div id="listaDetalhadaCompras" class="space-y-2 max-h-80 overflow-y-auto pr-1 no-scrollbar">
-            <!-- Renderizado via JS -->
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </main>
-
-  <!-- BOTÃO FLUTUANTE DE ADICIONAR ITEM -->
-  <button onclick="openAddItemModal()" class="fixed bottom-20 right-4 bg-rose-600 text-white rounded-full p-4 shadow-lg hover:bg-rose-700 active:scale-95 transition flex items-center justify-center z-30">
-    <i data-lucide="plus" class="w-6 h-6"></i>
-  </button>
-
-  <!-- BARRA DE NAVEGAÇÃO INFERIOR: SOMENTE NAVEGAÇÃO -->
-  <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 z-40 py-2 px-6">
-    <div class="max-w-md mx-auto grid grid-cols-3 items-center text-center">
-      <button onclick="switchTab('enxoval')" id="navBtnEnxoval" class="nav-item text-rose-600 flex flex-col items-center justify-center py-1 transition">
-        <i data-lucide="list-checks" class="w-5 h-5"></i>
-        <span class="text-[10px] font-bold mt-1">Enxoval</span>
-      </button>
-      <button onclick="switchTab('maternidade')" id="navBtnMaternidade" class="nav-item text-gray-400 flex flex-col items-center justify-center py-1 transition hover:text-gray-600">
-        <i data-lucide="backpack" class="w-5 h-5"></i>
-        <span class="text-[10px] font-medium mt-1">Maternidade</span>
-      </button>
-      <button onclick="switchTab('resumo')" id="navBtnResumo" class="nav-item text-gray-400 flex flex-col items-center justify-center py-1 transition hover:text-gray-600">
-        <i data-lucide="wallet" class="w-5 h-5"></i>
-        <span class="text-[10px] font-medium mt-1">Financeiro</span>
-      </button>
-    </div>
-  </nav>
-
-  <!-- MODAL ADICIONAR / EDITAR ITEM -->
-  <div id="modalItem" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
-    <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-5 space-y-4 shadow-xl">
-      <div class="flex justify-between items-center border-b pb-2">
-        <h3 id="modalTitle" class="font-bold text-gray-900 text-base">Novo Item no Enxoval</h3>
-        <button onclick="closeModal('modalItem')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
-      </div>
-
-      <form id="itemForm" onsubmit="saveItem(event)" class="space-y-3">
-        <input type="hidden" id="itemId">
-
-        <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Nome do Item</label>
-          <input type="text" id="itemName" required placeholder="Ex: Body Manga Curta" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-400 outline-none">
-        </div>
-
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="block text-xs font-semibold text-gray-700 mb-1">Categoria</label>
-            <select id="itemCategory" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-400 outline-none">
-              <option value="vestuario">Vestuário</option>
-              <option value="quarto">Quarto do Bebê</option>
-              <option value="higiene">Higiene e Banho</option>
-              <option value="alimentacao">Alimentação</option>
-              <option value="passeio">Passeio e Transporte</option>
-              <option value="mamae">Coisas da Mamãe</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-700 mb-1">Importância</label>
-            <select id="itemEssential" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-400 outline-none">
-              <option value="true">⭐ Essencial</option>
-              <option value="false">Opcional / Desejável</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- QUANTIDADES E METAS -->
-        <div id="sizeQuantitiesBox" class="border border-gray-100 bg-rose-50/40 p-3 rounded-xl space-y-2">
-          <label class="block text-xs font-bold text-gray-800">Metas, estoque e presentes</label>
-          <p class="text-[10px] text-gray-500">"Possui" = tudo que vocês já têm. "Presente" = parte desse estoque que não foi paga por vocês.</p>
-
-          <div class="grid grid-cols-4 gap-2 text-center text-xs">
-            <div>
-              <span class="block text-[10px] text-gray-500 font-bold">RN</span>
-              <input type="number" id="qty_RN" min="0" placeholder="Possui" class="w-full text-center p-1 bg-white border border-gray-200 rounded-lg text-xs">
-              <input type="number" id="target_RN" min="0" placeholder="Meta" class="w-full text-center p-1 bg-white/60 border border-gray-100 rounded-lg text-[10px] mt-1 text-gray-400">
-            </div>
-            <div>
-              <span class="block text-[10px] text-gray-500 font-bold">P</span>
-              <input type="number" id="qty_P" min="0" placeholder="Possui" class="w-full text-center p-1 bg-white border border-gray-200 rounded-lg text-xs">
-              <input type="number" id="target_P" min="0" placeholder="Meta" class="w-full text-center p-1 bg-white/60 border border-gray-100 rounded-lg text-[10px] mt-1 text-gray-400">
-            </div>
-            <div>
-              <span class="block text-[10px] text-gray-500 font-bold">M</span>
-              <input type="number" id="qty_M" min="0" placeholder="Possui" class="w-full text-center p-1 bg-white border border-gray-200 rounded-lg text-xs">
-              <input type="number" id="target_M" min="0" placeholder="Meta" class="w-full text-center p-1 bg-white/60 border border-gray-100 rounded-lg text-[10px] mt-1 text-gray-400">
-            </div>
-            <div>
-              <span class="block text-[10px] text-gray-500 font-bold">Único / G</span>
-              <input type="number" id="qty_U" min="0" placeholder="Possui" class="w-full text-center p-1 bg-white border border-gray-200 rounded-lg text-xs">
-              <input type="number" id="target_U" min="0" placeholder="Meta" class="w-full text-center p-1 bg-white/60 border border-gray-100 rounded-lg text-[10px] mt-1 text-gray-400">
-            </div>
-          </div>
-        </div>
-
-        <!-- PRESENTES / DOAÇÕES POR TAMANHO -->
-        <div class="border border-emerald-100 bg-emerald-50/40 p-3 rounded-xl space-y-2">
-          <label class="block text-xs font-bold text-gray-800">Quantos dos que vocês possuem foram presentes/doações?</label>
-          <p class="text-[10px] text-gray-500">A soma de presentes não pode ser maior que o estoque atual.</p>
-          <div class="grid grid-cols-4 gap-2 text-center text-xs">
-            <div>
-              <span class="block text-[10px] text-gray-500 font-bold">RN</span>
-              <input type="number" id="gift_RN" min="0" placeholder="0" class="w-full text-center p-1 bg-white border border-gray-200 rounded-lg text-xs">
-            </div>
-            <div>
-              <span class="block text-[10px] text-gray-500 font-bold">P</span>
-              <input type="number" id="gift_P" min="0" placeholder="0" class="w-full text-center p-1 bg-white border border-gray-200 rounded-lg text-xs">
-            </div>
-            <div>
-              <span class="block text-[10px] text-gray-500 font-bold">M</span>
-              <input type="number" id="gift_M" min="0" placeholder="0" class="w-full text-center p-1 bg-white border border-gray-200 rounded-lg text-xs">
-            </div>
-            <div>
-              <span class="block text-[10px] text-gray-500 font-bold">Único / G</span>
-              <input type="number" id="gift_U" min="0" placeholder="0" class="w-full text-center p-1 bg-white border border-gray-200 rounded-lg text-xs">
-            </div>
-          </div>
-        </div>
-
-        <!-- DETALHES DE COMPRA -->
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="block text-xs font-semibold text-gray-700 mb-1">Marca / Modelo</label>
-            <input type="text" id="itemBrand" placeholder="Ex: Mini & Co / Up Baby" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-700 mb-1">Total pago neste item (R$)</label>
-            <input type="number" step="0.01" id="itemPrice" placeholder="0.00" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Valor estimado dos presentes (opcional)</label>
-          <input type="number" step="0.01" id="itemGiftValue" placeholder="Só preencha se souber o valor" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Observações / Cores</label>
-          <input type="text" id="itemNotes" placeholder="Ex: 1 Rosa (BB2), 1 Branco (Mini & Co)" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
-        </div>
-
-        <div class="pt-2 flex space-x-2">
-          <button type="button" onclick="closeModal('modalItem')" class="w-1/2 py-2.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">Cancelar</button>
-          <button type="submit" class="w-1/2 py-2.5 text-xs font-bold text-white bg-rose-600 rounded-xl hover:bg-rose-700 shadow-md">Salvar Item</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- JAVASCRIPT LÓGICA COMPLETA -->
-  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyCAhZfbA7UtRDIPy38crac_44WJ3jn-4Ag",
       authDomain: "app-da-cora.firebaseapp.com",
@@ -400,47 +21,16 @@
       messagingSenderId: "632318857310",
       appId: "1:632318857310:web:9e2e7d933f0d1d4ce664cf"
     };
-  
+
     if (!firebase.apps.length) {
       firebase.initializeApp(firebaseConfig);
     }
     const db = firebase.database();
-  
-    // ESTADO DA APLICAÇÃO E BANCO DE DADOS INICIAL
-    // V2: cada item fica separado no Firebase para reduzir conflitos entre os dois celulares.
-    // "current" continua sendo a quantidade que vocês possuem; "gift" é a parte recebida como presente/doação.
-    function normalizeItem(item) {
-      const sizes = item.sizes || {};
-      const normalizeSize = (key) => {
-        const source = sizes[key] || {};
-        return {
-          current: Number(source.current ?? source.owned ?? 0),
-          target: Number(source.target ?? 0),
-          gift: Number(source.gift ?? 0)
-        };
-      };
 
-      return {
-        id: item.id,
-        name: item.name || 'Item sem nome',
-        category: item.category || 'vestuario',
-        essential: !!item.essential,
-        brand: item.brand || '',
-        notes: item.notes || '',
-        pricePaid: Number(item.pricePaid ?? item.price ?? 0),
-        giftValue: Number(item.giftValue ?? 0),
-        sizes: {
-          RN: normalizeSize('RN'),
-          P: normalizeSize('P'),
-          M: normalizeSize('M'),
-          U: normalizeSize('U')
-        }
-      };
-    }
-
-    function itemToFirebase(item) {
-      return normalizeItem(item);
-    }
+    // V3.3 — Item é uma necessidade do enxoval; aquisições registram como cada peça chegou.
+    const SIZE_KEYS = ['RN', 'P', 'M', 'U'];
+    const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', U: 'Único' };
+    const SCHEMA_VERSION = 3;
 
     const INITIAL_ITEMS = [
       // VESTUÁRIO (COM OS DADOS INFORMADOS DA CORA)
@@ -735,49 +325,167 @@
       items: [],
       maternidade: [],
       activeCategory: 'vestuario',
-      activeTab: 'enxoval'
+      activeTab: 'enxoval',
+      activeHistoryItemId: null
     };
 
-    // INICIALIZAÇÃO / SINCRONIZAÇÃO EM TEMPO REAL
-    // Estrutura nova:
-    // cora/items/{id}
-    // cora/maternidade/{id}
-    async function initRealtimeSync() {
-      try {
-        const rootRef = db.ref('cora');
-        const rootSnapshot = await rootRef.once('value');
+    function money(value) {
+      return `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
+    }
 
-        if (!rootSnapshot.exists()) {
-          await seedDatabase();
-        } else {
-          const root = rootSnapshot.val() || {};
-          // Migração única da estrutura antiga enxoval_items.
-          if (!root.items) {
-            await migrateLegacyDatabase();
-          }
+    function normalizeAcquisition(acq, idFallback) {
+      return {
+        id: acq.id || idFallback,
+        size: SIZE_KEYS.includes(acq.size) ? acq.size : 'U',
+        quantity: Math.max(1, Number(acq.quantity) || 1),
+        unitPrice: acq.type === 'gift' ? 0 : Math.max(0, Number(acq.unitPrice) || 0),
+        type: acq.type === 'gift' ? 'gift' : 'purchase',
+        brand: acq.brand || '',
+        notes: acq.notes || '',
+        legacy: !!acq.legacy
+      };
+    }
+
+    function legacyToAcquisitions(item) {
+      const acquisitions = {};
+      const sizes = item.sizes || {};
+      const purchaseBySize = {};
+      let totalPurchased = 0;
+
+      SIZE_KEYS.forEach(size => {
+        const source = sizes[size] || {};
+        const current = Math.max(0, Number(source.current ?? source.owned ?? 0));
+        const gift = Math.min(current, Math.max(0, Number(source.gift ?? 0)));
+        const purchased = Math.max(0, current - gift);
+        purchaseBySize[size] = purchased;
+        totalPurchased += purchased;
+      });
+
+      const legacyTotalPaid = Number(item.pricePaid ?? item.price ?? 0) || 0;
+      const legacyUnitPrice = totalPurchased > 0 ? legacyTotalPaid / totalPurchased : 0;
+
+      SIZE_KEYS.forEach(size => {
+        const source = sizes[size] || {};
+        const current = Math.max(0, Number(source.current ?? source.owned ?? 0));
+        const gift = Math.min(current, Math.max(0, Number(source.gift ?? 0)));
+        const purchased = Math.max(0, current - gift);
+
+        if (purchased > 0) {
+          const id = `legacy_purchase_${item.id}_${size}`;
+          acquisitions[id] = normalizeAcquisition({
+            id,
+            size,
+            quantity: purchased,
+            unitPrice: legacyUnitPrice,
+            type: 'purchase',
+            brand: item.brand || '',
+            notes: 'Registro migrado da versão anterior do Cora.',
+            legacy: true
+          }, id);
         }
 
-        rootRef.on('value', (snapshot) => {
-          const data = snapshot.val() || {};
-          appState.items = Object.values(data.items || {}).map(normalizeItem);
-          appState.maternidade = Object.values(data.maternidade || {});
-          renderAll();
+        if (gift > 0) {
+          const id = `legacy_gift_${item.id}_${size}`;
+          acquisitions[id] = normalizeAcquisition({
+            id,
+            size,
+            quantity: gift,
+            unitPrice: 0,
+            type: 'gift',
+            brand: item.brand || '',
+            notes: 'Registro de presente/doação migrado da versão anterior do Cora.',
+            legacy: true
+          }, id);
+        }
+      });
+
+      return { acquisitions, legacyPaidRemainder: 0 };
+    }
+
+    function normalizeItem(item) {
+      const normalized = {
+        id: item.id,
+        name: item.name || 'Item sem nome',
+        category: item.category || 'vestuario',
+        essential: !!item.essential,
+        notes: item.notes || '',
+        sizes: {},
+        acquisitions: {}
+      };
+
+      SIZE_KEYS.forEach(size => {
+        const source = (item.sizes && item.sizes[size]) || {};
+        normalized.sizes[size] = {
+          target: Math.max(0, Number(source.target) || 0)
+        };
+      });
+
+      if (item.acquisitions && typeof item.acquisitions === 'object') {
+        Object.entries(item.acquisitions).forEach(([id, acq]) => {
+          normalized.acquisitions[id] = normalizeAcquisition(acq, id);
         });
-      } catch (error) {
-        console.error('Erro ao iniciar sincronização:', error);
-        alert('Não foi possível conectar ao banco da Cora. Verifique a internet e tente novamente.');
+      } else {
+        const migrated = legacyToAcquisitions(item);
+        normalized.acquisitions = migrated.acquisitions;
+        if (!Object.keys(normalized.acquisitions).length && Number(item.pricePaid ?? item.price ?? 0) > 0) {
+          normalized.legacyPaidRemainder = Number(item.pricePaid ?? item.price ?? 0);
+        }
       }
+
+      if (Number(item.legacyPaidRemainder) > 0) {
+        normalized.legacyPaidRemainder = Number(item.legacyPaidRemainder);
+      }
+
+      return normalized;
+    }
+
+    function itemToFirebase(item) {
+      return normalizeItem(item);
+    }
+
+    function getAcquisitions(item) {
+      return Object.values(item.acquisitions || {});
+    }
+
+    function getOwnedForSize(item, size) {
+      return getAcquisitions(item)
+        .filter(acq => acq.size === size)
+        .reduce((sum, acq) => sum + (Number(acq.quantity) || 0), 0);
+    }
+
+    function getOwnedTotal(item) {
+      return SIZE_KEYS.reduce((sum, size) => sum + getOwnedForSize(item, size), 0);
+    }
+
+    function getTargetTotal(item) {
+      return SIZE_KEYS.reduce((sum, size) => sum + (Number(item.sizes?.[size]?.target) || 0), 0);
+    }
+
+    function getPurchaseTotal(item) {
+      return getAcquisitions(item)
+        .filter(acq => acq.type === 'purchase')
+        .reduce((sum, acq) => sum + ((Number(acq.quantity) || 0) * (Number(acq.unitPrice) || 0)), 0) + (Number(item.legacyPaidRemainder) || 0);
+    }
+
+    function getPurchasedPieces(item) {
+      return getAcquisitions(item)
+        .filter(acq => acq.type === 'purchase')
+        .reduce((sum, acq) => sum + (Number(acq.quantity) || 0), 0);
+    }
+
+    function seedItemFromInitial(item) {
+      return itemToFirebase(item);
     }
 
     async function seedDatabase() {
       const updates = {};
       INITIAL_ITEMS.forEach(item => {
-        updates[`cora/items/${item.id}`] = itemToFirebase(item);
+        updates[`cora/items/${item.id}`] = seedItemFromInitial(item);
       });
       MATERNIDADE_DEFAULT.forEach(item => {
         updates[`cora/maternidade/${item.id}`] = item;
       });
-      updates['cora/meta/schemaVersion'] = 2;
+      updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
       updates['cora/meta/updatedAt'] = firebase.database.ServerValue.TIMESTAMP;
       await db.ref().update(updates);
     }
@@ -785,7 +493,6 @@
     async function migrateLegacyDatabase() {
       const oldSnapshot = await db.ref('enxoval_items').once('value');
       const oldData = oldSnapshot.val();
-
       if (!oldData || !oldData.items) {
         await seedDatabase();
         return;
@@ -796,20 +503,73 @@
         const normalized = normalizeItem(item);
         updates[`cora/items/${normalized.id}`] = normalized;
       });
-
       Object.values(oldData.maternidade || {}).forEach(item => {
         updates[`cora/maternidade/${item.id}`] = item;
       });
-
       if (!Object.keys(oldData.maternidade || {}).length) {
         MATERNIDADE_DEFAULT.forEach(item => {
           updates[`cora/maternidade/${item.id}`] = item;
         });
       }
-
-      updates['cora/meta/schemaVersion'] = 2;
+      updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
       updates['cora/meta/migratedAt'] = firebase.database.ServerValue.TIMESTAMP;
       await db.ref().update(updates);
+    }
+
+    async function migrateCurrentV2ToV3(root) {
+      const updates = {};
+      Object.values(root.items || {}).forEach(item => {
+        const normalized = normalizeItem(item);
+        updates[`cora/items/${normalized.id}`] = normalized;
+      });
+      updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
+      updates['cora/meta/migratedFrom'] = 2;
+      updates['cora/meta/migratedAt'] = firebase.database.ServerValue.TIMESTAMP;
+      await db.ref().update(updates);
+    }
+
+    async function ensureDatabaseSchema() {
+      const rootRef = db.ref('cora');
+      const snapshot = await rootRef.once('value');
+
+      if (!snapshot.exists()) {
+        await seedDatabase();
+        return;
+      }
+
+      const root = snapshot.val() || {};
+      const version = Number(root.meta?.schemaVersion || 1);
+
+      if (!root.items) {
+        await migrateLegacyDatabase();
+        return;
+      }
+
+      if (version < SCHEMA_VERSION) {
+        await migrateCurrentV2ToV3(root);
+      }
+    }
+
+    function listenRealtime() {
+      db.ref('cora').on('value', snapshot => {
+        const data = snapshot.val() || {};
+        appState.items = Object.values(data.items || {}).map(normalizeItem);
+        appState.maternidade = Object.values(data.maternidade || {});
+        renderAll();
+      }, error => {
+        console.error('Erro de sincronização:', error);
+        alert('Não foi possível sincronizar o enxoval. Verifique sua conexão.');
+      });
+    }
+
+    async function initRealtimeSync() {
+      try {
+        await ensureDatabaseSchema();
+        listenRealtime();
+      } catch (error) {
+        console.error('Erro ao iniciar sincronização:', error);
+        alert('Não foi possível conectar ao banco da Cora. Verifique a internet e tente novamente.');
+      }
     }
 
     function saveItemToFirebase(item) {
@@ -824,6 +584,14 @@
       return db.ref(`cora/maternidade/${item.id}`).set(item);
     }
 
+    function saveAcquisitionToFirebase(itemId, acquisition) {
+      return db.ref(`cora/items/${itemId}/acquisitions/${acquisition.id}`).set(normalizeAcquisition(acquisition, acquisition.id));
+    }
+
+    function deleteAcquisitionFromFirebase(itemId, acquisitionId) {
+      return db.ref(`cora/items/${itemId}/acquisitions/${acquisitionId}`).remove();
+    }
+
     window.onload = function() {
       lucide.createIcons();
       initRealtimeSync();
@@ -834,13 +602,12 @@
       renderItems();
       renderMaternidade();
       renderResumoFinanceiro();
+      if (!document.getElementById('modalAction').classList.contains('hidden')) lucide.createIcons();
       lucide.createIcons();
     }
 
-    // ALTERNAR ABAS PRINCIPAIS
     function switchTab(tab) {
       appState.activeTab = tab;
-
       document.getElementById('sectionEnxoval').classList.toggle('hidden', tab !== 'enxoval');
       document.getElementById('sectionMaternidade').classList.toggle('hidden', tab !== 'maternidade');
       document.getElementById('sectionResumo').classList.toggle('hidden', tab !== 'resumo');
@@ -850,28 +617,24 @@
         maternidade: document.getElementById('navBtnMaternidade'),
         resumo: document.getElementById('navBtnResumo')
       };
-
       Object.values(navButtons).forEach(btn => {
         if (!btn) return;
         btn.classList.remove('text-rose-600', 'font-bold');
         btn.classList.add('text-gray-400');
       });
-
-      const activeButton = navButtons[tab];
-      if (activeButton) {
-        activeButton.classList.remove('text-gray-400');
-        activeButton.classList.add('text-rose-600', 'font-bold');
+      const active = navButtons[tab];
+      if (active) {
+        active.classList.remove('text-gray-400');
+        active.classList.add('text-rose-600', 'font-bold');
       }
     }
 
-    // FILTRAR POR CATEGORIA
     function filterCategory(cat) {
       appState.activeCategory = cat;
       document.getElementById('categoryTipText').innerHTML = CATEGORY_TIPS[cat] || 'Organize as compras de forma inteligente.';
       renderItems();
     }
 
-    // DASHBOARD E CÁLCULOS
     function updateDashboard() {
       let totalCurrent = 0;
       let totalTarget = 0;
@@ -879,37 +642,33 @@
       let totalSpent = 0;
 
       appState.items.forEach(item => {
-        Object.values(item.sizes || {}).forEach(s => {
-          const current = Number(s.current) || 0;
-          const target = Number(s.target) || 0;
-
+        SIZE_KEYS.forEach(size => {
+          const current = getOwnedForSize(item, size);
+          const target = Number(item.sizes?.[size]?.target) || 0;
           totalCurrent += current;
           totalTarget += target;
-
-          // A quantidade excedente de cada tamanho não conta no progresso.
-          // Ex.: RN 9/4 contribui com 4, não com 9.
           completedForProgress += Math.min(current, target);
         });
-        totalSpent += Number(item.pricePaid) || 0;
+        totalSpent += getPurchaseTotal(item);
       });
 
-      // O percentual é baseado na soma das quantidades concluídas,
-      // limitada pela meta individual de cada tamanho.
       const percent = totalTarget > 0 ? Math.round((completedForProgress / totalTarget) * 100) : 0;
-
       document.getElementById('progressPercentText').innerText = `${percent}%`;
       document.getElementById('progressBar').style.width = `${percent}%`;
       document.getElementById('progressItemsCount').innerText = `${totalCurrent} de ${totalTarget} peças`;
-      document.getElementById('financeTotalSpent').innerText = `Gasto: R$ ${totalSpent.toFixed(2)}`;
+      document.getElementById('financeTotalSpent').innerText = `Gasto: ${money(totalSpent)}`;
 
       const categories = ['vestuario', 'quarto', 'higiene', 'alimentacao', 'passeio', 'mamae'];
       categories.forEach(c => {
         const catItems = appState.items.filter(i => i.category === c);
         let cur = 0, tar = 0;
-        catItems.forEach(i => {
-          Object.values(i.sizes || {}).forEach(s => {
-            cur += Number(s.current) || 0;
-            tar += Number(s.target) || 0;
+        catItems.forEach(item => {
+          SIZE_KEYS.forEach(size => {
+            const owned = getOwnedForSize(item, size);
+            const target = Number(item.sizes?.[size]?.target) || 0;
+            // O badge da categoria representa progresso: excedentes não aumentam o numerador.
+            cur += Math.min(owned, target);
+            tar += target;
           });
         });
         const badge = document.getElementById(`catBadge${c.charAt(0).toUpperCase() + c.slice(1)}`);
@@ -917,133 +676,126 @@
       });
     }
 
-    // RENDERIZAR ITENS COM STEPPERS POR TAMANHO
+    function getSearchableBrands(item) {
+      return getAcquisitions(item).map(a => a.brand).filter(Boolean).join(' ').toLowerCase();
+    }
+
+    function itemMatchesStatus(item, statusFilter) {
+      const hasTargets = SIZE_KEYS.some(size => (Number(item.sizes?.[size]?.target) || 0) > 0);
+      if (statusFilter === 'essenciais') return item.essential;
+      if (statusFilter === 'faltam') {
+        return SIZE_KEYS.some(size => {
+          const target = Number(item.sizes?.[size]?.target) || 0;
+          return target > 0 && getOwnedForSize(item, size) < target;
+        });
+      }
+      if (statusFilter === 'completos') {
+        if (!hasTargets) return false;
+        return SIZE_KEYS.every(size => {
+          const target = Number(item.sizes?.[size]?.target) || 0;
+          return target === 0 || getOwnedForSize(item, size) >= target;
+        });
+      }
+      return true;
+    }
+
     function renderItems() {
       const container = document.getElementById('itemsContainer');
-      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+      const searchTerm = (document.getElementById('searchInput').value || '').toLowerCase().trim();
       const statusFilter = document.getElementById('filterStatus').value;
 
-      let filtered = appState.items.filter(i => i.category === appState.activeCategory);
-
+      let filtered = appState.items.filter(item => item.category === appState.activeCategory);
       if (searchTerm) {
-        filtered = filtered.filter(i => i.name.toLowerCase().includes(searchTerm) || (i.brand && i.brand.toLowerCase().includes(searchTerm)));
+        filtered = filtered.filter(item =>
+          item.name.toLowerCase().includes(searchTerm) ||
+          item.notes.toLowerCase().includes(searchTerm) ||
+          getSearchableBrands(item).includes(searchTerm)
+        );
       }
+      filtered = filtered.filter(item => itemMatchesStatus(item, statusFilter));
 
-      if (statusFilter === 'essenciais') {
-        filtered = filtered.filter(i => i.essential);
-      } else if (statusFilter === 'faltam') {
-        filtered = filtered.filter(i => {
-          return Object.values(i.sizes).some(s => s.current < s.target);
-        });
-      } else if (statusFilter === 'completos') {
-        filtered = filtered.filter(i => {
-          return Object.values(i.sizes).every(s => s.target === 0 || s.current >= s.target);
-        });
-      }
-
-      if (filtered.length === 0) {
+      if (!filtered.length) {
         container.innerHTML = `
           <div class="text-center py-8 bg-white rounded-2xl border border-dashed border-gray-200">
             <p class="text-xs text-gray-400 font-medium">Nenhum item encontrado nesta categoria com os filtros atuais.</p>
-            <button onclick="openAddItemModal()" class="mt-2 text-xs text-rose-600 font-bold underline">+ Adicionar item</button>
-          </div>
-        `;
+            <button onclick="openActionModal()" class="mt-2 text-xs text-rose-600 font-bold underline">+ Adicionar</button>
+          </div>`;
         return;
       }
 
       container.innerHTML = filtered.map(item => {
-        const isComplete = Object.values(item.sizes).every(s => s.target === 0 || s.current >= s.target);
+        const isComplete = itemMatchesStatus(item, 'completos');
+        const acquisitions = getAcquisitions(item);
+        const purchaseTotal = getPurchaseTotal(item);
+        const brands = [...new Set(acquisitions.map(a => a.brand).filter(Boolean))];
+        const brandSummary = brands.length ? brands.slice(0, 2).join(' • ') + (brands.length > 2 ? ' • +' + (brands.length - 2) : '') : 'Sem marca informada';
 
         return `
           <div class="bg-white rounded-2xl border ${isComplete ? 'border-emerald-200 bg-emerald-50/20' : 'border-gray-200'} p-4 shadow-xs relative space-y-3">
-            
-            <div class="flex items-start justify-between">
-              <div>
-                <div class="flex items-center gap-1.5">
-                  <h3 class="font-bold text-gray-900 text-sm">${item.name}</h3>
-                  ${item.essential ? '<span class="text-[9px] bg-amber-100 text-amber-700 font-bold px-1.5 py-0.2 rounded-md">Essencial</span>' : ''}
-                  ${isComplete ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.2 rounded-md">✅ OK</span>' : ''}
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <h3 class="font-bold text-gray-900 text-sm">${escapeHtml(item.name)}</h3>
+                  ${item.essential ? '<span class="text-[9px] bg-amber-100 text-amber-700 font-bold px-1.5 py-0.5 rounded-md">Essencial</span>' : ''}
+                  ${isComplete ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded-md">✅ OK</span>' : ''}
                 </div>
-                ${item.brand ? `<p class="text-xs text-gray-500 font-medium">${item.brand}</p>` : ''}
+                ${acquisitions.length ? `<p class="text-[10px] text-gray-500 mt-1">${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição' : 'aquisições'} • ${escapeHtml(brandSummary)}</p>` : '<p class="text-[10px] text-gray-400 mt-1">Nenhuma aquisição registrada</p>'}
               </div>
-
-              <div class="flex items-center space-x-1">
-                <button onclick="editItem('${item.id}')" class="p-1.5 text-gray-400 hover:text-rose-600 transition"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
-                <button onclick="deleteItem('${item.id}')" class="p-1.5 text-gray-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-              </div>
+              <button onclick="editItem('${item.id}')" class="p-2 text-gray-400 hover:text-rose-600 transition rounded-lg hover:bg-rose-50" aria-label="Editar item">
+                <i data-lucide="edit-3" class="w-4 h-4"></i>
+              </button>
             </div>
 
-            <!-- MATRIZ VISUAL DE TAMANHOS (STEPPERS COM + E -) -->
             <div class="grid grid-cols-4 gap-1.5 pt-1">
-              ${renderSizeStepper(item.id, 'RN', item.sizes.RN)}
-              ${renderSizeStepper(item.id, 'P', item.sizes.P)}
-              ${renderSizeStepper(item.id, 'M', item.sizes.M)}
-              ${renderSizeStepper(item.id, 'Único', item.sizes.U)}
+              ${renderSizeCell(item, 'RN')}
+              ${renderSizeCell(item, 'P')}
+              ${renderSizeCell(item, 'M')}
+              ${renderSizeCell(item, 'U')}
             </div>
 
-            <!-- NOTAS E DETALHES -->
-            ${item.notes || item.pricePaid > 0 || item.giftValue > 0 || getGiftTotal(item) > 0 ? `
-              <div class="bg-gray-50 rounded-xl p-2.5 text-[11px] text-gray-600 flex justify-between items-center">
-                <span>${item.notes || 'Sem observações'}</span>
-                <span class="font-bold text-gray-800 shrink-0 ml-2">
-                  ${getGiftTotal(item) > 0 ? `<span class="text-emerald-600">🎁 ${getGiftTotal(item)} presente(s)</span>` : (item.pricePaid > 0 ? `R$ ${item.pricePaid.toFixed(2)} pagos` : '')}
-                </span>
+            <button onclick="openAcquisitionHistory('${item.id}')" class="w-full pt-2.5 pb-2.5 px-3 rounded-xl border border-emerald-100 bg-emerald-50/40 hover:bg-emerald-50 transition text-left flex items-center justify-between gap-3" aria-label="Ver aquisições do item">
+              <div class="min-w-0">
+                <span class="block text-xs font-bold text-gray-800">${acquisitions.length ? `${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição' : 'aquisições'}` : 'Nenhuma aquisição'}</span>
+                <span class="block text-[10px] text-gray-500 mt-0.5">Ver detalhes, editar ou excluir</span>
               </div>
-            ` : ''}
+              <div class="shrink-0 flex items-center gap-1.5">
+                <span class="text-[10px] font-semibold text-emerald-700">${purchaseTotal > 0 ? money(purchaseTotal) + ' pagos' : 'Sem gasto'}</span>
+                <i data-lucide="chevron-right" class="w-4 h-4 text-emerald-600"></i>
+              </div>
+            </button>
 
-          </div>
-        `;
+            ${item.notes ? `<div class="bg-gray-50 rounded-xl p-2.5 text-[11px] text-gray-600">${escapeHtml(item.notes)}</div>` : ''}
+          </div>`;
       }).join('');
+      lucide.createIcons();
     }
 
-    function renderSizeStepper(itemId, label, sizeData) {
-      if (!sizeData || sizeData.target === 0 && sizeData.current === 0) {
-        return `<div class="bg-gray-50 border border-gray-100 rounded-xl p-1.5 text-center text-[10px] text-gray-300 font-medium">${label}<br>—</div>`;
+    function renderSizeCell(item, size) {
+      const current = getOwnedForSize(item, size);
+      const target = Number(item.sizes?.[size]?.target) || 0;
+      const visible = target > 0 || current > 0;
+      if (!visible) {
+        return `<div class="bg-gray-50 border border-gray-100 rounded-xl p-2 text-center text-[10px] text-gray-300 font-medium">${SIZE_LABELS[size]}<br>—</div>`;
       }
-
-      const isOk = sizeData.current >= sizeData.target && sizeData.target > 0;
-
+      const isOk = target > 0 && current >= target;
       return `
-        <div class="border ${isOk ? 'border-emerald-300 bg-emerald-50/50' : 'border-rose-100 bg-rose-50/30'} rounded-xl p-1.5 text-center">
-          <span class="block text-[10px] font-bold text-gray-600 mb-0.5">${label}</span>
-          <div class="text-xs font-black ${isOk ? 'text-emerald-700' : 'text-rose-600'}">
-            ${sizeData.current}/${sizeData.target}
-          </div>
-          <div class="flex items-center justify-center space-x-1 mt-1">
-            <button onclick="updateQty('${itemId}', '${label}', -1)" class="w-5 h-5 rounded-md bg-white border border-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold shadow-2xs active:scale-95">-</button>
-            <button onclick="updateQty('${itemId}', '${label}', 1)" class="w-5 h-5 rounded-md bg-rose-500 text-white flex items-center justify-center text-xs font-bold shadow-2xs active:scale-95">+</button>
-          </div>
-        </div>
-      `;
+        <div class="border ${isOk ? 'border-emerald-300 bg-emerald-50/50' : 'border-rose-100 bg-rose-50/30'} rounded-xl p-2 text-center">
+          <span class="block text-[10px] font-bold text-gray-600">${SIZE_LABELS[size]}</span>
+          <div class="text-xs font-black ${isOk ? 'text-emerald-700' : 'text-rose-600'} mt-0.5">${current}/${target}</div>
+          <button onclick="openAcquisitionModalForItem('${item.id}', '${size}')" class="w-full mt-1.5 h-6 rounded-md bg-emerald-600 text-white flex items-center justify-center text-xs font-bold active:scale-95 transition" aria-label="Adicionar aquisição para ${SIZE_LABELS[size]}">+</button>
+        </div>`;
     }
 
-    // MUDAR QUANTIDADE RAPIDAMENTE (STEPPER)
-    // Usa transaction para que dois celulares possam alterar a mesma quantidade sem um sobrescrever o outro.
-    async function updateQty(itemId, sizeLabel, delta) {
-      const key = sizeLabel === 'Único' ? 'U' : sizeLabel;
-      const sizeRef = db.ref(`cora/items/${itemId}/sizes/${key}/current`);
-
-      try {
-        await sizeRef.transaction(current => Math.max(0, Number(current || 0) + delta));
-      } catch (error) {
-        console.error('Erro ao atualizar quantidade:', error);
-      }
-    }
-
-    // CHECKLIST DA MATERNIDADE
     function renderMaternidade() {
       const container = document.getElementById('maternidadeChecklistContainer');
       const total = appState.maternidade.length;
       const checked = appState.maternidade.filter(i => i.checked).length;
-
       document.getElementById('maternidadeProgress').innerText = `${checked}/${total} prontos`;
-
       container.innerHTML = appState.maternidade.map(item => `
         <label class="flex items-center space-x-3 p-2.5 rounded-xl border border-gray-100 hover:bg-rose-50/30 transition cursor-pointer">
           <input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggleMaternidade('${item.id}')" class="w-4 h-4 text-rose-600 rounded border-gray-300 focus:ring-rose-400">
-          <span class="text-xs font-medium ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}">${item.title}</span>
-        </label>
-      `).join('');
+          <span class="text-xs font-medium ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}">${escapeHtml(item.title)}</span>
+        </label>`).join('');
     }
 
     function toggleMaternidade(id) {
@@ -1054,125 +806,324 @@
       }
     }
 
-    // RESUMO FINANCEIRO
-    function getGiftTotal(item) {
-      return Object.values(item.sizes || {}).reduce((acc, s) => acc + (Number(s.gift) || 0), 0);
-    }
-
-    function getOwnedTotal(item) {
-      return Object.values(item.sizes || {}).reduce((acc, s) => acc + (Number(s.current) || 0), 0);
-    }
-
     function renderResumoFinanceiro() {
       let spent = 0;
-      let giftSaved = 0;
-      let detailedListHtml = '';
+      let purchasedPieces = 0;
+      let acquisitionCount = 0;
+      const rows = [];
 
       appState.items.forEach(item => {
-        const totalPieces = getOwnedTotal(item);
-        const giftPieces = getGiftTotal(item);
-        const purchasedPieces = Math.max(0, totalPieces - giftPieces);
-        const pricePaid = Number(item.pricePaid) || 0;
-        const giftValue = Number(item.giftValue) || 0;
-
-        spent += pricePaid;
-        giftSaved += giftValue;
-
-        if (totalPieces > 0 || pricePaid > 0 || giftValue > 0) {
-          detailedListHtml += `
-            <div class="p-2.5 bg-gray-50 rounded-lg border border-gray-100">
-              <div class="flex justify-between items-start gap-2">
-                <div>
-                  <span class="font-bold text-gray-800">${item.name}</span>
-                  <span class="text-[10px] text-gray-500 block">${totalPieces} peças • ${purchasedPieces} compradas • ${giftPieces} presente(s)</span>
-                </div>
-                <span class="font-bold text-gray-900 shrink-0">R$ ${pricePaid.toFixed(2)}</span>
-              </div>
-              ${giftValue > 0 ? `<div class="text-[10px] text-emerald-600 mt-1">🎁 Valor estimado dos presentes: R$ ${giftValue.toFixed(2)}</div>` : ''}
-            </div>
-          `;
-        }
+        getAcquisitions(item).forEach(acq => {
+          acquisitionCount += 1;
+          if (acq.type === 'purchase') {
+            const total = (Number(acq.quantity) || 0) * (Number(acq.unitPrice) || 0);
+            spent += total;
+            purchasedPieces += Number(acq.quantity) || 0;
+          }
+          rows.push({ item, acq });
+        });
+        spent += Number(item.legacyPaidRemainder) || 0;
       });
 
-      document.getElementById('resumoGastoReal').innerText = `R$ ${spent.toFixed(2)}`;
-      document.getElementById('resumoEconomiaPresentes').innerText = `R$ ${giftSaved.toFixed(2)}`;
-      document.getElementById('listaDetalhadaCompras').innerHTML = detailedListHtml || '<p class="text-xs text-gray-400">Nenhuma aquisição informada ainda.</p>';
+      rows.sort((a, b) => String(b.acq.id).localeCompare(String(a.acq.id)));
+
+      document.getElementById('resumoGastoReal').innerText = money(spent);
+      document.getElementById('resumoPecasCompradas').innerText = `${purchasedPieces} ${purchasedPieces === 1 ? 'peça paga' : 'peças pagas'}`;
+      document.getElementById('resumoQtdAquisicoes').innerText = `${acquisitionCount} ${acquisitionCount === 1 ? 'aquisição' : 'aquisições'}`;
+
+      document.getElementById('listaDetalhadaCompras').innerHTML = rows.length ? rows.map(({item, acq}) => {
+        const total = acq.type === 'purchase' ? (Number(acq.quantity) || 0) * (Number(acq.unitPrice) || 0) : 0;
+        return `
+          <div class="p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+            <div class="flex justify-between items-start gap-2">
+              <div class="min-w-0">
+                <span class="font-bold text-gray-800 text-xs">${escapeHtml(item.name)}</span>
+                <span class="text-[10px] text-gray-500 block mt-0.5">${acq.quantity}× ${SIZE_LABELS[acq.size]}${acq.brand ? ' • ' + escapeHtml(acq.brand) : ''}</span>
+              </div>
+              <span class="font-bold text-xs shrink-0 ${acq.type === 'gift' ? 'text-emerald-600' : 'text-gray-900'}">${acq.type === 'gift' ? 'Presente' : money(total)}</span>
+            </div>
+            ${acq.type === 'purchase' ? `<div class="text-[10px] text-gray-400 mt-1">${money(acq.unitPrice)} / un.</div>` : ''}
+            ${acq.notes ? `<div class="text-[10px] text-gray-500 mt-1">${escapeHtml(acq.notes)}</div>` : ''}
+          </div>`;
+      }).join('') : '<p class="text-xs text-gray-400">Nenhuma aquisição registrada ainda.</p>';
     }
 
-    // CONTROLE DE MODAL E FORMULÁRIO
-    function openAddItemModal() {
+    function openActionModal() {
+      document.getElementById('modalAction').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function openNewItemModal() {
+      closeModal('modalAction');
       document.getElementById('itemForm').reset();
       document.getElementById('itemId').value = '';
-      document.getElementById('modalTitle').innerText = 'Novo Item no Enxoval';
+      document.getElementById('modalTitle').innerText = 'Novo item';
+      document.getElementById('deleteItemSection').classList.add('hidden');
+      SIZE_KEYS.forEach(size => {
+        document.getElementById(`target_${size}`).value = 0;
+        document.getElementById(`owned_${size}`).innerText = 'Possui 0';
+      });
       document.getElementById('modalItem').classList.remove('hidden');
     }
 
-    function closeModal(id) {
-      document.getElementById(id).classList.add('hidden');
+    function openAcquisitionItemPicker() {
+      closeModal('modalAction');
+      document.getElementById('acquisitionItemSearch').value = '';
+      document.getElementById('modalChooseAcquisition').classList.remove('hidden');
+      renderAcquisitionItemChoices();
+    }
+
+    function openChooseAcquisitionModal() {
+      openAcquisitionItemPicker();
+    }
+
+    function renderAcquisitionItemChoices() {
+      const container = document.getElementById('acquisitionItemChoices');
+      const term = (document.getElementById('acquisitionItemSearch').value || '').toLowerCase().trim();
+      const items = appState.items
+        .filter(item => !term || item.name.toLowerCase().includes(term) || getSearchableBrands(item).includes(term))
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+      container.innerHTML = items.length ? items.map(item => `
+        <button onclick="openAcquisitionModalForItem('${item.id}')" class="w-full p-3 rounded-xl border border-gray-100 hover:bg-emerald-50 text-left flex items-center justify-between gap-3">
+          <span class="min-w-0"><strong class="block text-xs text-gray-900 truncate">${escapeHtml(item.name)}</strong><span class="block text-[10px] text-gray-500">Possui ${getOwnedTotal(item)} • Meta ${getTargetTotal(item)}</span></span>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-gray-400 shrink-0"></i>
+        </button>`).join('') : '<p class="text-xs text-gray-400 text-center py-6">Nenhum item encontrado.</p>';
+      lucide.createIcons();
+    }
+
+    function openAcquisitionModalForItem(itemId, presetSize = '') {
+      const item = appState.items.find(i => i.id === itemId);
+      if (!item) return;
+      closeModal('modalChooseAcquisition');
+      closeModal('modalAction');
+      document.getElementById('acquisitionForm').reset();
+      document.getElementById('acquisitionItemId').value = item.id;
+      document.getElementById('acquisitionId').value = '';
+      document.getElementById('deleteAcquisitionSection').classList.add('hidden');
+      document.getElementById('acquisitionItemName').innerText = item.name;
+      document.getElementById('acquisitionType').value = 'purchase';
+      document.getElementById('acquisitionSize').value = presetSize || 'RN';
+      document.getElementById('acquisitionQuantity').value = 1;
+      document.getElementById('acquisitionUnitPrice').value = '';
+      document.getElementById('acquisitionBrand').value = '';
+      document.getElementById('acquisitionNotes').value = '';
+      toggleAcquisitionType();
+      updateAcquisitionPreview();
+      document.getElementById('modalAcquisition').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function toggleAcquisitionType() {
+      const isGift = document.getElementById('acquisitionType').value === 'gift';
+      const box = document.getElementById('acquisitionPriceBox');
+      box.classList.toggle('hidden', isGift);
+      if (isGift) document.getElementById('acquisitionUnitPrice').value = '0';
+      updateAcquisitionPreview();
+    }
+
+    function updateAcquisitionPreview() {
+      const qty = Number(document.getElementById('acquisitionQuantity').value) || 0;
+      const price = Number(document.getElementById('acquisitionUnitPrice').value) || 0;
+      document.getElementById('acquisitionTotalPreview').innerText = `Total desta aquisição: ${money(qty * price)}`;
+    }
+
+    document.addEventListener('input', e => {
+      if (e.target && (e.target.id === 'acquisitionQuantity' || e.target.id === 'acquisitionUnitPrice')) {
+        updateAcquisitionPreview();
+      }
+    });
+
+    function openAcquisitionHistory(itemId) {
+      const item = appState.items.find(i => i.id === itemId);
+      if (!item) return;
+      appState.activeHistoryItemId = itemId;
+      document.getElementById('historyItemName').innerText = item.name;
+      document.getElementById('historySummary').innerText = `${getOwnedTotal(item)} peças • ${getAcquisitions(item).length} aquisições • ${money(getPurchaseTotal(item))} pagos`;
+      renderAcquisitionHistory(item);
+      document.getElementById('modalAcquisitionHistory').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function renderAcquisitionHistory(item) {
+      const container = document.getElementById('historyList');
+      const acquisitions = getAcquisitions(item);
+      if (!acquisitions.length) {
+        container.innerHTML = '<p class="text-xs text-gray-400 text-center py-6">Nenhuma aquisição registrada.</p>';
+        return;
+      }
+
+      acquisitions.sort((a, b) => String(b.id).localeCompare(String(a.id)));
+      container.innerHTML = acquisitions.map(acq => {
+        const total = acq.type === 'purchase' ? acq.quantity * acq.unitPrice : 0;
+        return `
+          <div class="p-3 rounded-xl border border-gray-100 bg-gray-50">
+            <div class="flex justify-between items-start gap-2">
+              <div>
+                <span class="text-xs font-bold text-gray-800">${acq.quantity}× ${SIZE_LABELS[acq.size]}</span>
+                <span class="block text-[10px] text-gray-500 mt-0.5">${acq.type === 'gift' ? '🎁 Presente / Doação' : `🛒 Compra • ${money(acq.unitPrice)} / un.`}</span>
+                ${acq.brand ? `<span class="block text-[10px] text-gray-500">${escapeHtml(acq.brand)}</span>` : ''}
+              </div>
+              <div class="text-right shrink-0">
+                <span class="text-xs font-bold ${acq.type === 'gift' ? 'text-emerald-600' : 'text-gray-900'}">${acq.type === 'gift' ? 'Presente' : money(total)}</span>
+                <div class="flex justify-end mt-2">
+                  <button onclick="editAcquisition('${item.id}', '${acq.id}')" class="p-2 rounded-lg text-gray-500 bg-white border border-gray-200 hover:bg-rose-50 hover:text-rose-600" aria-label="Editar aquisição" title="Editar aquisição">
+                    <i data-lucide="edit-3" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            ${acq.notes ? `<div class="text-[10px] text-gray-500 mt-2">${escapeHtml(acq.notes)}</div>` : ''}
+          </div>`;
+      }).join('');
+      lucide.createIcons();
+    }
+
+    function addAcquisitionFromHistory() {
+      if (appState.activeHistoryItemId) {
+        closeModal('modalAcquisitionHistory');
+        openAcquisitionModalForItem(appState.activeHistoryItemId);
+      }
+    }
+
+    function editAcquisition(itemId, acquisitionId) {
+      const item = appState.items.find(i => i.id === itemId);
+      const acq = item?.acquisitions?.[acquisitionId];
+      if (!item || !acq) return;
+      closeModal('modalAcquisitionHistory');
+      document.getElementById('acquisitionItemId').value = item.id;
+      document.getElementById('acquisitionId').value = acquisitionId;
+      document.getElementById('deleteAcquisitionSection').classList.remove('hidden');
+      document.getElementById('acquisitionItemName').innerText = item.name;
+      document.getElementById('acquisitionType').value = acq.type;
+      document.getElementById('acquisitionSize').value = acq.size;
+      document.getElementById('acquisitionQuantity').value = acq.quantity;
+      document.getElementById('acquisitionBrand').value = acq.brand || '';
+      document.getElementById('acquisitionUnitPrice').value = acq.unitPrice || 0;
+      document.getElementById('acquisitionNotes').value = acq.notes || '';
+      toggleAcquisitionType();
+      updateAcquisitionPreview();
+      document.getElementById('modalAcquisition').classList.remove('hidden');
+    }
+
+    async function saveAcquisition(e) {
+      e.preventDefault();
+      const itemId = document.getElementById('acquisitionItemId').value;
+      const item = appState.items.find(i => i.id === itemId);
+      if (!item) return;
+
+      const id = document.getElementById('acquisitionId').value || `acq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const type = document.getElementById('acquisitionType').value === 'gift' ? 'gift' : 'purchase';
+      const quantity = Math.max(1, parseInt(document.getElementById('acquisitionQuantity').value, 10) || 1);
+      const unitPrice = type === 'gift' ? 0 : Math.max(0, parseFloat(document.getElementById('acquisitionUnitPrice').value) || 0);
+      const acquisition = normalizeAcquisition({
+        id,
+        type,
+        size: document.getElementById('acquisitionSize').value,
+        quantity,
+        unitPrice,
+        brand: document.getElementById('acquisitionBrand').value.trim(),
+        notes: document.getElementById('acquisitionNotes').value.trim()
+      }, id);
+
+      try {
+        await saveAcquisitionToFirebase(itemId, acquisition);
+        closeModal('modalAcquisition');
+      } catch (error) {
+        console.error('Erro ao salvar aquisição:', error);
+        alert('Não foi possível salvar a aquisição. Tente novamente.');
+      }
+    }
+
+    async function deleteAcquisition(itemId, acquisitionId) {
+      const item = appState.items.find(i => i.id === itemId);
+      const acq = item?.acquisitions?.[acquisitionId];
+      if (!item || !acq) return;
+      if (!confirm(`Excluir esta aquisição de ${acq.quantity} peça(s)?`)) return;
+      try {
+        await deleteAcquisitionFromFirebase(itemId, acquisitionId);
+        openAcquisitionHistory(itemId);
+      } catch (error) {
+        console.error('Erro ao excluir aquisição:', error);
+        alert('Não foi possível excluir a aquisição. Tente novamente.');
+      }
+    }
+
+    async function deleteAcquisitionFromEdit() {
+      const itemId = document.getElementById('acquisitionItemId').value;
+      const acquisitionId = document.getElementById('acquisitionId').value;
+      if (!itemId || !acquisitionId) return;
+
+      const item = appState.items.find(i => i.id === itemId);
+      const acq = item?.acquisitions?.[acquisitionId];
+      if (!item || !acq) return;
+
+      if (!confirm(`Excluir esta aquisição de ${acq.quantity} peça(s)?`)) return;
+
+      try {
+        await deleteAcquisitionFromFirebase(itemId, acquisitionId);
+        closeModal('modalAcquisition');
+        openAcquisitionHistory(itemId);
+      } catch (error) {
+        console.error('Erro ao excluir aquisição:', error);
+        alert('Não foi possível excluir a aquisição. Tente novamente.');
+      }
+    }
+
+    function openItemEditOwned(item) {
+      SIZE_KEYS.forEach(size => {
+        document.getElementById(`owned_${size}`).innerText = `Possui ${getOwnedForSize(item, size)}`;
+      });
     }
 
     function editItem(id) {
       const item = appState.items.find(i => i.id === id);
       if (!item) return;
-
       document.getElementById('itemId').value = item.id;
       document.getElementById('itemName').value = item.name;
       document.getElementById('itemCategory').value = item.category;
       document.getElementById('itemEssential').value = item.essential.toString();
-      document.getElementById('itemBrand').value = item.brand || '';
-      document.getElementById('itemPrice').value = item.pricePaid || '';
-      document.getElementById('itemGiftValue').value = item.giftValue || '';
-            document.getElementById('itemNotes').value = item.notes || '';
-
-      document.getElementById('qty_RN').value = item.sizes.RN?.current || 0;
-      document.getElementById('target_RN').value = item.sizes.RN?.target || 0;
-      document.getElementById('gift_RN').value = item.sizes.RN?.gift || 0;
-
-      document.getElementById('qty_P').value = item.sizes.P?.current || 0;
-      document.getElementById('target_P').value = item.sizes.P?.target || 0;
-      document.getElementById('gift_P').value = item.sizes.P?.gift || 0;
-
-      document.getElementById('qty_M').value = item.sizes.M?.current || 0;
-      document.getElementById('target_M').value = item.sizes.M?.target || 0;
-      document.getElementById('gift_M').value = item.sizes.M?.gift || 0;
-
-      document.getElementById('qty_U').value = item.sizes.U?.current || 0;
-      document.getElementById('target_U').value = item.sizes.U?.target || 0;
-      document.getElementById('gift_U').value = item.sizes.U?.gift || 0;
-
-      document.getElementById('modalTitle').innerText = 'Editar Item';
+      document.getElementById('itemNotes').value = item.notes || '';
+      SIZE_KEYS.forEach(size => {
+        document.getElementById(`target_${size}`).value = Number(item.sizes?.[size]?.target) || 0;
+      });
+      openItemEditOwned(item);
+      document.getElementById('modalTitle').innerText = 'Editar item';
+      document.getElementById('deleteItemSection').classList.remove('hidden');
       document.getElementById('modalItem').classList.remove('hidden');
+      lucide.createIcons();
     }
 
     async function saveItem(e) {
       e.preventDefault();
+      const id = document.getElementById('itemId').value || `item_${Date.now()}`;
+      const existing = appState.items.find(i => i.id === id);
 
-      const id = document.getElementById('itemId').value || 'item_' + Date.now();
-      const newItem = normalizeItem({
+      const item = {
         id,
         name: document.getElementById('itemName').value.trim(),
         category: document.getElementById('itemCategory').value,
         essential: document.getElementById('itemEssential').value === 'true',
-        brand: document.getElementById('itemBrand').value.trim(),
-        pricePaid: parseFloat(document.getElementById('itemPrice').value) || 0,
-        giftValue: parseFloat(document.getElementById('itemGiftValue').value) || 0,
         notes: document.getElementById('itemNotes').value.trim(),
-        sizes: {
-          RN: { current: parseInt(document.getElementById('qty_RN').value) || 0, target: parseInt(document.getElementById('target_RN').value) || 0, gift: parseInt(document.getElementById('gift_RN').value) || 0 },
-          P:  { current: parseInt(document.getElementById('qty_P').value) || 0, target: parseInt(document.getElementById('target_P').value) || 0, gift: parseInt(document.getElementById('gift_P').value) || 0 },
-          M:  { current: parseInt(document.getElementById('qty_M').value) || 0, target: parseInt(document.getElementById('target_M').value) || 0, gift: parseInt(document.getElementById('gift_M').value) || 0 },
-          U:  { current: parseInt(document.getElementById('qty_U').value) || 0, target: parseInt(document.getElementById('target_U').value) || 0, gift: parseInt(document.getElementById('gift_U').value) || 0 }
-        }
+        sizes: {},
+        acquisitions: existing?.acquisitions || {},
+        legacyPaidRemainder: existing?.legacyPaidRemainder || 0
+      };
+
+      SIZE_KEYS.forEach(size => {
+        item.sizes[size] = { target: Math.max(0, parseInt(document.getElementById(`target_${size}`).value, 10) || 0) };
       });
 
-      const invalidGift = Object.values(newItem.sizes).some(s => s.gift > s.current);
-      if (invalidGift) {
-        alert('A quantidade de presentes não pode ser maior do que a quantidade que vocês possuem.');
-        return;
+      if (existing && Object.keys(existing.acquisitions || {}).length) {
+        const activeSizes = SIZE_KEYS.filter(size => item.sizes[size].target > 0 || getOwnedForSize(existing, size) > 0);
+        if (activeSizes.length === 1 && activeSizes[0] === 'U') {
+          // Mantém Único exclusivo quando o item já usa somente Único.
+          SIZE_KEYS.filter(size => size !== 'U').forEach(size => item.sizes[size].target = 0);
+        }
       }
 
       try {
-        await saveItemToFirebase(newItem);
+        await saveItemToFirebase(item);
         closeModal('modalItem');
       } catch (error) {
         console.error('Erro ao salvar item:', error);
@@ -1180,38 +1131,479 @@
       }
     }
 
-    async function deleteItem(id) {
-      if (confirm('Tem certeza que deseja excluir este item?')) {
-        try {
-          await deleteItemFromFirebase(id);
-        } catch (error) {
-          console.error('Erro ao excluir item:', error);
-          alert('Não foi possível excluir o item. Tente novamente.');
-        }
+    async function deleteItemFromEdit() {
+      const id = document.getElementById('itemId').value;
+      if (!id) return;
+      const item = appState.items.find(i => i.id === id);
+      if (!item) return;
+      if (!confirm(`Excluir “${item.name}” e todas as aquisições registradas nele?`)) return;
+      try {
+        await deleteItemFromFirebase(id);
+        closeModal('modalItem');
+      } catch (error) {
+        console.error('Erro ao excluir item:', error);
+        alert('Não foi possível excluir o item. Tente novamente.');
       }
     }
 
-    function openFinanceModal() {
-      switchTab('resumo');
+    async function deleteItem(id) {
+      const item = appState.items.find(i => i.id === id);
+      if (!item) return;
+      if (!confirm(`Excluir “${item.name}” e todas as aquisições registradas nele?`)) return;
+      try {
+        await deleteItemFromFirebase(id);
+      } catch (error) {
+        console.error('Erro ao excluir item:', error);
+        alert('Não foi possível excluir o item. Tente novamente.');
+      }
+    }
+
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
     }
 
     async function openSettingsModal() {
-      if (confirm('Deseja resetar o enxoval para os valores padrão? Isso substituirá os dados atuais da Cora no banco compartilhado.')) {
-        try {
-          const updates = {};
-          INITIAL_ITEMS.forEach(item => {
-            updates[`cora/items/${item.id}`] = itemToFirebase(item);
-          });
-          MATERNIDADE_DEFAULT.forEach(item => {
-            updates[`cora/maternidade/${item.id}`] = item;
-          });
-          await db.ref().update(updates);
-        } catch (error) {
-          console.error('Erro ao resetar:', error);
-          alert('Não foi possível resetar o enxoval.');
-        }
+      if (!confirm('Deseja resetar o enxoval para os valores padrão? Isso substituirá os dados atuais da Cora no banco compartilhado.')) return;
+      try {
+        const updates = {};
+        INITIAL_ITEMS.forEach(item => { updates[`cora/items/${item.id}`] = seedItemFromInitial(item); });
+        MATERNIDADE_DEFAULT.forEach(item => { updates[`cora/maternidade/${item.id}`] = item; });
+        updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
+        updates['cora/meta/updatedAt'] = firebase.database.ServerValue.TIMESTAMP;
+        await db.ref().update(updates);
+      } catch (error) {
+        console.error('Erro ao resetar:', error);
+        alert('Não foi possível resetar o enxoval.');
       }
     }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
   </script>
+  <style>
+    /* Estilos personalizados de rolagem e UI */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    body { -webkit-tap-highlight-color: transparent; }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+  </style>
+</head>
+<body class="bg-[#FBF8F6] text-gray-800 font-sans pb-24 min-h-screen">
+
+  <!-- TOP HEADER -->
+  <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-rose-100 px-4 py-3 shadow-sm">
+    <div class="max-w-md mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <div class="w-9 h-9 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 font-bold text-lg">
+          👶
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-gray-900 leading-tight">Enxoval da Cora</h1>
+          <p class="text-xs text-rose-600 font-medium">DPP: 21/Fev • Niterói, RJ</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <button onclick="openSettingsModal()" aria-label="Configurações" class="p-2 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+          <i data-lucide="sliders-horizontal" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-md mx-auto px-4 pt-4 space-y-4">
+
+    <!-- DASHBOARD PROGRESS CARD -->
+    <div class="bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-100 rounded-2xl p-4 shadow-xs">
+      <div class="flex justify-between items-center mb-2">
+        <div>
+          <span id="progressPercentText" class="text-2xl font-extrabold text-rose-600">0%</span>
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider ml-1">concluído</span>
+        </div>
+        <div class="text-right">
+          <p id="progressItemsCount" class="text-xs font-bold text-gray-700">0 de 0 peças</p>
+          <p id="financeTotalSpent" class="text-xs text-rose-700 font-semibold">Gasto: R$ 0,00</p>
+        </div>
+      </div>
+      
+      <div class="w-full bg-rose-200/60 rounded-full h-2.5 overflow-hidden mb-3">
+        <div id="progressBar" class="bg-rose-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+      </div>
+
+      <!-- WIDGET CLIMA & DP -->
+      <div class="bg-white/80 rounded-xl p-3 border border-rose-100 text-xs">
+        <div class="flex items-center justify-between text-gray-600 mb-2 font-medium">
+          <span class="flex items-center gap-1"><i data-lucide="sun-medium" class="w-3.5 h-3.5 text-amber-500"></i> Estações do Crescimento (RJ):</span>
+          <span id="seasonTip" class="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full font-semibold">Análise Ativa</span>
+        </div>
+        <div class="grid grid-cols-4 gap-1 text-center font-medium">
+          <div class="p-1.5 rounded-lg bg-orange-50 border border-orange-100">
+            <span class="block text-[10px] text-gray-500 font-bold">RN (Fev)</span>
+            <span class="block text-xs font-bold text-orange-600">☀️ 28°C</span>
+            <span class="text-[9px] text-gray-400">Verão / Ar</span>
+          </div>
+          <div class="p-1.5 rounded-lg bg-amber-50 border border-amber-100">
+            <span class="block text-[10px] text-gray-500 font-bold">P (Mar-Mai)</span>
+            <span class="block text-xs font-bold text-amber-600">⛅ 25°C</span>
+            <span class="text-[9px] text-gray-400">Transição</span>
+          </div>
+          <div class="p-1.5 rounded-lg bg-blue-50 border border-blue-100">
+            <span class="block text-[10px] text-gray-500 font-bold">M (Mai-Ago)</span>
+            <span class="block text-xs font-bold text-blue-600">🌤️ 21°C</span>
+            <span class="text-[9px] text-gray-400">Inverno RJ</span>
+          </div>
+          <div class="p-1.5 rounded-lg bg-green-50 border border-green-100">
+            <span class="block text-[10px] text-gray-500 font-bold">G (Ago-Nov)</span>
+            <span class="block text-xs font-bold text-green-600">☀️ 26°C</span>
+            <span class="text-[9px] text-gray-400">Primavera</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEÇÃO: ENXOVAL PRINCIPAL -->
+    <div id="sectionEnxoval" class="space-y-4">
+      
+      <!-- CARROSSEL DE CATEGORIAS (ESTILO CARDS DO PRINT) -->
+      <div class="grid grid-cols-3 gap-2">
+        <button onclick="filterCategory('vestuario')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
+          <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-1 text-xl">👚</div>
+          <span class="text-xs font-bold text-gray-800">Vestuário</span>
+          <span id="catBadgeVestuario" class="text-[10px] text-gray-400 font-medium">0/0</span>
+        </button>
+        <button onclick="filterCategory('quarto')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
+          <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mb-1 text-xl">🛏️</div>
+          <span class="text-xs font-bold text-gray-800">Quarto</span>
+          <span id="catBadgeQuarto" class="text-[10px] text-gray-400 font-medium">0/0</span>
+        </button>
+        <button onclick="filterCategory('higiene')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
+          <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-1 text-xl">🛁</div>
+          <span class="text-xs font-bold text-gray-800">Higiene</span>
+          <span id="catBadgeHigiene" class="text-[10px] text-gray-400 font-medium">0/0</span>
+        </button>
+        <button onclick="filterCategory('alimentacao')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
+          <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mb-1 text-xl">🍼</div>
+          <span class="text-xs font-bold text-gray-800">Alimentação</span>
+          <span id="catBadgeAlimentacao" class="text-[10px] text-gray-400 font-medium">0/0</span>
+        </button>
+        <button onclick="filterCategory('passeio')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
+          <div class="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mb-1 text-xl">👶</div>
+          <span class="text-xs font-bold text-gray-800">Passeio</span>
+          <span id="catBadgePasseio" class="text-[10px] text-gray-400 font-medium">0/0</span>
+        </button>
+        <button onclick="filterCategory('mamae')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
+          <div class="w-10 h-10 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center mb-1 text-xl">🤰</div>
+          <span class="text-xs font-bold text-gray-800">Mamãe</span>
+          <span id="catBadgeMamae" class="text-[10px] text-gray-400 font-medium">0/0</span>
+        </button>
+      </div>
+
+      <!-- FILTROS SECUNDÁRIOS & BUSCA -->
+      <div class="flex items-center space-x-2">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-gray-400"></i>
+          <input type="text" id="searchInput" onkeyup="renderItems()" placeholder="Buscar item ou marca..." class="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-400">
+        </div>
+        <select id="filterStatus" onchange="renderItems()" class="bg-white border border-gray-200 text-xs rounded-xl px-2 py-1.5 focus:outline-none font-medium text-gray-600">
+          <option value="todos">Todos os Itens</option>
+          <option value="faltam">🚨 O que falta</option>
+          <option value="completos">✅ Comprados / OK</option>
+          <option value="essenciais">⭐ Essenciais</option>
+        </select>
+      </div>
+
+      <!-- DICA DA CATEGORIA SELECCIONADA -->
+      <div id="categoryTipBox" class="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 flex items-start gap-2">
+        <i data-lucide="lightbulb" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
+        <p id="categoryTipText">Para o RJ em Fev: Dê prioridade a tecidos 100% algodão bem leves para o dia e manga longa fina para o ar-condicionado.</p>
+      </div>
+
+      <!-- LISTA DINÂMICA DE ITENS (CARDS COM STEPPER POR TAMANHO) -->
+      <div id="itemsContainer" class="space-y-4">
+        <!-- Renderizado via JavaScript -->
+      </div>
+    </div>
+
+    <!-- SEÇÃO: MALA DA MATERNIDADE -->
+    <div id="sectionMaternidade" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl border border-rose-100 p-4 shadow-xs">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold text-gray-900 flex items-center gap-2">
+            <i data-lucide="backpack" class="w-5 h-5 text-rose-500"></i> Checklist da Maternidade
+          </h2>
+          <span id="maternidadeProgress" class="text-xs bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded-full">0/0</span>
+        </div>
+        <p class="text-xs text-gray-500 mb-4">Recomendado deixar a mala pronta até a 34ª-36ª semana de gestação.</p>
+
+        <!-- SUB-ABAS MATERNIDADE -->
+        <div class="space-y-4" id="maternidadeChecklistContainer">
+          <!-- Renderizado via JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- SEÇÃO: RESUMO FINANCEIRO -->
+    <div id="sectionResumo" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-xs space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-bold text-gray-900 flex items-center gap-2">
+            <i data-lucide="wallet" class="w-5 h-5 text-emerald-600"></i> Financeiro
+          </h2>
+          <span id="resumoQtdAquisicoes" class="text-[10px] bg-gray-100 text-gray-600 font-bold px-2 py-1 rounded-full">0 aquisições</span>
+        </div>
+
+        <div class="p-4 rounded-xl bg-gray-50 border border-gray-200 text-center">
+          <span class="text-[10px] text-gray-500 uppercase font-semibold">Total pago</span>
+          <p id="resumoGastoReal" class="text-2xl font-extrabold text-gray-900 mt-1">R$ 0,00</p>
+          <p id="resumoPecasCompradas" class="text-[10px] text-gray-500 mt-1">0 peças pagas</p>
+        </div>
+
+        <div>
+          <h3 class="text-xs font-bold text-gray-700 mb-2">Aquisições</h3>
+          <div id="listaDetalhadaCompras" class="space-y-2 max-h-96 overflow-y-auto pr-1 no-scrollbar">
+            <!-- Renderizado via JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- BOTÃO FLUTUANTE DE ADICIONAR ITEM -->
+  <button onclick="openActionModal()" class="fixed bottom-20 right-4 bg-rose-600 text-white rounded-full p-4 shadow-lg hover:bg-rose-700 active:scale-95 transition flex items-center justify-center z-30">
+    <i data-lucide="plus" class="w-6 h-6"></i>
+  </button>
+
+  <!-- BARRA DE NAVEGAÇÃO INFERIOR: SOMENTE NAVEGAÇÃO -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 z-40 py-2 px-6">
+    <div class="max-w-md mx-auto grid grid-cols-3 items-center text-center">
+      <button onclick="switchTab('enxoval')" id="navBtnEnxoval" class="nav-item text-rose-600 flex flex-col items-center justify-center py-1 transition">
+        <i data-lucide="list-checks" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold mt-1">Enxoval</span>
+      </button>
+      <button onclick="switchTab('maternidade')" id="navBtnMaternidade" class="nav-item text-gray-400 flex flex-col items-center justify-center py-1 transition hover:text-gray-600">
+        <i data-lucide="backpack" class="w-5 h-5"></i>
+        <span class="text-[10px] font-medium mt-1">Maternidade</span>
+      </button>
+      <button onclick="switchTab('resumo')" id="navBtnResumo" class="nav-item text-gray-400 flex flex-col items-center justify-center py-1 transition hover:text-gray-600">
+        <i data-lucide="wallet" class="w-5 h-5"></i>
+        <span class="text-[10px] font-medium mt-1">Financeiro</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- MODAL: ESCOLHA DA AÇÃO -->
+  <div id="modalAction" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md p-5 space-y-4 shadow-xl">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="font-bold text-gray-900 text-base">Adicionar ao enxoval</h3>
+        <button onclick="closeModal('modalAction')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <p class="text-xs text-gray-500">Escolha o que você quer cadastrar.</p>
+      <div class="space-y-2">
+        <button onclick="openNewItemModal()" class="w-full p-4 rounded-2xl border border-rose-200 bg-rose-50 text-left flex items-center gap-3 active:scale-[.99] transition">
+          <span class="w-10 h-10 rounded-full bg-white text-rose-600 flex items-center justify-center shadow-sm"><i data-lucide="plus" class="w-5 h-5"></i></span>
+          <span><strong class="block text-sm text-gray-900">Criar novo item</strong><span class="text-[11px] text-gray-500">Ex.: Body Manga Longa, Berço, Toalha...</span></span>
+        </button>
+        <button onclick="openChooseAcquisitionModal()" class="w-full p-4 rounded-2xl border border-emerald-200 bg-emerald-50 text-left flex items-center gap-3 active:scale-[.99] transition">
+          <span class="w-10 h-10 rounded-full bg-white text-emerald-600 flex items-center justify-center shadow-sm"><i data-lucide="shopping-bag" class="w-5 h-5"></i></span>
+          <span><strong class="block text-sm text-gray-900">Adicionar aquisição</strong><span class="text-[11px] text-gray-500">Registre uma compra ou um presente em um item existente.</span></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CRIAR / EDITAR ITEM -->
+  <div id="modalItem" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-5 space-y-4 shadow-xl">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 id="modalTitle" class="font-bold text-gray-900 text-base">Novo item</h3>
+        <button onclick="closeModal('modalItem')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <form id="itemForm" onsubmit="saveItem(event)" class="space-y-3">
+        <input type="hidden" id="itemId">
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Nome do item</label>
+          <input type="text" id="itemName" required placeholder="Ex.: Body Manga Longa" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-400 outline-none">
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Categoria</label>
+            <select id="itemCategory" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+              <option value="vestuario">Vestuário</option>
+              <option value="quarto">Quarto do Bebê</option>
+              <option value="higiene">Higiene e Banho</option>
+              <option value="alimentacao">Alimentação</option>
+              <option value="passeio">Passeio e Transporte</option>
+              <option value="mamae">Coisas da Mamãe</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Importância</label>
+            <select id="itemEssential" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+              <option value="true">⭐ Essencial</option>
+              <option value="false">Opcional / Desejável</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="border border-gray-100 bg-rose-50/40 p-3 rounded-xl space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-bold text-gray-800">Meta por tamanho</label>
+            <span class="text-[10px] text-gray-500">O “possui” vem das aquisições</span>
+          </div>
+          <div class="grid grid-cols-4 gap-2 text-center text-xs">
+            <div>
+              <span class="block text-[10px] text-gray-500 font-bold">RN</span>
+              <input type="number" id="target_RN" min="0" placeholder="Meta" class="w-full text-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
+              <span id="owned_RN" class="block text-[9px] text-gray-400 mt-1">Possui 0</span>
+            </div>
+            <div>
+              <span class="block text-[10px] text-gray-500 font-bold">P</span>
+              <input type="number" id="target_P" min="0" placeholder="Meta" class="w-full text-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
+              <span id="owned_P" class="block text-[9px] text-gray-400 mt-1">Possui 0</span>
+            </div>
+            <div>
+              <span class="block text-[10px] text-gray-500 font-bold">M</span>
+              <input type="number" id="target_M" min="0" placeholder="Meta" class="w-full text-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
+              <span id="owned_M" class="block text-[9px] text-gray-400 mt-1">Possui 0</span>
+            </div>
+            <div>
+              <span class="block text-[10px] text-gray-500 font-bold">Único</span>
+              <input type="number" id="target_U" min="0" placeholder="Meta" class="w-full text-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
+              <span id="owned_U" class="block text-[9px] text-gray-400 mt-1">Possui 0</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Observações</label>
+          <textarea id="itemNotes" rows="2" placeholder="Ex.: preferir algodão leve; cores neutras..." class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none resize-none"></textarea>
+        </div>
+
+        <div id="deleteItemSection" class="hidden pt-1">
+          <button type="button" id="deleteItemFromEditButton" onclick="deleteItemFromEdit()" class="w-full py-2.5 text-xs font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl flex items-center justify-center gap-2">
+            <i data-lucide="trash-2" class="w-4 h-4"></i> Excluir item e aquisições
+          </button>
+        </div>
+
+        <div class="pt-2 flex space-x-2">
+          <button type="button" onclick="closeModal('modalItem')" class="w-1/2 py-2.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl">Cancelar</button>
+          <button type="submit" class="w-1/2 py-2.5 text-xs font-bold text-white bg-rose-600 rounded-xl shadow-md">Salvar item</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ESCOLHER ITEM PARA AQUISIÇÃO -->
+  <div id="modalChooseAcquisition" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[80vh] overflow-y-auto p-5 space-y-4 shadow-xl">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="font-bold text-gray-900 text-base">Escolher item</h3>
+        <button onclick="closeModal('modalChooseAcquisition')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <input type="text" id="acquisitionItemSearch" oninput="renderAcquisitionItemChoices()" placeholder="Buscar item..." class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+      <div id="acquisitionItemChoices" class="space-y-2"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: NOVA AQUISIÇÃO -->
+  <div id="modalAcquisition" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-5 space-y-4 shadow-xl">
+      <div class="flex justify-between items-center border-b pb-2">
+        <div>
+          <h3 class="font-bold text-gray-900 text-base">Adicionar aquisição</h3>
+          <p id="acquisitionItemName" class="text-[11px] text-gray-500 mt-0.5"></p>
+        </div>
+        <button onclick="closeModal('modalAcquisition')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <form id="acquisitionForm" onsubmit="saveAcquisition(event)" class="space-y-3">
+        <input type="hidden" id="acquisitionItemId">
+        <input type="hidden" id="acquisitionId">
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Tipo</label>
+          <select id="acquisitionType" onchange="toggleAcquisitionType()" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+            <option value="purchase">🛒 Compra</option>
+            <option value="gift">🎁 Presente / Doação</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Tamanho</label>
+            <select id="acquisitionSize" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+              <option value="RN">RN</option>
+              <option value="P">P</option>
+              <option value="M">M</option>
+              <option value="U">Único</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Quantidade</label>
+            <input type="number" id="acquisitionQuantity" min="1" step="1" value="1" required class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Marca / Modelo</label>
+          <input type="text" id="acquisitionBrand" placeholder="Ex.: Marca 1" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+        </div>
+
+        <div id="acquisitionPriceBox">
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Preço unitário (R$)</label>
+          <input type="number" id="acquisitionUnitPrice" min="0" step="0.01" placeholder="0,00" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+          <p id="acquisitionTotalPreview" class="text-[10px] text-gray-500 mt-1">Total desta aquisição: R$ 0,00</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Observação da aquisição</label>
+          <textarea id="acquisitionNotes" rows="2" placeholder="Ex.: 2 bodies iguais; presente da família..." class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none resize-none"></textarea>
+        </div>
+
+        <div id="deleteAcquisitionSection" class="hidden pt-1">
+          <button type="button" onclick="deleteAcquisitionFromEdit()" class="w-full py-2.5 text-xs font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl flex items-center justify-center gap-2">
+            <i data-lucide="trash-2" class="w-4 h-4"></i> Excluir aquisição
+          </button>
+        </div>
+
+        <div class="pt-2 flex space-x-2">
+          <button type="button" onclick="closeModal('modalAcquisition')" class="w-1/2 py-2.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl">Cancelar</button>
+          <button type="submit" class="w-1/2 py-2.5 text-xs font-bold text-white bg-emerald-600 rounded-xl shadow-md">Salvar aquisição</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: AQUISIÇÕES DO ITEM -->
+  <div id="modalAcquisitionHistory" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-5 space-y-4 shadow-xl">
+      <div class="flex justify-between items-center border-b pb-2">
+        <div>
+          <h3 id="historyItemName" class="font-bold text-gray-900 text-base">Aquisições</h3>
+          <p id="historySummary" class="text-[11px] text-gray-500 mt-0.5"></p>
+          <p class="text-[10px] text-gray-400 mt-1">Histórico completo. Toque no lápis para editar ou excluir uma aquisição.</p>
+        </div>
+        <button onclick="closeModal('modalAcquisitionHistory')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <button id="historyAddButton" onclick="addAcquisitionFromHistory()" class="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Adicionar aquisição</button>
+      <div id="historyList" class="space-y-2"></div>
+    </div>
+  </div>
+
 </body>
 </html>
