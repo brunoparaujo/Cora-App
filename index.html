@@ -79,10 +79,7 @@
         </div>
       </div>
       <div class="flex items-center space-x-2">
-        <button onclick="openFinanceModal()" class="p-2 rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100 transition relative">
-          <i data-lucide="wallet" class="w-5 h-5"></i>
-        </button>
-        <button onclick="openSettingsModal()" class="p-2 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+        <button onclick="openSettingsModal()" aria-label="Configurações" class="p-2 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
           <i data-lucide="sliders-horizontal" class="w-5 h-5"></i>
         </button>
       </div>
@@ -137,19 +134,6 @@
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- NAVEGAÇÃO DE ABAS / TABS -->
-    <div class="flex space-x-2 border-b border-gray-200 overflow-x-auto no-scrollbar pb-1 text-sm font-semibold text-gray-500">
-      <button onclick="switchTab('enxoval')" id="tabBtnEnxoval" class="tab-btn px-3 py-2 rounded-lg text-rose-600 bg-rose-50 flex items-center gap-1.5 border-b-2 border-rose-500 whitespace-nowrap">
-        <i data-lucide="baby" class="w-4 h-4"></i> Enxoval
-      </button>
-      <button onclick="switchTab('maternidade')" id="tabBtnMaternidade" class="tab-btn px-3 py-2 rounded-lg hover:text-gray-800 flex items-center gap-1.5 whitespace-nowrap">
-        <i data-lucide="briefcase" class="w-4 h-4"></i> Mala Maternidade
-      </button>
-      <button onclick="switchTab('resumo')" id="tabBtnResumo" class="tab-btn px-3 py-2 rounded-lg hover:text-gray-800 flex items-center gap-1.5 whitespace-nowrap">
-        <i data-lucide="pie-chart" class="w-4 h-4"></i> Resumo financeiro
-      </button>
     </div>
 
     <!-- SEÇÃO: ENXOVAL PRINCIPAL -->
@@ -267,24 +251,18 @@
     <i data-lucide="plus" class="w-6 h-6"></i>
   </button>
 
-  <!-- BARRA DE NAVEGAÇÃO INFERIOR -->
+  <!-- BARRA DE NAVEGAÇÃO INFERIOR: SOMENTE NAVEGAÇÃO -->
   <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 z-40 py-2 px-6">
-    <div class="max-w-md mx-auto flex justify-between items-center text-center">
-      <button onclick="switchTab('enxoval')" class="nav-item text-rose-600 flex flex-col items-center">
+    <div class="max-w-md mx-auto grid grid-cols-3 items-center text-center">
+      <button onclick="switchTab('enxoval')" id="navBtnEnxoval" class="nav-item text-rose-600 flex flex-col items-center justify-center py-1 transition">
         <i data-lucide="list-checks" class="w-5 h-5"></i>
-        <span class="text-[10px] font-bold mt-1">Lista</span>
+        <span class="text-[10px] font-bold mt-1">Enxoval</span>
       </button>
-      <button onclick="switchTab('maternidade')" class="nav-item text-gray-400 flex flex-col items-center hover:text-gray-600">
-        <i data-lucide="heart-handshake" class="w-5 h-5"></i>
+      <button onclick="switchTab('maternidade')" id="navBtnMaternidade" class="nav-item text-gray-400 flex flex-col items-center justify-center py-1 transition hover:text-gray-600">
+        <i data-lucide="backpack" class="w-5 h-5"></i>
         <span class="text-[10px] font-medium mt-1">Maternidade</span>
       </button>
-      <button onclick="openAddItemModal()" class="flex flex-col items-center text-rose-500">
-        <div class="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center -mt-2 shadow-xs border border-rose-200">
-          <i data-lucide="plus-circle" class="w-5 h-5"></i>
-        </div>
-        <span class="text-[10px] font-semibold mt-0.5">Novo Item</span>
-      </button>
-      <button onclick="switchTab('resumo')" class="nav-item text-gray-400 flex flex-col items-center hover:text-gray-600">
+      <button onclick="switchTab('resumo')" id="navBtnResumo" class="nav-item text-gray-400 flex flex-col items-center justify-center py-1 transition hover:text-gray-600">
         <i data-lucide="wallet" class="w-5 h-5"></i>
         <span class="text-[10px] font-medium mt-1">Financeiro</span>
       </button>
@@ -862,20 +840,27 @@
     // ALTERNAR ABAS PRINCIPAIS
     function switchTab(tab) {
       appState.activeTab = tab;
+
       document.getElementById('sectionEnxoval').classList.toggle('hidden', tab !== 'enxoval');
       document.getElementById('sectionMaternidade').classList.toggle('hidden', tab !== 'maternidade');
       document.getElementById('sectionResumo').classList.toggle('hidden', tab !== 'resumo');
 
-      document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.remove('text-rose-600', 'bg-rose-50', 'border-b-2', 'border-rose-500');
+      const navButtons = {
+        enxoval: document.getElementById('navBtnEnxoval'),
+        maternidade: document.getElementById('navBtnMaternidade'),
+        resumo: document.getElementById('navBtnResumo')
+      };
+
+      Object.values(navButtons).forEach(btn => {
+        if (!btn) return;
+        btn.classList.remove('text-rose-600', 'font-bold');
+        btn.classList.add('text-gray-400');
       });
 
-      if (tab === 'enxoval') {
-        document.getElementById('tabBtnEnxoval').classList.add('text-rose-600', 'bg-rose-50', 'border-b-2', 'border-rose-500');
-      } else if (tab === 'maternidade') {
-        document.getElementById('tabBtnMaternidade').classList.add('text-rose-600', 'bg-rose-50', 'border-b-2', 'border-rose-500');
-      } else if (tab === 'resumo') {
-        document.getElementById('tabBtnResumo').classList.add('text-rose-600', 'bg-rose-50', 'border-b-2', 'border-rose-500');
+      const activeButton = navButtons[tab];
+      if (activeButton) {
+        activeButton.classList.remove('text-gray-400');
+        activeButton.classList.add('text-rose-600', 'font-bold');
       }
     }
 
