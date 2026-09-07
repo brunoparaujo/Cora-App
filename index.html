@@ -242,17 +242,17 @@
 
         <div class="grid grid-cols-2 gap-2 text-center">
           <div class="p-3 rounded-xl bg-gray-50 border border-gray-200">
-            <span class="text-[10px] text-gray-500 uppercase font-semibold">Total Investido (Bolso)</span>
+            <span class="text-[10px] text-gray-500 uppercase font-semibold">Total pago (Bolso)</span>
             <p id="resumoGastoReal" class="text-lg font-extrabold text-gray-900">R$ 0,00</p>
           </div>
           <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-            <span class="text-[10px] text-emerald-700 uppercase font-semibold">Economia (Presentes)</span>
+            <span class="text-[10px] text-emerald-700 uppercase font-semibold">Valor estimado em presentes</span>
             <p id="resumoEconomiaPresentes" class="text-lg font-extrabold text-emerald-700">R$ 0,00</p>
           </div>
         </div>
 
         <div>
-          <h3 class="text-xs font-bold text-gray-700 mb-2">Peças Adquiridas com Detalhe de Valor/Loja</h3>
+          <h3 class="text-xs font-bold text-gray-700 mb-2">Itens adquiridos com detalhe de valor</h3>
           <div id="listaDetalhadaCompras" class="space-y-2 max-h-80 overflow-y-auto pr-1 no-scrollbar">
             <!-- Renderizado via JS -->
           </div>
@@ -330,7 +330,8 @@
 
         <!-- QUANTIDADES E METAS -->
         <div id="sizeQuantitiesBox" class="border border-gray-100 bg-rose-50/40 p-3 rounded-xl space-y-2">
-          <label class="block text-xs font-bold text-gray-800">Metas e Estoque Atual</label>
+          <label class="block text-xs font-bold text-gray-800">Metas, estoque e presentes</label>
+          <p class="text-[10px] text-gray-500">"Possui" = tudo que vocês já têm. "Presente" = parte desse estoque que não foi paga por vocês.</p>
 
           <div class="grid grid-cols-4 gap-2 text-center text-xs">
             <div>
@@ -356,21 +357,45 @@
           </div>
         </div>
 
-        <!-- DETALHES DE COMPRA/PRESENTE -->
+        <!-- PRESENTES / DOAÇÕES POR TAMANHO -->
+        <div class="border border-emerald-100 bg-emerald-50/40 p-3 rounded-xl space-y-2">
+          <label class="block text-xs font-bold text-gray-800">Quantos dos que vocês possuem foram presentes/doações?</label>
+          <p class="text-[10px] text-gray-500">A soma de presentes não pode ser maior que o estoque atual.</p>
+          <div class="grid grid-cols-4 gap-2 text-center text-xs">
+            <div>
+              <span class="block text-[10px] text-gray-500 font-bold">RN</span>
+              <input type="number" id="gift_RN" min="0" placeholder="0" class="w-full text-center p-1 bg-white border border-gray-200 rounded-lg text-xs">
+            </div>
+            <div>
+              <span class="block text-[10px] text-gray-500 font-bold">P</span>
+              <input type="number" id="gift_P" min="0" placeholder="0" class="w-full text-center p-1 bg-white border border-gray-200 rounded-lg text-xs">
+            </div>
+            <div>
+              <span class="block text-[10px] text-gray-500 font-bold">M</span>
+              <input type="number" id="gift_M" min="0" placeholder="0" class="w-full text-center p-1 bg-white border border-gray-200 rounded-lg text-xs">
+            </div>
+            <div>
+              <span class="block text-[10px] text-gray-500 font-bold">Único / G</span>
+              <input type="number" id="gift_U" min="0" placeholder="0" class="w-full text-center p-1 bg-white border border-gray-200 rounded-lg text-xs">
+            </div>
+          </div>
+        </div>
+
+        <!-- DETALHES DE COMPRA -->
         <div class="grid grid-cols-2 gap-2">
           <div>
             <label class="block text-xs font-semibold text-gray-700 mb-1">Marca / Modelo</label>
             <input type="text" id="itemBrand" placeholder="Ex: Mini & Co / Up Baby" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
           </div>
           <div>
-            <label class="block text-xs font-semibold text-gray-700 mb-1">Preço Pago (R$)</label>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Total pago neste item (R$)</label>
             <input type="number" step="0.01" id="itemPrice" placeholder="0.00" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
           </div>
         </div>
 
-        <div class="flex items-center gap-2 pt-1">
-          <input type="checkbox" id="itemIsGift" class="rounded text-rose-600 focus:ring-rose-400">
-          <label for="itemIsGift" class="text-xs text-gray-700 font-medium">Foi presente / Doação (R$ 0 no orçamento)</label>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Valor estimado dos presentes (opcional)</label>
+          <input type="number" step="0.01" id="itemGiftValue" placeholder="Só preencha se souber o valor" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
         </div>
 
         <div>
@@ -404,6 +429,41 @@
     const db = firebase.database();
   
     // ESTADO DA APLICAÇÃO E BANCO DE DADOS INICIAL
+    // V2: cada item fica separado no Firebase para reduzir conflitos entre os dois celulares.
+    // "current" continua sendo a quantidade que vocês possuem; "gift" é a parte recebida como presente/doação.
+    function normalizeItem(item) {
+      const sizes = item.sizes || {};
+      const normalizeSize = (key) => {
+        const source = sizes[key] || {};
+        return {
+          current: Number(source.current ?? source.owned ?? 0),
+          target: Number(source.target ?? 0),
+          gift: Number(source.gift ?? 0)
+        };
+      };
+
+      return {
+        id: item.id,
+        name: item.name || 'Item sem nome',
+        category: item.category || 'vestuario',
+        essential: !!item.essential,
+        brand: item.brand || '',
+        notes: item.notes || '',
+        pricePaid: Number(item.pricePaid ?? item.price ?? 0),
+        giftValue: Number(item.giftValue ?? 0),
+        sizes: {
+          RN: normalizeSize('RN'),
+          P: normalizeSize('P'),
+          M: normalizeSize('M'),
+          U: normalizeSize('U')
+        }
+      };
+    }
+
+    function itemToFirebase(item) {
+      return normalizeItem(item);
+    }
+
     const INITIAL_ITEMS = [
       // VESTUÁRIO (COM OS DADOS INFORMADOS DA CORA)
       {
@@ -413,13 +473,13 @@
         essential: true,
         brand: 'Mini & Co / BB2',
         notes: 'RN: 1 Ovelha, 1 Limão (Mini&Co), 2 Rosas (BB2)',
-        price: 439.80,
-        isGift: false,
+        pricePaid: 439.80,
+        giftValue: 0,
         sizes: {
-          RN: { current: 4, target: 4 },
-          P: { current: 0, target: 4 },
-          M: { current: 0, target: 4 },
-          U: { current: 0, target: 0 }
+          RN: { current: 4, target: 4, gift: 0 },
+          P: { current: 0, target: 4, gift: 0 },
+          M: { current: 0, target: 4, gift: 0 },
+          U: { current: 0, target: 0, gift: 0 }
         }
       },
       {
@@ -429,13 +489,13 @@
         essential: true,
         brand: 'Mini & Co',
         notes: 'RN: 1 Estampa Abelha (Mini & Co)',
-        price: 90.00,
-        isGift: false,
+        pricePaid: 90.00,
+        giftValue: 0,
         sizes: {
-          RN: { current: 1, target: 4 },
-          P: { current: 0, target: 4 },
-          M: { current: 0, target: 4 },
-          U: { current: 0, target: 0 }
+          RN: { current: 1, target: 4, gift: 0 },
+          P: { current: 0, target: 4, gift: 0 },
+          M: { current: 0, target: 4, gift: 0 },
+          U: { current: 0, target: 0, gift: 0 }
         }
       },
       {
@@ -445,13 +505,13 @@
         essential: true,
         brand: 'BB2 / Baby&Kids / Up Baby',
         notes: 'M: 1 Vermelho (Up Baby - Presente), 1 Branco (Mini&Co)',
-        price: 224.80,
-        isGift: false,
+        pricePaid: 224.80,
+        giftValue: 0,
         sizes: {
-          RN: { current: 3, target: 4 },
-          P: { current: 1, target: 6 },
-          M: { current: 2, target: 6 },
-          U: { current: 0, target: 0 }
+          RN: { current: 3, target: 4, gift: 0 },
+          P: { current: 1, target: 6, gift: 0 },
+          M: { current: 2, target: 6, gift: 0 },
+          U: { current: 0, target: 0, gift: 0 }
         }
       },
       {
@@ -461,13 +521,13 @@
         essential: true,
         brand: 'Baby & Kids',
         notes: 'Essencial para o calor do verão carioca',
-        price: 35.00,
-        isGift: false,
+        pricePaid: 35.00,
+        giftValue: 0,
         sizes: {
-          RN: { current: 0, target: 6 },
-          P: { current: 1, target: 6 },
-          M: { current: 0, target: 6 },
-          U: { current: 0, target: 0 }
+          RN: { current: 0, target: 6, gift: 0 },
+          P: { current: 1, target: 6, gift: 0 },
+          M: { current: 0, target: 6, gift: 0 },
+          U: { current: 0, target: 0, gift: 0 }
         }
       },
       {
@@ -477,13 +537,13 @@
         essential: true,
         brand: 'BB2 / Baby&Kids / Up Baby',
         notes: 'M: 1 Vermelho (Presente), 1 Amarelo (BB2)',
-        price: 80.00,
-        isGift: false,
+        pricePaid: 80.00,
+        giftValue: 0,
         sizes: {
-          RN: { current: 3, target: 5 },
-          P: { current: 1, target: 6 },
-          M: { current: 2, target: 6 },
-          U: { current: 0, target: 0 }
+          RN: { current: 3, target: 5, gift: 0 },
+          P: { current: 1, target: 6, gift: 0 },
+          M: { current: 2, target: 6, gift: 0 },
+          U: { current: 0, target: 0, gift: 0 }
         }
       },
       {
@@ -493,13 +553,13 @@
         essential: false,
         brand: 'BB2',
         notes: 'RN: 1 Marrom (BB2)',
-        price: 49.90,
-        isGift: false,
+        pricePaid: 49.90,
+        giftValue: 0,
         sizes: {
-          RN: { current: 1, target: 3 },
-          P: { current: 0, target: 4 },
-          M: { current: 0, target: 4 },
-          U: { current: 0, target: 0 }
+          RN: { current: 1, target: 3, gift: 0 },
+          P: { current: 0, target: 4, gift: 0 },
+          M: { current: 0, target: 4, gift: 0 },
+          U: { current: 0, target: 0, gift: 0 }
         }
       },
       {
@@ -509,13 +569,13 @@
         essential: false,
         brand: 'Zum Zum',
         notes: 'Tam 1: 1 Azul (Presente)',
-        price: 0.00,
-        isGift: true,
+        pricePaid: 0.00,
+        giftValue: 0,
         sizes: {
-          RN: { current: 0, target: 0 },
-          P: { current: 0, target: 1 },
-          M: { current: 0, target: 2 },
-          U: { current: 1, target: 2 }
+          RN: { current: 0, target: 0, gift: 0 },
+          P: { current: 0, target: 1, gift: 0 },
+          M: { current: 0, target: 2, gift: 0 },
+          U: { current: 1, target: 2, gift: 0 }
         }
       },
       {
@@ -525,13 +585,13 @@
         essential: false,
         brand: 'Baby Confort',
         notes: '1 Sapato Branco (Presente)',
-        price: 0.00,
-        isGift: true,
+        pricePaid: 0.00,
+        giftValue: 0,
         sizes: {
-          RN: { current: 0, target: 2 },
-          P: { current: 1, target: 3 },
-          M: { current: 0, target: 3 },
-          U: { current: 0, target: 0 }
+          RN: { current: 0, target: 2, gift: 0 },
+          P: { current: 1, target: 3, gift: 0 },
+          M: { current: 0, target: 3, gift: 0 },
+          U: { current: 0, target: 0, gift: 0 }
         }
       },
 
@@ -543,13 +603,13 @@
         essential: true,
         brand: 'Loupiot / Guibaby',
         notes: '3 Brancos Guibaby/Loupiot + 3 Diversos',
-        price: 49.99,
-        isGift: false,
+        pricePaid: 49.99,
+        giftValue: 0,
         sizes: {
-          RN: { current: 0, target: 0 },
-          P: { current: 0, target: 0 },
-          M: { current: 0, target: 0 },
-          U: { current: 6, target: 6 }
+          RN: { current: 0, target: 0, gift: 0 },
+          P: { current: 0, target: 0, gift: 0 },
+          M: { current: 0, target: 0, gift: 0 },
+          U: { current: 6, target: 6, gift: 0 }
         }
       },
       {
@@ -559,13 +619,13 @@
         essential: false,
         brand: 'Especial',
         notes: '1 Totoro + 1 Naninha do sono',
-        price: 0,
-        isGift: true,
+        pricePaid: 0,
+        giftValue: 0,
         sizes: {
-          RN: { current: 0, target: 0 },
-          P: { current: 0, target: 0 },
-          M: { current: 0, target: 0 },
-          U: { current: 2, target: 2 }
+          RN: { current: 0, target: 0, gift: 0 },
+          P: { current: 0, target: 0, gift: 0 },
+          M: { current: 0, target: 0, gift: 0 },
+          U: { current: 2, target: 2, gift: 0 }
         }
       },
       {
@@ -575,13 +635,13 @@
         essential: true,
         brand: '',
         notes: 'Berço americano ou acoplável',
-        price: 0,
-        isGift: false,
+        pricePaid: 0,
+        giftValue: 0,
         sizes: {
-          RN: { current: 0, target: 0 },
-          P: { current: 0, target: 0 },
-          M: { current: 0, target: 0 },
-          U: { current: 0, target: 1 }
+          RN: { current: 0, target: 0, gift: 0 },
+          P: { current: 0, target: 0, gift: 0 },
+          M: { current: 0, target: 0, gift: 0 },
+          U: { current: 0, target: 1, gift: 0 }
         }
       },
 
@@ -593,13 +653,13 @@
         essential: true,
         brand: 'Diversas',
         notes: '1 Rosa + 1 Branca',
-        price: 0,
-        isGift: false,
+        pricePaid: 0,
+        giftValue: 0,
         sizes: {
-          RN: { current: 0, target: 0 },
-          P: { current: 0, target: 0 },
-          M: { current: 0, target: 0 },
-          U: { current: 2, target: 4 }
+          RN: { current: 0, target: 0, gift: 0 },
+          P: { current: 0, target: 0, gift: 0 },
+          M: { current: 0, target: 0, gift: 0 },
+          U: { current: 2, target: 4, gift: 0 }
         }
       },
       {
@@ -609,13 +669,13 @@
         essential: true,
         brand: 'Algodão',
         notes: 'Essencial para gorfos e mamadas',
-        price: 40.00,
-        isGift: false,
+        pricePaid: 40.00,
+        giftValue: 0,
         sizes: {
-          RN: { current: 0, target: 0 },
-          P: { current: 0, target: 0 },
-          M: { current: 0, target: 0 },
-          U: { current: 4, target: 12 }
+          RN: { current: 0, target: 0, gift: 0 },
+          P: { current: 0, target: 0, gift: 0 },
+          M: { current: 0, target: 0, gift: 0 },
+          U: { current: 4, target: 12, gift: 0 }
         }
       },
       {
@@ -625,13 +685,13 @@
         essential: false,
         brand: '',
         notes: '1 Ganho de presente',
-        price: 0,
-        isGift: true,
+        pricePaid: 0,
+        giftValue: 0,
         sizes: {
-          RN: { current: 0, target: 0 },
-          P: { current: 0, target: 0 },
-          M: { current: 0, target: 0 },
-          U: { current: 1, target: 1 }
+          RN: { current: 0, target: 0, gift: 0 },
+          P: { current: 0, target: 0, gift: 0 },
+          M: { current: 0, target: 0, gift: 0 },
+          U: { current: 1, target: 1, gift: 0 }
         }
       },
 
@@ -643,13 +703,13 @@
         essential: false,
         brand: 'Up Baby',
         notes: '1 Vermelha ganha de presente',
-        price: 0,
-        isGift: true,
+        pricePaid: 0,
+        giftValue: 0,
         sizes: {
-          RN: { current: 0, target: 0 },
-          P: { current: 0, target: 0 },
-          M: { current: 0, target: 0 },
-          U: { current: 1, target: 4 }
+          RN: { current: 0, target: 0, gift: 0 },
+          P: { current: 0, target: 0, gift: 0 },
+          M: { current: 0, target: 0, gift: 0 },
+          U: { current: 1, target: 4, gift: 0 }
         }
       },
       {
@@ -659,13 +719,13 @@
         essential: true,
         brand: '',
         notes: 'Foco em modelo leve para o calor do RJ',
-        price: 0,
-        isGift: false,
+        pricePaid: 0,
+        giftValue: 0,
         sizes: {
-          RN: { current: 0, target: 0 },
-          P: { current: 0, target: 0 },
-          M: { current: 0, target: 0 },
-          U: { current: 0, target: 1 }
+          RN: { current: 0, target: 0, gift: 0 },
+          P: { current: 0, target: 0, gift: 0 },
+          M: { current: 0, target: 0, gift: 0 },
+          U: { current: 0, target: 1, gift: 0 }
         }
       }
     ];
@@ -700,35 +760,95 @@
       activeTab: 'enxoval'
     };
 
-    // INICIALIZAÇÃO
-    function initRealtimeSync() {
-      db.ref('enxoval_items').on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          appState.items = data.items || [];
-          appState.maternidade = data.maternidade || [];
+    // INICIALIZAÇÃO / SINCRONIZAÇÃO EM TEMPO REAL
+    // Estrutura nova:
+    // cora/items/{id}
+    // cora/maternidade/{id}
+    async function initRealtimeSync() {
+      try {
+        const rootRef = db.ref('cora');
+        const rootSnapshot = await rootRef.once('value');
+
+        if (!rootSnapshot.exists()) {
+          await seedDatabase();
         } else {
-          // Se o banco estiver vazio, ele sobe a SUA lista original (INITIAL_ITEMS)
-          db.ref('enxoval_items').set({
-            items: INITIAL_ITEMS, 
-            maternidade: MATERNIDADE_DEFAULT 
-          });
+          const root = rootSnapshot.val() || {};
+          // Migração única da estrutura antiga enxoval_items.
+          if (!root.items) {
+            await migrateLegacyDatabase();
+          }
         }
-        renderAll();
-      });
+
+        rootRef.on('value', (snapshot) => {
+          const data = snapshot.val() || {};
+          appState.items = Object.values(data.items || {}).map(normalizeItem);
+          appState.maternidade = Object.values(data.maternidade || {});
+          renderAll();
+        });
+      } catch (error) {
+        console.error('Erro ao iniciar sincronização:', error);
+        alert('Não foi possível conectar ao banco da Cora. Verifique a internet e tente novamente.');
+      }
     }
-  
-    function saveState() {
-      db.ref('enxoval_items').set({
-        items: appState.items,
-        maternidade: appState.maternidade,
-        updatedAt: Date.now()
+
+    async function seedDatabase() {
+      const updates = {};
+      INITIAL_ITEMS.forEach(item => {
+        updates[`cora/items/${item.id}`] = itemToFirebase(item);
       });
+      MATERNIDADE_DEFAULT.forEach(item => {
+        updates[`cora/maternidade/${item.id}`] = item;
+      });
+      updates['cora/meta/schemaVersion'] = 2;
+      updates['cora/meta/updatedAt'] = firebase.database.ServerValue.TIMESTAMP;
+      await db.ref().update(updates);
     }
-    
+
+    async function migrateLegacyDatabase() {
+      const oldSnapshot = await db.ref('enxoval_items').once('value');
+      const oldData = oldSnapshot.val();
+
+      if (!oldData || !oldData.items) {
+        await seedDatabase();
+        return;
+      }
+
+      const updates = {};
+      Object.values(oldData.items).forEach(item => {
+        const normalized = normalizeItem(item);
+        updates[`cora/items/${normalized.id}`] = normalized;
+      });
+
+      Object.values(oldData.maternidade || {}).forEach(item => {
+        updates[`cora/maternidade/${item.id}`] = item;
+      });
+
+      if (!Object.keys(oldData.maternidade || {}).length) {
+        MATERNIDADE_DEFAULT.forEach(item => {
+          updates[`cora/maternidade/${item.id}`] = item;
+        });
+      }
+
+      updates['cora/meta/schemaVersion'] = 2;
+      updates['cora/meta/migratedAt'] = firebase.database.ServerValue.TIMESTAMP;
+      await db.ref().update(updates);
+    }
+
+    function saveItemToFirebase(item) {
+      return db.ref(`cora/items/${item.id}`).set(itemToFirebase(item));
+    }
+
+    function deleteItemFromFirebase(id) {
+      return db.ref(`cora/items/${id}`).remove();
+    }
+
+    function saveMaternidadeItemToFirebase(item) {
+      return db.ref(`cora/maternidade/${item.id}`).set(item);
+    }
+
     window.onload = function() {
       lucide.createIcons();
-      initRealtimeSync(); 
+      initRealtimeSync();
     };
 
     function renderAll() {
@@ -773,14 +893,11 @@
       let totalSpent = 0;
 
       appState.items.forEach(item => {
-        Object.values(item.sizes).forEach(s => {
-          totalCurrent += s.current || 0;
-          totalTarget += s.target || 0;
+        Object.values(item.sizes || {}).forEach(s => {
+          totalCurrent += Number(s.current) || 0;
+          totalTarget += Number(s.target) || 0;
         });
-
-        if (!item.isGift) {
-          totalSpent += (item.price || 0);
-        }
+        totalSpent += Number(item.pricePaid) || 0;
       });
 
       const percent = totalTarget > 0 ? Math.min(100, Math.round((totalCurrent / totalTarget) * 100)) : 0;
@@ -790,13 +907,15 @@
       document.getElementById('progressItemsCount').innerText = `${totalCurrent} de ${totalTarget} peças`;
       document.getElementById('financeTotalSpent').innerText = `Gasto: R$ ${totalSpent.toFixed(2)}`;
 
-      // Badges por Categoria
       const categories = ['vestuario', 'quarto', 'higiene', 'alimentacao', 'passeio', 'mamae'];
       categories.forEach(c => {
         const catItems = appState.items.filter(i => i.category === c);
         let cur = 0, tar = 0;
         catItems.forEach(i => {
-          Object.values(i.sizes).forEach(s => { cur += s.current; tar += s.target; });
+          Object.values(i.sizes || {}).forEach(s => {
+            cur += Number(s.current) || 0;
+            tar += Number(s.target) || 0;
+          });
         });
         const badge = document.getElementById(`catBadge${c.charAt(0).toUpperCase() + c.slice(1)}`);
         if (badge) badge.innerText = `${cur}/${tar}`;
@@ -868,11 +987,11 @@
             </div>
 
             <!-- NOTAS E DETALHES -->
-            ${item.notes || item.price > 0 || item.isGift ? `
+            ${item.notes || item.pricePaid > 0 || item.giftValue > 0 || getGiftTotal(item) > 0 ? `
               <div class="bg-gray-50 rounded-xl p-2.5 text-[11px] text-gray-600 flex justify-between items-center">
                 <span>${item.notes || 'Sem observações'}</span>
                 <span class="font-bold text-gray-800 shrink-0 ml-2">
-                  ${item.isGift ? '<span class="text-emerald-600">🎁 Presente</span>' : (item.price > 0 ? `R$ ${item.price.toFixed(2)}` : '')}
+                  ${getGiftTotal(item) > 0 ? `<span class="text-emerald-600">🎁 ${getGiftTotal(item)} presente(s)</span>` : (item.pricePaid > 0 ? `R$ ${item.pricePaid.toFixed(2)} pagos` : '')}
                 </span>
               </div>
             ` : ''}
@@ -904,14 +1023,15 @@
     }
 
     // MUDAR QUANTIDADE RAPIDAMENTE (STEPPER)
-    function updateQty(itemId, sizeLabel, delta) {
-      const item = appState.items.find(i => i.id === itemId);
-      if (!item) return;
-
+    // Usa transaction para que dois celulares possam alterar a mesma quantidade sem um sobrescrever o outro.
+    async function updateQty(itemId, sizeLabel, delta) {
       const key = sizeLabel === 'Único' ? 'U' : sizeLabel;
-      if (item.sizes[key]) {
-        item.sizes[key].current = Math.max(0, item.sizes[key].current + delta);
-        saveState();
+      const sizeRef = db.ref(`cora/items/${itemId}/sizes/${key}/current`);
+
+      try {
+        await sizeRef.transaction(current => Math.max(0, Number(current || 0) + delta));
+      } catch (error) {
+        console.error('Erro ao atualizar quantidade:', error);
       }
     }
 
@@ -935,35 +1055,45 @@
       const item = appState.maternidade.find(i => i.id === id);
       if (item) {
         item.checked = !item.checked;
-        saveState();
+        saveMaternidadeItemToFirebase(item);
       }
     }
 
     // RESUMO FINANCEIRO
+    function getGiftTotal(item) {
+      return Object.values(item.sizes || {}).reduce((acc, s) => acc + (Number(s.gift) || 0), 0);
+    }
+
+    function getOwnedTotal(item) {
+      return Object.values(item.sizes || {}).reduce((acc, s) => acc + (Number(s.current) || 0), 0);
+    }
+
     function renderResumoFinanceiro() {
       let spent = 0;
       let giftSaved = 0;
       let detailedListHtml = '';
 
       appState.items.forEach(item => {
-        let totalPieces = Object.values(item.sizes).reduce((acc, s) => acc + s.current, 0);
+        const totalPieces = getOwnedTotal(item);
+        const giftPieces = getGiftTotal(item);
+        const purchasedPieces = Math.max(0, totalPieces - giftPieces);
+        const pricePaid = Number(item.pricePaid) || 0;
+        const giftValue = Number(item.giftValue) || 0;
 
-        if (totalPieces > 0) {
-          if (item.isGift) {
-            giftSaved += (item.price || 50) * totalPieces; // Estimativa de economia se não houver preço
-          } else {
-            spent += (item.price || 0);
-          }
+        spent += pricePaid;
+        giftSaved += giftValue;
 
+        if (totalPieces > 0 || pricePaid > 0 || giftValue > 0) {
           detailedListHtml += `
-            <div class="flex justify-between items-center text-xs p-2 bg-gray-50 rounded-lg border border-gray-100">
-              <div>
-                <span class="font-bold text-gray-800">${item.name}</span>
-                <span class="text-[10px] text-gray-500 block">${totalPieces} peças • ${item.brand || 'Marca n/i'}</span>
+            <div class="p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+              <div class="flex justify-between items-start gap-2">
+                <div>
+                  <span class="font-bold text-gray-800">${item.name}</span>
+                  <span class="text-[10px] text-gray-500 block">${totalPieces} peças • ${purchasedPieces} compradas • ${giftPieces} presente(s)</span>
+                </div>
+                <span class="font-bold text-gray-900 shrink-0">R$ ${pricePaid.toFixed(2)}</span>
               </div>
-              <span class="font-bold ${item.isGift ? 'text-emerald-600' : 'text-gray-900'}">
-                ${item.isGift ? 'Ganhou 🎁' : `R$ ${(item.price || 0).toFixed(2)}`}
-              </span>
+              ${giftValue > 0 ? `<div class="text-[10px] text-emerald-600 mt-1">🎁 Valor estimado dos presentes: R$ ${giftValue.toFixed(2)}</div>` : ''}
             </div>
           `;
         }
@@ -971,7 +1101,7 @@
 
       document.getElementById('resumoGastoReal').innerText = `R$ ${spent.toFixed(2)}`;
       document.getElementById('resumoEconomiaPresentes').innerText = `R$ ${giftSaved.toFixed(2)}`;
-      document.getElementById('listaDetalhadaCompras').innerHTML = detailedListHtml || '<p class="text-xs text-gray-400">Nenhuma compra informada ainda.</p>';
+      document.getElementById('listaDetalhadaCompras').innerHTML = detailedListHtml || '<p class="text-xs text-gray-400">Nenhuma aquisição informada ainda.</p>';
     }
 
     // CONTROLE DE MODAL E FORMULÁRIO
@@ -995,74 +1125,74 @@
       document.getElementById('itemCategory').value = item.category;
       document.getElementById('itemEssential').value = item.essential.toString();
       document.getElementById('itemBrand').value = item.brand || '';
-      document.getElementById('itemPrice').value = item.price || '';
-      document.getElementById('itemIsGift').checked = !!item.isGift;
-      document.getElementById('itemNotes').value = item.notes || '';
+      document.getElementById('itemPrice').value = item.pricePaid || '';
+      document.getElementById('itemGiftValue').value = item.giftValue || '';
+            document.getElementById('itemNotes').value = item.notes || '';
 
       document.getElementById('qty_RN').value = item.sizes.RN?.current || 0;
       document.getElementById('target_RN').value = item.sizes.RN?.target || 0;
+      document.getElementById('gift_RN').value = item.sizes.RN?.gift || 0;
 
       document.getElementById('qty_P').value = item.sizes.P?.current || 0;
       document.getElementById('target_P').value = item.sizes.P?.target || 0;
+      document.getElementById('gift_P').value = item.sizes.P?.gift || 0;
 
       document.getElementById('qty_M').value = item.sizes.M?.current || 0;
       document.getElementById('target_M').value = item.sizes.M?.target || 0;
+      document.getElementById('gift_M').value = item.sizes.M?.gift || 0;
 
       document.getElementById('qty_U').value = item.sizes.U?.current || 0;
       document.getElementById('target_U').value = item.sizes.U?.target || 0;
+      document.getElementById('gift_U').value = item.sizes.U?.gift || 0;
 
       document.getElementById('modalTitle').innerText = 'Editar Item';
       document.getElementById('modalItem').classList.remove('hidden');
     }
 
-    function saveItem(e) {
+    async function saveItem(e) {
       e.preventDefault();
 
       const id = document.getElementById('itemId').value || 'item_' + Date.now();
-      const newItem = {
+      const newItem = normalizeItem({
         id,
-        name: document.getElementById('itemName').value,
+        name: document.getElementById('itemName').value.trim(),
         category: document.getElementById('itemCategory').value,
         essential: document.getElementById('itemEssential').value === 'true',
-        brand: document.getElementById('itemBrand').value,
-        price: parseFloat(document.getElementById('itemPrice').value) || 0,
-        isGift: document.getElementById('itemIsGift').checked,
-        notes: document.getElementById('itemNotes').value,
+        brand: document.getElementById('itemBrand').value.trim(),
+        pricePaid: parseFloat(document.getElementById('itemPrice').value) || 0,
+        giftValue: parseFloat(document.getElementById('itemGiftValue').value) || 0,
+        notes: document.getElementById('itemNotes').value.trim(),
         sizes: {
-          RN: {
-            current: parseInt(document.getElementById('qty_RN').value) || 0,
-            target: parseInt(document.getElementById('target_RN').value) || 0
-          },
-          P: {
-            current: parseInt(document.getElementById('qty_P').value) || 0,
-            target: parseInt(document.getElementById('target_P').value) || 0
-          },
-          M: {
-            current: parseInt(document.getElementById('qty_M').value) || 0,
-            target: parseInt(document.getElementById('target_M').value) || 0
-          },
-          U: {
-            current: parseInt(document.getElementById('qty_U').value) || 0,
-            target: parseInt(document.getElementById('target_U').value) || 0
-          }
+          RN: { current: parseInt(document.getElementById('qty_RN').value) || 0, target: parseInt(document.getElementById('target_RN').value) || 0, gift: parseInt(document.getElementById('gift_RN').value) || 0 },
+          P:  { current: parseInt(document.getElementById('qty_P').value) || 0, target: parseInt(document.getElementById('target_P').value) || 0, gift: parseInt(document.getElementById('gift_P').value) || 0 },
+          M:  { current: parseInt(document.getElementById('qty_M').value) || 0, target: parseInt(document.getElementById('target_M').value) || 0, gift: parseInt(document.getElementById('gift_M').value) || 0 },
+          U:  { current: parseInt(document.getElementById('qty_U').value) || 0, target: parseInt(document.getElementById('target_U').value) || 0, gift: parseInt(document.getElementById('gift_U').value) || 0 }
         }
-      };
+      });
 
-      const existingIndex = appState.items.findIndex(i => i.id === id);
-      if (existingIndex >= 0) {
-        appState.items[existingIndex] = newItem;
-      } else {
-        appState.items.push(newItem);
+      const invalidGift = Object.values(newItem.sizes).some(s => s.gift > s.current);
+      if (invalidGift) {
+        alert('A quantidade de presentes não pode ser maior do que a quantidade que vocês possuem.');
+        return;
       }
 
-      saveState();
-      closeModal('modalItem');
+      try {
+        await saveItemToFirebase(newItem);
+        closeModal('modalItem');
+      } catch (error) {
+        console.error('Erro ao salvar item:', error);
+        alert('Não foi possível salvar o item. Tente novamente.');
+      }
     }
 
-    function deleteItem(id) {
+    async function deleteItem(id) {
       if (confirm('Tem certeza que deseja excluir este item?')) {
-        appState.items = appState.items.filter(i => i.id !== id);
-        saveState();
+        try {
+          await deleteItemFromFirebase(id);
+        } catch (error) {
+          console.error('Erro ao excluir item:', error);
+          alert('Não foi possível excluir o item. Tente novamente.');
+        }
       }
     }
 
@@ -1070,25 +1200,23 @@
       switchTab('resumo');
     }
 
-    function openSettingsModal() {
-      if (confirm('Deseja resetar a lista para os valores padrão e recarregar os dados originais da Cora?')) {
-        // Sobrescreve a base de dados na nuvem com as listas originais
-        db.ref('enxoval_items').set({
-          items: INITIAL_ITEMS,
-          maternidade: MATERNIDADE_DEFAULT,
-          updatedAt: Date.now()
-        });
-        
-        // Limpa o cache antigo do celular apenas por segurança
-        localStorage.removeItem('cora_enxoval_items');
-        localStorage.removeItem('cora_maternidade');
-        
-        // A chamada para loadState() e renderAll() foi removida.
-        // A função initRealtimeSync() que configuramos antes já detecta 
-        // a alteração no banco e atualiza a tela automaticamente para todos.
+    async function openSettingsModal() {
+      if (confirm('Deseja resetar o enxoval para os valores padrão? Isso substituirá os dados atuais da Cora no banco compartilhado.')) {
+        try {
+          const updates = {};
+          INITIAL_ITEMS.forEach(item => {
+            updates[`cora/items/${item.id}`] = itemToFirebase(item);
+          });
+          MATERNIDADE_DEFAULT.forEach(item => {
+            updates[`cora/maternidade/${item.id}`] = item;
+          });
+          await db.ref().update(updates);
+        } catch (error) {
+          console.error('Erro ao resetar:', error);
+          alert('Não foi possível resetar o enxoval.');
+        }
       }
     }
-
   </script>
 </body>
 </html>
