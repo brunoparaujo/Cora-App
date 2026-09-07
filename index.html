@@ -27,10 +27,11 @@
     }
     const db = firebase.database();
 
-    // V3.3 — Item é uma necessidade do enxoval; aquisições registram como cada peça chegou.
-    const SIZE_KEYS = ['RN', 'P', 'M', 'U'];
-    const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', U: 'Único' };
-    const SCHEMA_VERSION = 3;
+    // V3.4 — Visualização de quantidade: itens com tamanho usam quebra por tamanho; itens tamanho único usam quantidade.
+    const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
+    const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
+    const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
+    const SCHEMA_VERSION = 4;
 
     const INITIAL_ITEMS = [
       // VESTUÁRIO (COM OS DADOS INFORMADOS DA CORA)
@@ -409,6 +410,7 @@
         category: item.category || 'vestuario',
         essential: !!item.essential,
         notes: item.notes || '',
+        sizeMode: item.sizeMode === 'unique' ? 'unique' : 'multi',
         sizes: {},
         acquisitions: {}
       };
@@ -419,6 +421,11 @@
           target: Math.max(0, Number(source.target) || 0)
         };
       });
+
+      if (!item.sizeMode) {
+        const hasNonUniqueTargets = STANDARD_SIZE_KEYS.some(size => normalized.sizes[size].target > 0);
+        normalized.sizeMode = normalized.sizes.U.target > 0 && !hasNonUniqueTargets ? 'unique' : 'multi';
+      }
 
       if (item.acquisitions && typeof item.acquisitions === 'object') {
         Object.entries(item.acquisitions).forEach(([id, acq]) => {
@@ -459,6 +466,66 @@
 
     function getTargetTotal(item) {
       return SIZE_KEYS.reduce((sum, size) => sum + (Number(item.sizes?.[size]?.target) || 0), 0);
+    }
+
+    function isUniqueSizeItem(item) {
+      return item.sizeMode === 'unique';
+    }
+
+    function getDisplaySizes(item) {
+      if (isUniqueSizeItem(item)) return ['U'];
+      return STANDARD_SIZE_KEYS;
+    }
+
+    function setSizeMode(mode, silent = false) {
+      const select = document.getElementById('itemSizeMode');
+      if (!select) return;
+      if (mode === 'unique') {
+        const hasOtherData = STANDARD_SIZE_KEYS.some(size => {
+          const target = Number(document.getElementById(`target_${size}`)?.value) || 0;
+          const owned = Number((document.getElementById(`owned_${size}`)?.innerText || '').replace(/\D/g, '')) || 0;
+          return target > 0 || owned > 0;
+        });
+        if (hasOtherData) {
+          select.value = 'multi';
+          if (!silent) alert('Para usar “Tamanho único”, primeiro zere as metas e remova as aquisições dos outros tamanhos.');
+          return;
+        }
+      }
+      select.value = mode === 'unique' ? 'unique' : 'multi';
+      const unique = select.value === 'unique';
+      STANDARD_SIZE_KEYS.forEach(size => {
+        const wrapper = document.getElementById(`sizeWrap_${size}`);
+        const input = document.getElementById(`target_${size}`);
+        if (wrapper) wrapper.classList.toggle('hidden', unique);
+        if (input) {
+          input.disabled = unique;
+          if (unique) input.value = 0;
+        }
+      });
+      const uWrap = document.getElementById('sizeWrap_U');
+      if (uWrap) {
+        uWrap.classList.toggle('hidden', !unique);
+        uWrap.classList.toggle('col-span-4', unique);
+      }
+      const hint = document.getElementById('sizeModeHint');
+      if (hint) hint.innerText = unique ? 'Este item usa somente o tamanho Único.' : 'Use RN, P, M e G. Para itens sem tamanho, escolha Único.';
+    }
+
+    function syncAcquisitionSizeOptions(item, presetSize = '') {
+      const select = document.getElementById('acquisitionSize');
+      if (!select) return;
+      const sizes = isUniqueSizeItem(item) ? ['U'] : (presetSize === 'U' ? [...STANDARD_SIZE_KEYS, 'U'] : STANDARD_SIZE_KEYS);
+      select.innerHTML = sizes.map(size => `<option value=\"${size}\">${SIZE_LABELS[size]}</option>`).join('');
+      select.value = sizes.includes(presetSize) ? presetSize : sizes[0];
+    }
+
+    function getProgressCurrentForItem(item) {
+      return SIZE_KEYS.reduce((sum, size) => {
+        const current = getOwnedForSize(item, size);
+        const target = Number(item.sizes?.[size]?.target) || 0;
+        return sum + Math.min(current, target);
+      }, 0);
     }
 
     function getPurchaseTotal(item) {
@@ -746,11 +813,15 @@
               </button>
             </div>
 
-            <div class="grid grid-cols-4 gap-1.5 pt-1">
-              ${renderSizeCell(item, 'RN')}
-              ${renderSizeCell(item, 'P')}
-              ${renderSizeCell(item, 'M')}
-              ${renderSizeCell(item, 'U')}
+            <div class="pt-1">
+              ${isUniqueSizeItem(item) ? renderUniqueQuantity(item) : `
+                <div class="flex items-center justify-between gap-2 mb-1.5">
+                  <span class="text-[10px] font-semibold text-gray-500">Quantidade por tamanho</span>
+                  <span class="text-[10px] font-bold text-gray-600">${getOwnedTotal(item)} ${getOwnedTotal(item) === 1 ? 'peça' : 'peças'} adquiridas</span>
+                </div>
+                <div class="grid grid-cols-4 gap-1.5">
+                  ${getDisplaySizes(item).map(size => renderSizeCell(item, size)).join('')}
+                </div>`}
             </div>
 
             <button onclick="openAcquisitionHistory('${item.id}')" class="w-full pt-2.5 pb-2.5 px-3 rounded-xl border border-emerald-100 bg-emerald-50/40 hover:bg-emerald-50 transition text-left flex items-center justify-between gap-3" aria-label="Ver aquisições do item">
@@ -770,19 +841,39 @@
       lucide.createIcons();
     }
 
+    function renderUniqueQuantity(item) {
+      const current = getOwnedForSize(item, 'U');
+      const target = Number(item.sizes?.U?.target) || 0;
+      const isOk = target > 0 && current >= target;
+      const quantityText = target > 0 ? `${current}/${target} peças` : `${current} ${current === 1 ? 'peça' : 'peças'}`;
+      return `
+        <div class="border ${isOk ? 'border-emerald-300 bg-emerald-50/50' : 'border-rose-100 bg-rose-50/30'} rounded-xl p-3">
+          <div class="flex items-end justify-between gap-3">
+            <div>
+              <span class="block text-[10px] font-bold text-gray-500 uppercase tracking-wide">Quantidade</span>
+              <div class="text-lg font-black ${isOk ? 'text-emerald-700' : 'text-rose-600'} mt-0.5">${quantityText}</div>
+            </div>
+            <button onclick="openAcquisitionModalForItem('${item.id}', 'U')" class="shrink-0 h-9 px-4 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-sm font-bold active:scale-95 transition" aria-label="Adicionar aquisição">+ Adicionar</button>
+          </div>
+        </div>`;
+    }
+
     function renderSizeCell(item, size) {
       const current = getOwnedForSize(item, size);
       const target = Number(item.sizes?.[size]?.target) || 0;
-      const visible = target > 0 || current > 0;
-      if (!visible) {
-        return `<div class="bg-gray-50 border border-gray-100 rounded-xl p-2 text-center text-[10px] text-gray-300 font-medium">${SIZE_LABELS[size]}<br>—</div>`;
+      const showCell = target > 0 || current > 0 || STANDARD_SIZE_KEYS.includes(size);
+      if (!showCell) {
+        return '';
       }
       const isOk = target > 0 && current >= target;
+      const isExtra = target === 0 && current > 0;
+      const valueText = target > 0 || current > 0 ? `${current}/${target}` : '—';
       return `
-        <div class="border ${isOk ? 'border-emerald-300 bg-emerald-50/50' : 'border-rose-100 bg-rose-50/30'} rounded-xl p-2 text-center">
+        <div class="border ${isOk ? 'border-emerald-300 bg-emerald-50/50' : isExtra ? 'border-sky-200 bg-sky-50/40' : 'border-rose-100 bg-rose-50/30'} rounded-xl p-2 text-center">
           <span class="block text-[10px] font-bold text-gray-600">${SIZE_LABELS[size]}</span>
-          <div class="text-xs font-black ${isOk ? 'text-emerald-700' : 'text-rose-600'} mt-0.5">${current}/${target}</div>
-          <button onclick="openAcquisitionModalForItem('${item.id}', '${size}')" class="w-full mt-1.5 h-6 rounded-md bg-emerald-600 text-white flex items-center justify-center text-xs font-bold active:scale-95 transition" aria-label="Adicionar aquisição para ${SIZE_LABELS[size]}">+</button>
+          <div class="text-xs font-black ${isOk ? 'text-emerald-700' : isExtra ? 'text-sky-700' : target > 0 ? 'text-rose-600' : 'text-gray-400'} mt-0.5">${valueText}</div>
+          ${isExtra ? '<span class="block text-[8px] font-bold text-sky-600 mt-0.5">extra</span>' : '<span class="block text-[8px] mt-0.5 opacity-0">.</span>'}
+          <button onclick="openAcquisitionModalForItem('${item.id}', '${size}')" class="w-full mt-1 h-6 rounded-md bg-emerald-600 text-white flex items-center justify-center text-xs font-bold active:scale-95 transition" aria-label="Adicionar aquisição para ${SIZE_LABELS[size]}">+</button>
         </div>`;
     }
 
@@ -859,10 +950,12 @@
       document.getElementById('itemId').value = '';
       document.getElementById('modalTitle').innerText = 'Novo item';
       document.getElementById('deleteItemSection').classList.add('hidden');
+      document.getElementById('itemSizeMode').value = 'multi';
       SIZE_KEYS.forEach(size => {
         document.getElementById(`target_${size}`).value = 0;
         document.getElementById(`owned_${size}`).innerText = 'Possui 0';
       });
+      setSizeMode('multi', true);
       document.getElementById('modalItem').classList.remove('hidden');
     }
 
@@ -903,7 +996,7 @@
       document.getElementById('deleteAcquisitionSection').classList.add('hidden');
       document.getElementById('acquisitionItemName').innerText = item.name;
       document.getElementById('acquisitionType').value = 'purchase';
-      document.getElementById('acquisitionSize').value = presetSize || 'RN';
+      syncAcquisitionSizeOptions(item, presetSize);
       document.getElementById('acquisitionQuantity').value = 1;
       document.getElementById('acquisitionUnitPrice').value = '';
       document.getElementById('acquisitionBrand').value = '';
@@ -996,7 +1089,7 @@
       document.getElementById('deleteAcquisitionSection').classList.remove('hidden');
       document.getElementById('acquisitionItemName').innerText = item.name;
       document.getElementById('acquisitionType').value = acq.type;
-      document.getElementById('acquisitionSize').value = acq.size;
+      syncAcquisitionSizeOptions(item, acq.size);
       document.getElementById('acquisitionQuantity').value = acq.quantity;
       document.getElementById('acquisitionBrand').value = acq.brand || '';
       document.getElementById('acquisitionUnitPrice').value = acq.unitPrice || 0;
@@ -1084,10 +1177,12 @@
       document.getElementById('itemCategory').value = item.category;
       document.getElementById('itemEssential').value = item.essential.toString();
       document.getElementById('itemNotes').value = item.notes || '';
+      document.getElementById('itemSizeMode').value = isUniqueSizeItem(item) ? 'unique' : 'multi';
       SIZE_KEYS.forEach(size => {
         document.getElementById(`target_${size}`).value = Number(item.sizes?.[size]?.target) || 0;
       });
       openItemEditOwned(item);
+      setSizeMode(item.sizeMode === 'unique' ? 'unique' : 'multi', true);
       document.getElementById('modalTitle').innerText = 'Editar item';
       document.getElementById('deleteItemSection').classList.remove('hidden');
       document.getElementById('modalItem').classList.remove('hidden');
@@ -1105,6 +1200,7 @@
         category: document.getElementById('itemCategory').value,
         essential: document.getElementById('itemEssential').value === 'true',
         notes: document.getElementById('itemNotes').value.trim(),
+        sizeMode: document.getElementById('itemSizeMode').value === 'unique' ? 'unique' : 'multi',
         sizes: {},
         acquisitions: existing?.acquisitions || {},
         legacyPaidRemainder: existing?.legacyPaidRemainder || 0
@@ -1114,12 +1210,8 @@
         item.sizes[size] = { target: Math.max(0, parseInt(document.getElementById(`target_${size}`).value, 10) || 0) };
       });
 
-      if (existing && Object.keys(existing.acquisitions || {}).length) {
-        const activeSizes = SIZE_KEYS.filter(size => item.sizes[size].target > 0 || getOwnedForSize(existing, size) > 0);
-        if (activeSizes.length === 1 && activeSizes[0] === 'U') {
-          // Mantém Único exclusivo quando o item já usa somente Único.
-          SIZE_KEYS.filter(size => size !== 'U').forEach(size => item.sizes[size].target = 0);
-        }
+      if (item.sizeMode === 'unique') {
+        STANDARD_SIZE_KEYS.forEach(size => item.sizes[size].target = 0);
       }
 
       try {
@@ -1461,27 +1553,36 @@
         </div>
 
         <div class="border border-gray-100 bg-rose-50/40 p-3 rounded-xl space-y-2">
-          <div class="flex items-center justify-between">
-            <label class="block text-xs font-bold text-gray-800">Meta por tamanho</label>
-            <span class="text-[10px] text-gray-500">O “possui” vem das aquisições</span>
+          <div class="flex items-center justify-between gap-2">
+            <label class="block text-xs font-bold text-gray-800">Tamanhos do item</label>
+            <select id="itemSizeMode" onchange="setSizeMode(this.value)" class="text-[10px] font-bold p-1.5 bg-white border border-gray-200 rounded-lg outline-none">
+              <option value="multi">Vários tamanhos</option>
+              <option value="unique">Tamanho único</option>
+            </select>
           </div>
-          <div class="grid grid-cols-4 gap-2 text-center text-xs">
-            <div>
+          <p id="sizeModeHint" class="text-[10px] text-gray-500">Use RN, P, M e G. Para itens sem tamanho, escolha Único.</p>
+          <div class="grid grid-cols-4 gap-1.5 text-center text-xs">
+            <div id="sizeWrap_RN">
               <span class="block text-[10px] text-gray-500 font-bold">RN</span>
               <input type="number" id="target_RN" min="0" placeholder="Meta" class="w-full text-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
               <span id="owned_RN" class="block text-[9px] text-gray-400 mt-1">Possui 0</span>
             </div>
-            <div>
+            <div id="sizeWrap_P">
               <span class="block text-[10px] text-gray-500 font-bold">P</span>
               <input type="number" id="target_P" min="0" placeholder="Meta" class="w-full text-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
               <span id="owned_P" class="block text-[9px] text-gray-400 mt-1">Possui 0</span>
             </div>
-            <div>
+            <div id="sizeWrap_M">
               <span class="block text-[10px] text-gray-500 font-bold">M</span>
               <input type="number" id="target_M" min="0" placeholder="Meta" class="w-full text-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
               <span id="owned_M" class="block text-[9px] text-gray-400 mt-1">Possui 0</span>
             </div>
-            <div>
+            <div id="sizeWrap_G">
+              <span class="block text-[10px] text-gray-500 font-bold">G</span>
+              <input type="number" id="target_G" min="0" placeholder="Meta" class="w-full text-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
+              <span id="owned_G" class="block text-[9px] text-gray-400 mt-1">Possui 0</span>
+            </div>
+            <div id="sizeWrap_U">
               <span class="block text-[10px] text-gray-500 font-bold">Único</span>
               <input type="number" id="target_U" min="0" placeholder="Meta" class="w-full text-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
               <span id="owned_U" class="block text-[9px] text-gray-400 mt-1">Possui 0</span>
