@@ -204,7 +204,7 @@
       <div class="bg-white rounded-2xl border border-rose-100 p-4 shadow-xs">
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-bold text-gray-900 flex items-center gap-2">
-            <i data-lucide="baggage-claim" class="w-5 h-5 text-rose-500"></i> Checklist da Maternidade
+            <i data-lucide="backpack" class="w-5 h-5 text-rose-500"></i> Checklist da Maternidade
           </h2>
           <span id="maternidadeProgress" class="text-xs bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded-full">0/0</span>
         </div>
@@ -875,17 +875,27 @@
     function updateDashboard() {
       let totalCurrent = 0;
       let totalTarget = 0;
+      let completedForProgress = 0;
       let totalSpent = 0;
 
       appState.items.forEach(item => {
         Object.values(item.sizes || {}).forEach(s => {
-          totalCurrent += Number(s.current) || 0;
-          totalTarget += Number(s.target) || 0;
+          const current = Number(s.current) || 0;
+          const target = Number(s.target) || 0;
+
+          totalCurrent += current;
+          totalTarget += target;
+
+          // A quantidade excedente de cada tamanho não conta no progresso.
+          // Ex.: RN 9/4 contribui com 4, não com 9.
+          completedForProgress += Math.min(current, target);
         });
         totalSpent += Number(item.pricePaid) || 0;
       });
 
-      const percent = totalTarget > 0 ? Math.min(100, Math.round((totalCurrent / totalTarget) * 100)) : 0;
+      // O percentual é baseado na soma das quantidades concluídas,
+      // limitada pela meta individual de cada tamanho.
+      const percent = totalTarget > 0 ? Math.round((completedForProgress / totalTarget) * 100) : 0;
 
       document.getElementById('progressPercentText').innerText = `${percent}%`;
       document.getElementById('progressBar').style.width = `${percent}%`;
