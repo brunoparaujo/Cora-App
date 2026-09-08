@@ -31,7 +31,7 @@
     const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 6;
+    const SCHEMA_VERSION = 7; // V4.0: modelo de dados consolidado
 
     const INITIAL_ITEMS = [
       // VESTUÁRIO (COM OS DADOS INFORMADOS DA CORA)
@@ -44,10 +44,10 @@
         notes: 'RN: 1 Ovelha, 1 Limão (Mini&Co), 2 Rosas (BB2)',
         pricePaid: 439.80,
         sizes: {
-          RN: { current: 4, target: 4, gift: 0 },
-          P: { current: 0, target: 4, gift: 0 },
-          M: { current: 0, target: 4, gift: 0 },
-          U: { current: 0, target: 0, gift: 0 }
+          RN: { current: 4, target: 4 },
+          P: { current: 0, target: 4 },
+          M: { current: 0, target: 4 },
+          U: { current: 0, target: 0 }
         }
       },
       {
@@ -59,10 +59,10 @@
         notes: 'RN: 1 Estampa Abelha (Mini & Co)',
         pricePaid: 90.00,
         sizes: {
-          RN: { current: 1, target: 4, gift: 0 },
-          P: { current: 0, target: 4, gift: 0 },
-          M: { current: 0, target: 4, gift: 0 },
-          U: { current: 0, target: 0, gift: 0 }
+          RN: { current: 1, target: 4 },
+          P: { current: 0, target: 4 },
+          M: { current: 0, target: 4 },
+          U: { current: 0, target: 0 }
         }
       },
       {
@@ -74,10 +74,10 @@
         notes: 'M: 1 Vermelho (Up Baby - Presente), 1 Branco (Mini&Co)',
         pricePaid: 224.80,
         sizes: {
-          RN: { current: 3, target: 4, gift: 0 },
-          P: { current: 1, target: 6, gift: 0 },
-          M: { current: 2, target: 6, gift: 0 },
-          U: { current: 0, target: 0, gift: 0 }
+          RN: { current: 3, target: 4 },
+          P: { current: 1, target: 6 },
+          M: { current: 2, target: 6 },
+          U: { current: 0, target: 0 }
         }
       },
       {
@@ -89,10 +89,10 @@
         notes: 'Essencial para o calor do verão carioca',
         pricePaid: 35.00,
         sizes: {
-          RN: { current: 0, target: 6, gift: 0 },
-          P: { current: 1, target: 6, gift: 0 },
-          M: { current: 0, target: 6, gift: 0 },
-          U: { current: 0, target: 0, gift: 0 }
+          RN: { current: 0, target: 6 },
+          P: { current: 1, target: 6 },
+          M: { current: 0, target: 6 },
+          U: { current: 0, target: 0 }
         }
       },
       {
@@ -104,10 +104,10 @@
         notes: 'M: 1 Vermelho (Presente), 1 Amarelo (BB2)',
         pricePaid: 80.00,
         sizes: {
-          RN: { current: 3, target: 5, gift: 0 },
-          P: { current: 1, target: 6, gift: 0 },
-          M: { current: 2, target: 6, gift: 0 },
-          U: { current: 0, target: 0, gift: 0 }
+          RN: { current: 3, target: 5 },
+          P: { current: 1, target: 6 },
+          M: { current: 2, target: 6 },
+          U: { current: 0, target: 0 }
         }
       },
       {
@@ -119,10 +119,10 @@
         notes: 'RN: 1 Marrom (BB2)',
         pricePaid: 49.90,
         sizes: {
-          RN: { current: 1, target: 3, gift: 0 },
-          P: { current: 0, target: 4, gift: 0 },
-          M: { current: 0, target: 4, gift: 0 },
-          U: { current: 0, target: 0, gift: 0 }
+          RN: { current: 1, target: 3 },
+          P: { current: 0, target: 4 },
+          M: { current: 0, target: 4 },
+          U: { current: 0, target: 0 }
         }
       },
       {
@@ -134,10 +134,10 @@
         notes: 'Tam 1: 1 Azul (Presente)',
         pricePaid: 0.00,
         sizes: {
-          RN: { current: 0, target: 0, gift: 0 },
-          P: { current: 0, target: 1, gift: 0 },
-          M: { current: 0, target: 2, gift: 0 },
-          U: { current: 1, target: 2, gift: 0 }
+          RN: { current: 0, target: 0 },
+          P: { current: 0, target: 1 },
+          M: { current: 0, target: 2 },
+          U: { current: 1, target: 2 }
         }
       },
       {
@@ -149,10 +149,10 @@
         notes: '1 Sapato Branco (Presente)',
         pricePaid: 0.00,
         sizes: {
-          RN: { current: 0, target: 2, gift: 0 },
-          P: { current: 1, target: 3, gift: 0 },
-          M: { current: 0, target: 3, gift: 0 },
-          U: { current: 0, target: 0, gift: 0 }
+          RN: { current: 0, target: 2 },
+          P: { current: 1, target: 3 },
+          M: { current: 0, target: 3 },
+          U: { current: 0, target: 0 }
         }
       },
 
@@ -166,10 +166,10 @@
         notes: '3 Brancos Guibaby/Loupiot + 3 Diversos',
         pricePaid: 49.99,
         sizes: {
-          RN: { current: 0, target: 0, gift: 0 },
-          P: { current: 0, target: 0, gift: 0 },
-          M: { current: 0, target: 0, gift: 0 },
-          U: { current: 6, target: 6, gift: 0 }
+          RN: { current: 0, target: 0 },
+          P: { current: 0, target: 0 },
+          M: { current: 0, target: 0 },
+          U: { current: 6, target: 6 }
         }
       },
       {
@@ -181,10 +181,10 @@
         notes: '1 Totoro + 1 Naninha do sono',
         pricePaid: 0,
         sizes: {
-          RN: { current: 0, target: 0, gift: 0 },
-          P: { current: 0, target: 0, gift: 0 },
-          M: { current: 0, target: 0, gift: 0 },
-          U: { current: 2, target: 2, gift: 0 }
+          RN: { current: 0, target: 0 },
+          P: { current: 0, target: 0 },
+          M: { current: 0, target: 0 },
+          U: { current: 2, target: 2 }
         }
       },
       {
@@ -196,10 +196,10 @@
         notes: 'Berço americano ou acoplável',
         pricePaid: 0,
         sizes: {
-          RN: { current: 0, target: 0, gift: 0 },
-          P: { current: 0, target: 0, gift: 0 },
-          M: { current: 0, target: 0, gift: 0 },
-          U: { current: 0, target: 1, gift: 0 }
+          RN: { current: 0, target: 0 },
+          P: { current: 0, target: 0 },
+          M: { current: 0, target: 0 },
+          U: { current: 0, target: 1 }
         }
       },
 
@@ -213,10 +213,10 @@
         notes: '1 Rosa + 1 Branca',
         pricePaid: 0,
         sizes: {
-          RN: { current: 0, target: 0, gift: 0 },
-          P: { current: 0, target: 0, gift: 0 },
-          M: { current: 0, target: 0, gift: 0 },
-          U: { current: 2, target: 4, gift: 0 }
+          RN: { current: 0, target: 0 },
+          P: { current: 0, target: 0 },
+          M: { current: 0, target: 0 },
+          U: { current: 2, target: 4 }
         }
       },
       {
@@ -228,10 +228,10 @@
         notes: 'Essencial para gorfos e mamadas',
         pricePaid: 40.00,
         sizes: {
-          RN: { current: 0, target: 0, gift: 0 },
-          P: { current: 0, target: 0, gift: 0 },
-          M: { current: 0, target: 0, gift: 0 },
-          U: { current: 4, target: 12, gift: 0 }
+          RN: { current: 0, target: 0 },
+          P: { current: 0, target: 0 },
+          M: { current: 0, target: 0 },
+          U: { current: 4, target: 12 }
         }
       },
       {
@@ -243,10 +243,10 @@
         notes: '1 Ganho de presente',
         pricePaid: 0,
         sizes: {
-          RN: { current: 0, target: 0, gift: 0 },
-          P: { current: 0, target: 0, gift: 0 },
-          M: { current: 0, target: 0, gift: 0 },
-          U: { current: 1, target: 1, gift: 0 }
+          RN: { current: 0, target: 0 },
+          P: { current: 0, target: 0 },
+          M: { current: 0, target: 0 },
+          U: { current: 1, target: 1 }
         }
       },
 
@@ -260,10 +260,10 @@
         notes: '1 Vermelha ganha de presente',
         pricePaid: 0,
         sizes: {
-          RN: { current: 0, target: 0, gift: 0 },
-          P: { current: 0, target: 0, gift: 0 },
-          M: { current: 0, target: 0, gift: 0 },
-          U: { current: 1, target: 4, gift: 0 }
+          RN: { current: 0, target: 0 },
+          P: { current: 0, target: 0 },
+          M: { current: 0, target: 0 },
+          U: { current: 1, target: 4 }
         }
       },
       {
@@ -275,10 +275,10 @@
         notes: 'Foco em modelo leve para o calor do RJ',
         pricePaid: 0,
         sizes: {
-          RN: { current: 0, target: 0, gift: 0 },
-          P: { current: 0, target: 0, gift: 0 },
-          M: { current: 0, target: 0, gift: 0 },
-          U: { current: 0, target: 1, gift: 0 }
+          RN: { current: 0, target: 0 },
+          P: { current: 0, target: 0 },
+          M: { current: 0, target: 0 },
+          U: { current: 0, target: 1 }
         }
       }
     ];
@@ -318,6 +318,7 @@
       return `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
     }
 
+    // V4.0 — Aquisição é o único registro de estoque/gasto. Campos legados não são persistidos.
     function normalizeAcquisition(acq, idFallback) {
       return {
         id: acq.id || idFallback,
@@ -326,8 +327,7 @@
         unitPrice: acq.type === 'gift' ? 0 : Math.max(0, Number(acq.unitPrice) || 0),
         type: acq.type === 'gift' ? 'gift' : 'purchase',
         brand: acq.brand || '',
-        notes: acq.notes || '',
-        legacy: !!acq.legacy
+        notes: acq.notes || ''
       };
     }
 
@@ -365,7 +365,6 @@
             type: 'purchase',
             brand: item.brand || '',
             notes: 'Registro migrado da versão anterior do Cora.',
-            legacy: true
           }, id);
         }
 
@@ -379,14 +378,15 @@
             type: 'gift',
             brand: item.brand || '',
             notes: 'Registro de presente/doação migrado da versão anterior do Cora.',
-            legacy: true
           }, id);
         }
       });
 
-      return { acquisitions, legacyPaidRemainder: 0 };
+      return { acquisitions };
     }
 
+    // V4.0 — Normaliza o item para o contrato canônico do banco.
+    // O estoque é derivado exclusivamente das aquisições.
     function normalizeItem(item) {
       const normalized = {
         id: item.id,
@@ -410,8 +410,7 @@
       if (item.unitEstimate !== undefined && item.unitEstimate !== null && item.unitEstimate !== '') {
         normalized.unitEstimate = Math.max(0, Number(item.unitEstimate) || 0);
       } else if (item.budget !== undefined && item.budget !== null && item.budget !== '') {
-        // V3.5 anterior: budget era o orçamento total do item.
-        // Migra para estimativa por unidade sem perder o valor proporcional.
+        // Compatibilidade temporária para dados anteriores à V3.5.
         const legacyBudget = Math.max(0, Number(item.budget) || 0);
         const targetTotal = SIZE_KEYS.reduce((sum, size) => sum + (Number(item.sizes?.[size]?.target) || 0), 0);
         normalized.unitEstimate = targetTotal > 0 ? legacyBudget / targetTotal : null;
@@ -419,7 +418,8 @@
 
       if (!item.sizeMode) {
         const hasNonUniqueTargets = STANDARD_SIZE_KEYS.some(size => normalized.sizes[size].target > 0);
-        normalized.sizeMode = normalized.sizes.U.target > 0 && !hasNonUniqueTargets ? 'unique' : 'multi';
+        const hasUniqueTarget = normalized.sizes.U.target > 0;
+        normalized.sizeMode = hasUniqueTarget && !hasNonUniqueTargets ? 'unique' : 'multi';
       }
 
       if (item.acquisitions && typeof item.acquisitions === 'object') {
@@ -427,17 +427,10 @@
           normalized.acquisitions[id] = normalizeAcquisition(acq, id);
         });
       } else {
-        const migrated = legacyToAcquisitions(item);
-        normalized.acquisitions = migrated.acquisitions;
-        if (!Object.keys(normalized.acquisitions).length && Number(item.pricePaid ?? item.price ?? 0) > 0) {
-          normalized.legacyPaidRemainder = Number(item.pricePaid ?? item.price ?? 0);
-        }
+        normalized.acquisitions = legacyToAcquisitions(item).acquisitions;
       }
 
-      if (Number(item.legacyPaidRemainder) > 0) {
-        normalized.legacyPaidRemainder = Number(item.legacyPaidRemainder);
-      }
-
+      // Nenhum campo financeiro/estoque legado é persistido na V4.
       return normalized;
     }
 
@@ -526,7 +519,7 @@
     function getPurchaseTotal(item) {
       return getAcquisitions(item)
         .filter(acq => acq.type === 'purchase')
-        .reduce((sum, acq) => sum + ((Number(acq.quantity) || 0) * (Number(acq.unitPrice) || 0)), 0) + (Number(item.legacyPaidRemainder) || 0);
+        .reduce((sum, acq) => sum + ((Number(acq.quantity) || 0) * (Number(acq.unitPrice) || 0)), 0);
     }
 
     function getPurchasedPieces(item) {
@@ -548,6 +541,7 @@
         updates[`cora/maternidade/${item.id}`] = item;
       });
       updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
+      updates['cora/meta/model'] = 'v4';
       updates['cora/meta/updatedAt'] = firebase.database.ServerValue.TIMESTAMP;
       await db.ref().update(updates);
     }
@@ -578,28 +572,31 @@
       await db.ref().update(updates);
     }
 
-    async function migrateCurrentV2ToV3(root) {
+    async function migrateToV7(root) {
+      // V4.0: reescreve os registros no modelo canônico e elimina campos legados.
       const updates = {};
       Object.values(root.items || {}).forEach(item => {
         const normalized = normalizeItem(item);
         updates[`cora/items/${normalized.id}`] = normalized;
       });
+      Object.values(root.maternidade || {}).forEach(item => {
+        updates[`cora/maternidade/${item.id}`] = item;
+      });
       updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
-      updates['cora/meta/migratedFrom'] = 2;
+      updates['cora/meta/model'] = 'v4';
+      updates['cora/meta/migratedFrom'] = Number(root.meta?.schemaVersion || 1);
       updates['cora/meta/migratedAt'] = firebase.database.ServerValue.TIMESTAMP;
       await db.ref().update(updates);
     }
 
-    async function migrateToV6(root) {
-      const updates = {};
-      Object.values(root.items || {}).forEach(item => {
-        const normalized = normalizeItem(item);
-        updates[`cora/items/${normalized.id}`] = normalized;
-      });
-      updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
-      updates['cora/meta/migratedFrom'] = Number(root.meta?.schemaVersion || 1);
-      updates['cora/meta/migratedAt'] = firebase.database.ServerValue.TIMESTAMP;
-      await db.ref().update(updates);
+    function validateCanonicalItem(item) {
+      const allowedItemKeys = ['id', 'name', 'category', 'essential', 'notes', 'sizeMode', 'unitEstimate', 'sizes', 'acquisitions'];
+      const itemKeysOk = Object.keys(item || {}).every(key => allowedItemKeys.includes(key));
+      const sizesOk = Object.keys(item?.sizes || {}).every(size => Object.keys(item.sizes[size] || {}).every(k => k === 'target'));
+      const acquisitionsOk = Object.values(item?.acquisitions || {}).every(acq =>
+        Object.keys(acq || {}).every(k => ['id', 'size', 'quantity', 'unitPrice', 'type', 'brand', 'notes'].includes(k))
+      );
+      return itemKeysOk && sizesOk && acquisitionsOk;
     }
 
     async function ensureDatabaseSchema() {
@@ -620,7 +617,21 @@
       }
 
       if (version < SCHEMA_VERSION) {
-        await migrateToV6(root);
+        await migrateToV7(root);
+        return;
+      }
+
+      // Guard rail: corrige registros fora do contrato canônico sem resetar o enxoval.
+      const nonCanonical = Object.values(root.items || {}).filter(item => !validateCanonicalItem(item));
+      if (nonCanonical.length) {
+        const updates = {};
+        nonCanonical.forEach(item => {
+          const normalized = normalizeItem(item);
+          updates[`cora/items/${normalized.id}`] = normalized;
+        });
+        updates['cora/meta/model'] = 'v4';
+        updates['cora/meta/normalizedAt'] = firebase.database.ServerValue.TIMESTAMP;
+        await db.ref().update(updates);
       }
     }
 
@@ -1062,7 +1073,6 @@
           rows.push({ item, acq });
         });
 
-        spent += Number(item.legacyPaidRemainder) || 0;
       });
 
       rows.sort((a, b) => String(b.acq.id).localeCompare(String(a.acq.id)));
@@ -1379,7 +1389,6 @@
         sizeMode: document.getElementById('itemSizeMode').value === 'unique' ? 'unique' : 'multi',
         sizes: {},
         acquisitions: existing?.acquisitions || {},
-        legacyPaidRemainder: existing?.legacyPaidRemainder || 0
       };
 
       SIZE_KEYS.forEach(size => {
