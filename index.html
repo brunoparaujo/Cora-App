@@ -31,7 +31,7 @@
     const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 4;
+    const SCHEMA_VERSION = 6;
 
     const INITIAL_ITEMS = [
       // VESTUÁRIO (COM OS DADOS INFORMADOS DA CORA)
@@ -43,7 +43,6 @@
         brand: 'Mini & Co / BB2',
         notes: 'RN: 1 Ovelha, 1 Limão (Mini&Co), 2 Rosas (BB2)',
         pricePaid: 439.80,
-        giftValue: 0,
         sizes: {
           RN: { current: 4, target: 4, gift: 0 },
           P: { current: 0, target: 4, gift: 0 },
@@ -59,7 +58,6 @@
         brand: 'Mini & Co',
         notes: 'RN: 1 Estampa Abelha (Mini & Co)',
         pricePaid: 90.00,
-        giftValue: 0,
         sizes: {
           RN: { current: 1, target: 4, gift: 0 },
           P: { current: 0, target: 4, gift: 0 },
@@ -75,7 +73,6 @@
         brand: 'BB2 / Baby&Kids / Up Baby',
         notes: 'M: 1 Vermelho (Up Baby - Presente), 1 Branco (Mini&Co)',
         pricePaid: 224.80,
-        giftValue: 0,
         sizes: {
           RN: { current: 3, target: 4, gift: 0 },
           P: { current: 1, target: 6, gift: 0 },
@@ -91,7 +88,6 @@
         brand: 'Baby & Kids',
         notes: 'Essencial para o calor do verão carioca',
         pricePaid: 35.00,
-        giftValue: 0,
         sizes: {
           RN: { current: 0, target: 6, gift: 0 },
           P: { current: 1, target: 6, gift: 0 },
@@ -107,7 +103,6 @@
         brand: 'BB2 / Baby&Kids / Up Baby',
         notes: 'M: 1 Vermelho (Presente), 1 Amarelo (BB2)',
         pricePaid: 80.00,
-        giftValue: 0,
         sizes: {
           RN: { current: 3, target: 5, gift: 0 },
           P: { current: 1, target: 6, gift: 0 },
@@ -123,7 +118,6 @@
         brand: 'BB2',
         notes: 'RN: 1 Marrom (BB2)',
         pricePaid: 49.90,
-        giftValue: 0,
         sizes: {
           RN: { current: 1, target: 3, gift: 0 },
           P: { current: 0, target: 4, gift: 0 },
@@ -139,7 +133,6 @@
         brand: 'Zum Zum',
         notes: 'Tam 1: 1 Azul (Presente)',
         pricePaid: 0.00,
-        giftValue: 0,
         sizes: {
           RN: { current: 0, target: 0, gift: 0 },
           P: { current: 0, target: 1, gift: 0 },
@@ -155,7 +148,6 @@
         brand: 'Baby Confort',
         notes: '1 Sapato Branco (Presente)',
         pricePaid: 0.00,
-        giftValue: 0,
         sizes: {
           RN: { current: 0, target: 2, gift: 0 },
           P: { current: 1, target: 3, gift: 0 },
@@ -173,7 +165,6 @@
         brand: 'Loupiot / Guibaby',
         notes: '3 Brancos Guibaby/Loupiot + 3 Diversos',
         pricePaid: 49.99,
-        giftValue: 0,
         sizes: {
           RN: { current: 0, target: 0, gift: 0 },
           P: { current: 0, target: 0, gift: 0 },
@@ -189,7 +180,6 @@
         brand: 'Especial',
         notes: '1 Totoro + 1 Naninha do sono',
         pricePaid: 0,
-        giftValue: 0,
         sizes: {
           RN: { current: 0, target: 0, gift: 0 },
           P: { current: 0, target: 0, gift: 0 },
@@ -205,7 +195,6 @@
         brand: '',
         notes: 'Berço americano ou acoplável',
         pricePaid: 0,
-        giftValue: 0,
         sizes: {
           RN: { current: 0, target: 0, gift: 0 },
           P: { current: 0, target: 0, gift: 0 },
@@ -223,7 +212,6 @@
         brand: 'Diversas',
         notes: '1 Rosa + 1 Branca',
         pricePaid: 0,
-        giftValue: 0,
         sizes: {
           RN: { current: 0, target: 0, gift: 0 },
           P: { current: 0, target: 0, gift: 0 },
@@ -239,7 +227,6 @@
         brand: 'Algodão',
         notes: 'Essencial para gorfos e mamadas',
         pricePaid: 40.00,
-        giftValue: 0,
         sizes: {
           RN: { current: 0, target: 0, gift: 0 },
           P: { current: 0, target: 0, gift: 0 },
@@ -255,7 +242,6 @@
         brand: '',
         notes: '1 Ganho de presente',
         pricePaid: 0,
-        giftValue: 0,
         sizes: {
           RN: { current: 0, target: 0, gift: 0 },
           P: { current: 0, target: 0, gift: 0 },
@@ -273,7 +259,6 @@
         brand: 'Up Baby',
         notes: '1 Vermelha ganha de presente',
         pricePaid: 0,
-        giftValue: 0,
         sizes: {
           RN: { current: 0, target: 0, gift: 0 },
           P: { current: 0, target: 0, gift: 0 },
@@ -289,7 +274,6 @@
         brand: '',
         notes: 'Foco em modelo leve para o calor do RJ',
         pricePaid: 0,
-        giftValue: 0,
         sizes: {
           RN: { current: 0, target: 0, gift: 0 },
           P: { current: 0, target: 0, gift: 0 },
@@ -411,6 +395,7 @@
         essential: !!item.essential,
         notes: item.notes || '',
         sizeMode: item.sizeMode === 'unique' ? 'unique' : 'multi',
+        unitEstimate: null,
         sizes: {},
         acquisitions: {}
       };
@@ -421,6 +406,16 @@
           target: Math.max(0, Number(source.target) || 0)
         };
       });
+
+      if (item.unitEstimate !== undefined && item.unitEstimate !== null && item.unitEstimate !== '') {
+        normalized.unitEstimate = Math.max(0, Number(item.unitEstimate) || 0);
+      } else if (item.budget !== undefined && item.budget !== null && item.budget !== '') {
+        // V3.5 anterior: budget era o orçamento total do item.
+        // Migra para estimativa por unidade sem perder o valor proporcional.
+        const legacyBudget = Math.max(0, Number(item.budget) || 0);
+        const targetTotal = SIZE_KEYS.reduce((sum, size) => sum + (Number(item.sizes?.[size]?.target) || 0), 0);
+        normalized.unitEstimate = targetTotal > 0 ? legacyBudget / targetTotal : null;
+      }
 
       if (!item.sizeMode) {
         const hasNonUniqueTargets = STANDARD_SIZE_KEYS.some(size => normalized.sizes[size].target > 0);
@@ -595,6 +590,18 @@
       await db.ref().update(updates);
     }
 
+    async function migrateToV6(root) {
+      const updates = {};
+      Object.values(root.items || {}).forEach(item => {
+        const normalized = normalizeItem(item);
+        updates[`cora/items/${normalized.id}`] = normalized;
+      });
+      updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
+      updates['cora/meta/migratedFrom'] = Number(root.meta?.schemaVersion || 1);
+      updates['cora/meta/migratedAt'] = firebase.database.ServerValue.TIMESTAMP;
+      await db.ref().update(updates);
+    }
+
     async function ensureDatabaseSchema() {
       const rootRef = db.ref('cora');
       const snapshot = await rootRef.once('value');
@@ -613,7 +620,7 @@
       }
 
       if (version < SCHEMA_VERSION) {
-        await migrateCurrentV2ToV3(root);
+        await migrateToV6(root);
       }
     }
 
@@ -738,8 +745,17 @@
             tar += target;
           });
         });
-        const badge = document.getElementById(`catBadge${c.charAt(0).toUpperCase() + c.slice(1)}`);
+        const suffix = c.charAt(0).toUpperCase() + c.slice(1);
+        const badge = document.getElementById(`catBadge${suffix}`);
         if (badge) badge.innerText = `${cur}/${tar}`;
+        const donut = document.getElementById(`catDonut${suffix}`);
+        if (donut) {
+          const progress = tar > 0 ? Math.min(cur / tar, 1) * 100 : 0;
+          const color = donut.dataset.color || '#ef476f';
+          const pale = rgba(color, 0.16);
+          donut.style.background = `conic-gradient(${color} 0 ${progress}%, ${pale} ${progress}% 100%)`;
+          donut.setAttribute('aria-label', tar > 0 ? `${cur} de ${tar} peças` : 'Sem meta definida');
+        }
       });
     }
 
@@ -897,13 +913,145 @@
       }
     }
 
+    const CATEGORY_META = {
+      vestuario: { label: 'Vestuário', color: '#ef476f' },
+      quarto: { label: 'Quarto', color: '#f4b942' },
+      higiene: { label: 'Higiene', color: '#4f86c6' },
+      alimentacao: { label: 'Alimentação', color: '#50bfa3' },
+      passeio: { label: 'Passeio', color: '#8e6bbd' },
+      mamae: { label: 'Mamãe', color: '#e07a5f' }
+    };
+
+    function getItemPlannedBudget(item) {
+      if (item.unitEstimate === null || item.unitEstimate === undefined) return null;
+      return getTargetTotal(item) * (Number(item.unitEstimate) || 0);
+    }
+
+    function getCategoryFinanceData() {
+      return Object.entries(CATEGORY_META).map(([category, meta]) => {
+        const categoryItems = appState.items.filter(item => item.category === category);
+        let planned = 0;
+        let spent = 0;
+        let estimatedItems = 0;
+
+        categoryItems.forEach(item => {
+          const itemPlanned = getItemPlannedBudget(item);
+          if (itemPlanned !== null) {
+            planned += itemPlanned;
+            estimatedItems += 1;
+          }
+          spent += getPurchaseTotal(item);
+        });
+
+        return { category, ...meta, planned, spent, estimatedItems };
+      });
+    }
+
+    function rgba(hex, alpha) {
+      const value = hex.replace('#', '');
+      const r = parseInt(value.slice(0, 2), 16);
+      const g = parseInt(value.slice(2, 4), 16);
+      const b = parseInt(value.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function renderBudgetDonut(categoryData, totalPlanned, totalSpent) {
+      const chart = document.getElementById('orcamentoDonut');
+      const bars = document.getElementById('orcamentoCategorias');
+      const status = document.getElementById('orcamentoDonutStatus');
+      if (!chart || !bars) return;
+
+      const planned = Math.max(0, Number(totalPlanned) || 0);
+      const spent = Math.max(0, Number(totalSpent) || 0);
+      const hasPlanned = planned > 0;
+      const hasAny = categoryData.some(c => (Number(c.planned) || 0) > 0 || (Number(c.spent) || 0) > 0);
+
+      if (!hasAny) {
+        chart.innerHTML = '<div class="donut-empty"><strong>Sem dados</strong><span>adicione estimativas ou aquisições</span></div>';
+        if (status) status.innerText = '';
+      } else {
+        const rawProgress = hasPlanned ? (spent / planned) * 100 : 0;
+        const progress = Math.min(Math.max(rawProgress, 0), 100);
+        const over = hasPlanned && spent > planned;
+        const overAmount = over ? spent - planned : 0;
+        const centerStrong = hasPlanned ? `${Math.round(rawProgress)}%` : money(spent);
+        const centerSub = hasPlanned ? `${money(spent)} de ${money(planned)}` : 'sem orçamento';
+
+        chart.innerHTML = `
+          <div class="budget-total-ring budget-total-ring-track"></div>
+          <div class="budget-total-ring budget-total-ring-progress"></div>
+          ${over ? '<div class="budget-total-over-marker"></div>' : ''}
+          <div class="budget-total-center">
+            <strong>${centerStrong}</strong>
+            <span>${centerSub}</span>
+          </div>`;
+
+        const track = chart.querySelector('.budget-total-ring-track');
+        const progressRing = chart.querySelector('.budget-total-ring-progress');
+        if (hasPlanned) {
+          track.style.background = 'conic-gradient(rgba(225,29,72,0.16) 0 100%)';
+          progressRing.style.background = `conic-gradient(#e11d48 0 ${progress}%, transparent ${progress}% 100%)`;
+        } else {
+          track.style.background = 'conic-gradient(#e5e7eb 0 100%)';
+          progressRing.style.background = 'transparent';
+        }
+
+        if (status) {
+          if (!hasPlanned) {
+            status.innerText = spent > 0 ? `${money(spent)} gastos • sem orçamento` : 'Nenhum orçamento definido';
+            status.className = 'text-[10px] font-semibold text-gray-500 text-center';
+          } else if (over) {
+            status.innerText = `${money(overAmount)} acima do planejado`;
+            status.className = 'text-[10px] font-semibold text-rose-700 text-center';
+          } else {
+            status.innerText = `${money(planned - spent)} restantes`;
+            status.className = 'text-[10px] font-semibold text-emerald-700 text-center';
+          }
+        }
+      }
+
+      const rows = categoryData.filter(c => (Number(c.planned) || 0) > 0 || (Number(c.spent) || 0) > 0);
+      bars.innerHTML = rows.length ? rows.map(c => {
+        const catPlanned = Math.max(0, Number(c.planned) || 0);
+        const catSpent = Math.max(0, Number(c.spent) || 0);
+        const hasCatPlanned = catPlanned > 0;
+        const pct = hasCatPlanned ? Math.min((catSpent / catPlanned) * 100, 100) : 0;
+        const over = hasCatPlanned && catSpent > catPlanned;
+        const diff = catPlanned - catSpent;
+        const bg = rgba(c.color, 0.16);
+        const fill = c.color;
+        let detail;
+        if (!hasCatPlanned) detail = `${money(catSpent)} gastos • sem orçamento`;
+        else if (over) detail = `${money(catSpent)} gastos • ${money(Math.abs(diff))} acima`;
+        else detail = `${money(catSpent)} gastos • ${money(diff)} restantes`;
+        const detailClass = !hasCatPlanned ? 'text-gray-400' : over ? 'text-rose-700' : 'text-emerald-700';
+        const barStyle = hasCatPlanned ? `background:${bg}; --bar-fill:${fill};` : 'background:repeating-linear-gradient(90deg,#e5e7eb 0 6px,transparent 6px 10px); --bar-fill:#9ca3af;';
+        return `<div class="finance-category-row">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-bold text-[11px] text-gray-700">${c.label}</span>
+            <span class="text-[10px] font-semibold text-gray-500">${hasCatPlanned ? `${money(catSpent)} / ${money(catPlanned)}` : money(catSpent)}</span>
+          </div>
+          <div class="finance-bar" style="${barStyle}"><div class="finance-bar-fill" style="width:${pct}%;"></div>${over ? '<div class="finance-bar-over"></div>' : ''}</div>
+          <div class="text-[9px] ${detailClass} mt-1">${detail}</div>
+        </div>`;
+      }).join('') : '<p class="text-[11px] text-gray-400 text-center py-2">Nenhum orçamento ou gasto registrado.</p>';
+    }
+
     function renderResumoFinanceiro() {
       let spent = 0;
       let purchasedPieces = 0;
       let acquisitionCount = 0;
+      let plannedTotal = 0;
+      let estimatedItemCount = 0;
       const rows = [];
 
       appState.items.forEach(item => {
+        const plannedItem = getItemPlannedBudget(item);
+        if (plannedItem !== null) {
+          plannedTotal += plannedItem;
+          estimatedItemCount += 1;
+        }
+
         getAcquisitions(item).forEach(acq => {
           acquisitionCount += 1;
           if (acq.type === 'purchase') {
@@ -913,14 +1061,28 @@
           }
           rows.push({ item, acq });
         });
+
         spent += Number(item.legacyPaidRemainder) || 0;
       });
 
       rows.sort((a, b) => String(b.acq.id).localeCompare(String(a.acq.id)));
 
+      const remaining = plannedTotal - spent;
+      const statusText = plannedTotal <= 0
+        ? 'Defina estimativas por unidade para planejar o gasto'
+        : remaining >= 0
+          ? `Restante: ${money(remaining)}`
+          : `Acima do planejado: ${money(Math.abs(remaining))}`;
+      const statusClass = plannedTotal <= 0 ? 'text-gray-500' : remaining >= 0 ? 'text-emerald-700' : 'text-rose-700';
+
       document.getElementById('resumoGastoReal').innerText = money(spent);
       document.getElementById('resumoPecasCompradas').innerText = `${purchasedPieces} ${purchasedPieces === 1 ? 'peça paga' : 'peças pagas'}`;
       document.getElementById('resumoQtdAquisicoes').innerText = `${acquisitionCount} ${acquisitionCount === 1 ? 'aquisição' : 'aquisições'}`;
+      document.getElementById('resumoOrcamentoTotal').innerText = plannedTotal > 0 ? `de ${money(plannedTotal)} planejados` : 'sem orçamento definido';
+      document.getElementById('resumoOrcamentoDetalhe').innerText = `${estimatedItemCount} ${estimatedItemCount === 1 ? 'item com estimativa' : 'itens com estimativa'}`;
+
+      const categoryFinanceData = getCategoryFinanceData();
+      renderBudgetDonut(categoryFinanceData, plannedTotal, spent);
 
       document.getElementById('listaDetalhadaCompras').innerHTML = rows.length ? rows.map(({item, acq}) => {
         const total = acq.type === 'purchase' ? (Number(acq.quantity) || 0) * (Number(acq.unitPrice) || 0) : 0;
@@ -939,6 +1101,17 @@
       }).join('') : '<p class="text-xs text-gray-400">Nenhuma aquisição registrada ainda.</p>';
     }
 
+    function toggleFinanceAcquisitions() {
+      const list = document.getElementById('listaDetalhadaCompras');
+      const text = document.getElementById('toggleAquisiçõesText');
+      const icon = document.getElementById('toggleAquisiçõesIcon');
+      if (!list) return;
+      const hidden = list.classList.toggle('hidden');
+      if (text) text.innerText = hidden ? 'Ver lista' : 'Ocultar lista';
+      if (icon) icon.setAttribute('data-lucide', hidden ? 'chevron-down' : 'chevron-up');
+      lucide.createIcons();
+    }
+
     function openActionModal() {
       document.getElementById('modalAction').classList.remove('hidden');
       lucide.createIcons();
@@ -948,6 +1121,7 @@
       closeModal('modalAction');
       document.getElementById('itemForm').reset();
       document.getElementById('itemId').value = '';
+      document.getElementById('itemUnitEstimate').value = '';
       document.getElementById('modalTitle').innerText = 'Novo item';
       document.getElementById('deleteItemSection').classList.add('hidden');
       document.getElementById('itemSizeMode').value = 'multi';
@@ -1177,6 +1351,7 @@
       document.getElementById('itemCategory').value = item.category;
       document.getElementById('itemEssential').value = item.essential.toString();
       document.getElementById('itemNotes').value = item.notes || '';
+      document.getElementById('itemUnitEstimate').value = item.unitEstimate === null || item.unitEstimate === undefined ? '' : Number(item.unitEstimate).toFixed(2);
       document.getElementById('itemSizeMode').value = isUniqueSizeItem(item) ? 'unique' : 'multi';
       SIZE_KEYS.forEach(size => {
         document.getElementById(`target_${size}`).value = Number(item.sizes?.[size]?.target) || 0;
@@ -1200,6 +1375,7 @@
         category: document.getElementById('itemCategory').value,
         essential: document.getElementById('itemEssential').value === 'true',
         notes: document.getElementById('itemNotes').value.trim(),
+        unitEstimate: document.getElementById('itemUnitEstimate').value.trim() === '' ? null : Math.max(0, Number(document.getElementById('itemUnitEstimate').value.replace(',', '.')) || 0),
         sizeMode: document.getElementById('itemSizeMode').value === 'unique' ? 'unique' : 'multi',
         sizes: {},
         acquisitions: existing?.acquisitions || {},
@@ -1262,7 +1438,7 @@
         INITIAL_ITEMS.forEach(item => { updates[`cora/items/${item.id}`] = seedItemFromInitial(item); });
         MATERNIDADE_DEFAULT.forEach(item => { updates[`cora/maternidade/${item.id}`] = item; });
         updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
-        updates['cora/meta/updatedAt'] = firebase.database.ServerValue.TIMESTAMP;
+          updates['cora/meta/updatedAt'] = firebase.database.ServerValue.TIMESTAMP;
         await db.ref().update(updates);
       } catch (error) {
         console.error('Erro ao resetar:', error);
@@ -1289,7 +1465,32 @@
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
     }
-  </style>
+  
+    .category-donut { width: 50px; height: 50px; border-radius: 50%; padding: 4px; display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 4px; background: conic-gradient(#e5e7eb 0 100%); }
+    .category-donut-icon { width: 42px; height: 42px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; font-size: 19px; }
+    .finance-category-row { padding: 9px 0; }
+    .finance-bar { position: relative; height: 9px; border-radius: 999px; overflow: hidden; margin-top: 5px; }
+    .finance-bar-fill { height: 100%; border-radius: 999px; background: var(--bar-fill); transition: width .25s ease; }
+    .finance-bar-over { position: absolute; right: 0; top: 1px; bottom: 1px; width: 4px; border-radius: 999px; background: #be123c; }
+    .finance-bar-no-budget { background: repeating-linear-gradient(90deg, #e5e7eb 0 6px, transparent 6px 10px); }
+    .donut-chart { width: 176px; height: 176px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; }
+    .donut-ring { position: absolute; border-radius: 50%; }
+    .budget-total-ring { position:absolute; inset:0; border-radius:50%; }
+    .budget-total-ring-track { -webkit-mask:radial-gradient(circle, transparent 0 59%, #000 60% 74%, transparent 75%); mask:radial-gradient(circle, transparent 0 59%, #000 60% 74%, transparent 75%); }
+    .budget-total-ring-progress { -webkit-mask:radial-gradient(circle, transparent 0 59%, #000 60% 74%, transparent 75%); mask:radial-gradient(circle, transparent 0 59%, #000 60% 74%, transparent 75%); z-index:1; }
+    .budget-total-over-marker { position:absolute; inset:-5px; border:3px solid #be123c; border-radius:50%; z-index:2; }
+    .budget-total-center { position:relative; z-index:3; width:118px; text-align:center; display:flex; flex-direction:column; align-items:center; }
+    .budget-total-center strong { font-size:23px; line-height:1.05; color:#1f2937; letter-spacing:-0.03em; }
+    .budget-total-center span { font-size:9px; color:#9ca3af; margin-top:5px; line-height:1.25; }
+    .donut-empty { position: relative; z-index: 1; width: 120px; height: 120px; border-radius: 999px; border: 18px solid #e5e7eb; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    .donut-empty strong { font-size: 12px; color: #6b7280; }
+    .donut-empty span { font-size: 8px; color: #9ca3af; margin-top: 3px; line-height: 1.2; }
+    .legend-swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+    .legend-light { background: rgba(31,41,55,.28); }
+    .legend-dark { background: #374151; }
+    .category-pair-swatch { display:flex; width:9px; height:16px; border-radius:4px; overflow:hidden; flex-direction:column; }
+    .category-pair-swatch span { flex:1; }
+</style>
 </head>
 <body class="bg-[#FBF8F6] text-gray-800 font-sans pb-24 min-h-screen">
 
@@ -1366,40 +1567,39 @@
     <!-- SEÇÃO: ENXOVAL PRINCIPAL -->
     <div id="sectionEnxoval" class="space-y-4">
       
-      <!-- CARROSSEL DE CATEGORIAS (ESTILO CARDS DO PRINT) -->
+      <!-- CATEGORIAS -->
       <div class="grid grid-cols-3 gap-2">
         <button onclick="filterCategory('vestuario')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-1 text-xl">👚</div>
+          <div id="catDonutVestuario" class="category-donut" data-color="#ef476f"><div class="category-donut-icon bg-rose-100 text-rose-600">👚</div></div>
           <span class="text-xs font-bold text-gray-800">Vestuário</span>
           <span id="catBadgeVestuario" class="text-[10px] text-gray-400 font-medium">0/0</span>
         </button>
         <button onclick="filterCategory('quarto')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mb-1 text-xl">🛏️</div>
+          <div id="catDonutQuarto" class="category-donut" data-color="#f4b942"><div class="category-donut-icon bg-amber-100 text-amber-600">🛏️</div></div>
           <span class="text-xs font-bold text-gray-800">Quarto</span>
           <span id="catBadgeQuarto" class="text-[10px] text-gray-400 font-medium">0/0</span>
         </button>
         <button onclick="filterCategory('higiene')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-1 text-xl">🛁</div>
+          <div id="catDonutHigiene" class="category-donut" data-color="#4f86c6"><div class="category-donut-icon bg-blue-100 text-blue-600">🛁</div></div>
           <span class="text-xs font-bold text-gray-800">Higiene</span>
           <span id="catBadgeHigiene" class="text-[10px] text-gray-400 font-medium">0/0</span>
         </button>
         <button onclick="filterCategory('alimentacao')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mb-1 text-xl">🍼</div>
+          <div id="catDonutAlimentacao" class="category-donut" data-color="#50bfa3"><div class="category-donut-icon bg-emerald-100 text-emerald-600">🍼</div></div>
           <span class="text-xs font-bold text-gray-800">Alimentação</span>
           <span id="catBadgeAlimentacao" class="text-[10px] text-gray-400 font-medium">0/0</span>
         </button>
         <button onclick="filterCategory('passeio')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div class="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mb-1 text-xl">👶</div>
+          <div id="catDonutPasseio" class="category-donut" data-color="#8e6bbd"><div class="category-donut-icon bg-purple-100 text-purple-600">👶</div></div>
           <span class="text-xs font-bold text-gray-800">Passeio</span>
           <span id="catBadgePasseio" class="text-[10px] text-gray-400 font-medium">0/0</span>
         </button>
         <button onclick="filterCategory('mamae')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div class="w-10 h-10 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center mb-1 text-xl">🤰</div>
+          <div id="catDonutMamae" class="category-donut" data-color="#e07a5f"><div class="category-donut-icon bg-pink-100 text-pink-600">🤰</div></div>
           <span class="text-xs font-bold text-gray-800">Mamãe</span>
           <span id="catBadgeMamae" class="text-[10px] text-gray-400 font-medium">0/0</span>
         </button>
       </div>
-
       <!-- FILTROS SECUNDÁRIOS & BUSCA -->
       <div class="flex items-center space-x-2">
         <div class="relative flex-1">
@@ -1444,27 +1644,44 @@
       </div>
     </div>
 
-    <!-- SEÇÃO: RESUMO FINANCEIRO -->
+    <!-- SEÇÃO: FINANCEIRO -->
     <div id="sectionResumo" class="hidden space-y-4">
-      <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-xs space-y-4">
-        <div class="flex items-center justify-between">
-          <h2 class="font-bold text-gray-900 flex items-center gap-2">
-            <i data-lucide="wallet" class="w-5 h-5 text-emerald-600"></i> Financeiro
-          </h2>
-          <span id="resumoQtdAquisicoes" class="text-[10px] bg-gray-100 text-gray-600 font-bold px-2 py-1 rounded-full">0 aquisições</span>
+      <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-xs">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold text-gray-900 flex items-center gap-2"><i data-lucide="wallet" class="w-5 h-5 text-emerald-600"></i> Financeiro</h2>
         </div>
 
-        <div class="p-4 rounded-xl bg-gray-50 border border-gray-200 text-center">
-          <span class="text-[10px] text-gray-500 uppercase font-semibold">Total pago</span>
-          <p id="resumoGastoReal" class="text-2xl font-extrabold text-gray-900 mt-1">R$ 0,00</p>
-          <p id="resumoPecasCompradas" class="text-[10px] text-gray-500 mt-1">0 peças pagas</p>
-        </div>
-
-        <div>
-          <h3 class="text-xs font-bold text-gray-700 mb-2">Aquisições</h3>
-          <div id="listaDetalhadaCompras" class="space-y-2 max-h-96 overflow-y-auto pr-1 no-scrollbar">
-            <!-- Renderizado via JS -->
+        <div class="rounded-2xl border border-rose-100 bg-rose-50/30 p-3">
+          <div class="flex items-center gap-4">
+            <div class="shrink-0"><div id="orcamentoDonut" class="donut-chart" aria-label="Progresso do gasto em relação ao orçamento planejado"></div></div>
+            <div class="min-w-0 flex-1">
+              <span class="block text-[10px] text-gray-500 uppercase font-semibold">Gasto</span>
+              <p id="resumoGastoReal" class="text-xl font-extrabold text-gray-900 mt-0.5">R$ 0,00</p>
+              <p id="resumoOrcamentoTotal" class="text-xs font-semibold text-gray-600 mt-1">sem orçamento definido</p>
+              <p id="orcamentoDonutStatus" class="text-[10px] font-semibold mt-2 text-gray-500"></p>
+            </div>
           </div>
+          <div class="mt-2 flex items-center justify-between text-[9px] text-gray-400">
+            <span id="resumoOrcamentoDetalhe">0 itens com estimativa</span>
+            <span id="resumoQtdAquisicoes">0 aquisições</span>
+            <span id="resumoPecasCompradas">0 peças pagas</span>
+          </div>
+        </div>
+
+        <div class="mt-5">
+          <div class="flex items-center justify-between mb-1">
+            <h3 class="text-xs font-bold text-gray-700">Por categoria</h3>
+            <span class="text-[9px] text-gray-400">gasto / planejado</span>
+          </div>
+          <div id="orcamentoCategorias" class="divide-y divide-gray-100"></div>
+        </div>
+
+        <div class="mt-5 border-t border-gray-100 pt-3">
+          <button id="toggleAquisiçõesBtn" type="button" onclick="toggleFinanceAcquisitions()" class="w-full flex items-center justify-between text-left py-1">
+            <span class="text-xs font-bold text-gray-700">Aquisições</span>
+            <span class="flex items-center gap-1 text-[10px] font-semibold text-gray-500"><span id="toggleAquisiçõesText">Ver lista</span><i id="toggleAquisiçõesIcon" data-lucide="chevron-down" class="w-4 h-4"></i></span>
+          </button>
+          <div id="listaDetalhadaCompras" class="space-y-2 max-h-96 overflow-y-auto pr-1 no-scrollbar hidden mt-2"></div>
         </div>
       </div>
     </div>
@@ -1591,6 +1808,12 @@
         </div>
 
         <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Valor estimado por unidade (R$)</label>
+          <input type="text" inputmode="decimal" id="itemUnitEstimate" placeholder="Opcional. Ex.: 50,00" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+          <p class="text-[10px] text-gray-400 mt-1">O planejado é calculado por: meta × valor por unidade. O gasto real vem das aquisições.</p>
+        </div>
+
+        <div>
           <label class="block text-xs font-semibold text-gray-700 mb-1">Observações</label>
           <textarea id="itemNotes" rows="2" placeholder="Ex.: preferir algodão leve; cores neutras..." class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none resize-none"></textarea>
         </div>
@@ -1705,6 +1928,7 @@
       <div id="historyList" class="space-y-2"></div>
     </div>
   </div>
+
 
 </body>
 </html>
