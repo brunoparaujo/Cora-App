@@ -31,7 +31,8 @@
     const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 10; // V4.1: família -> crianças -> módulos + migração segura
+    const SCHEMA_VERSION = 11; // V4.2: integridade, concorrência e gravações idempotentes
+    const APP_MODEL = 'v4.2-integrity-concurrency';
 
     const INITIAL_ITEMS = [
       // VESTUÁRIO (COM OS DADOS INFORMADOS DA CORA)
@@ -311,8 +312,64 @@
       maternidade: [],
       activeCategory: 'vestuario',
       activeTab: 'enxoval',
-      activeHistoryItemId: null
+      activeHistoryItemId: null,
+      editingItemBase: null,
+      editingAcquisitionBase: null,
+      connected: false
     };
+
+    // V4.2 — Estado de gravação local. Evita duplo clique/reenvio acidental
+    // enquanto a mesma operação ainda está em andamento.
+    const activeWrites = new Set();
+    let realtimeChildRef = null;
+    let realtimeConnectionRef = null;
+
+    function cloneData(value) {
+      return value == null ? value : JSON.parse(JSON.stringify(value));
+    }
+
+    function sameValue(a, b) {
+      return JSON.stringify(a) === JSON.stringify(b);
+    }
+
+    function createConcurrencyError(message) {
+      const error = new Error(message);
+      error.code = 'CORA_CONFLICT';
+      return error;
+    }
+
+    function isConcurrencyError(error) {
+      return error?.code === 'CORA_CONFLICT';
+    }
+
+    function newStableId(prefix, collectionPath) {
+      // push().key é gerado localmente pelo SDK do Firebase, é único entre
+      // dispositivos e continua disponível mesmo antes de uma ida ao servidor.
+      const key = db.ref(collectionPath).push().key || `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      return `${prefix}_${key}`;
+    }
+
+    function setBusy(buttonId, busy, busyText = 'Salvando...') {
+      const button = document.getElementById(buttonId);
+      if (!button) return;
+      if (!button.dataset.defaultText) button.dataset.defaultText = button.textContent.trim();
+      button.disabled = busy;
+      button.classList.toggle('opacity-60', busy);
+      button.classList.toggle('cursor-wait', busy);
+      button.textContent = busy ? busyText : button.dataset.defaultText;
+    }
+
+    async function runWriteOnce(key, buttonId, work, busyText = 'Salvando...') {
+      if (activeWrites.has(key)) return { skipped: true };
+      activeWrites.add(key);
+      if (buttonId) setBusy(buttonId, true, busyText);
+      try {
+        return await work();
+      } finally {
+        activeWrites.delete(key);
+        if (buttonId) setBusy(buttonId, false, busyText);
+      }
+    }
 
     function money(value) {
       return `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
@@ -327,7 +384,22 @@
         unitPrice: acq.type === 'gift' ? 0 : Math.max(0, Number(acq.unitPrice) || 0),
         type: acq.type === 'gift' ? 'gift' : 'purchase',
         brand: acq.brand || '',
-        notes: acq.notes || ''
+        notes: acq.notes || '',
+        revision: Math.max(0, Number(acq.revision) || 0),
+        createdAt: Number(acq.createdAt) || null,
+        updatedAt: Number(acq.updatedAt) || null
+      };
+    }
+
+    function normalizeMaternityItem(item, idFallback = '') {
+      return {
+        id: item?.id || idFallback,
+        cat: item?.cat || 'bebê',
+        title: item?.title || 'Item da maternidade',
+        checked: !!item?.checked,
+        revision: Math.max(0, Number(item?.revision) || 0),
+        createdAt: Number(item?.createdAt) || null,
+        updatedAt: Number(item?.updatedAt) || null
       };
     }
 
@@ -397,7 +469,10 @@
         sizeMode: item.sizeMode === 'unique' ? 'unique' : 'multi',
         unitEstimate: null,
         sizes: {},
-        acquisitions: {}
+        acquisitions: {},
+        revision: Math.max(0, Number(item.revision) || 0),
+        createdAt: Number(item.createdAt) || null,
+        updatedAt: Number(item.updatedAt) || null
       };
 
       SIZE_KEYS.forEach(size => {
@@ -532,7 +607,7 @@
       return itemToFirebase(item);
     }
 
-    // V4.1 — Arquitetura: família -> membros + crianças -> módulos.
+    // V4.2 — Arquitetura estabilizada: família -> membros + crianças -> módulos.
     // O ID da família é um identificador interno estável. O perfil da criança
     // representa para quem o aplicativo está sendo usado; membros serão ligados
     // aos usuários na V4.3/V4.5.
@@ -564,24 +639,38 @@
     function canonicalFamilyMeta() {
       return {
         schemaVersion: SCHEMA_VERSION,
-        model: 'v4.1-family-child',
+        model: APP_MODEL,
         updatedAt: firebase.database.ServerValue.TIMESTAMP
       };
     }
 
     function seedDatabase() {
       const updates = {};
+      const now = Date.now();
       INITIAL_ITEMS.forEach(item => {
-        updates[childPath(`enxoval/items/${item.id}`)] = seedItemFromInitial(item);
+        const seeded = seedItemFromInitial(item);
+        seeded.revision = Math.max(1, Number(seeded.revision) || 0);
+        seeded.createdAt = seeded.createdAt || now;
+        seeded.updatedAt = now;
+        updates[childPath(`enxoval/items/${item.id}`)] = seeded;
       });
       MATERNIDADE_DEFAULT.forEach(item => {
-        updates[childPath(`maternity/${item.id}`)] = item;
+        updates[childPath(`maternity/${item.id}`)] = {
+          ...normalizeMaternityItem(item, item.id),
+          revision: 1,
+          createdAt: now,
+          updatedAt: now
+        };
       });
       updates[childPath('profile')] = canonicalChildProfile();
       updates[childPath('meta/schemaVersion')] = SCHEMA_VERSION;
-      updates[childPath('meta/model')] = 'v4.1-family-child';
+      updates[childPath('meta/model')] = APP_MODEL;
+      updates[childPath('meta/legacyMigrationComplete')] = true;
+      updates[childPath('meta/legacyMigrationCompletedAt')] = firebase.database.ServerValue.TIMESTAMP;
       updates[childPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
-      updates[familyPath('meta')] = canonicalFamilyMeta();
+      updates[familyPath('meta/schemaVersion')] = SCHEMA_VERSION;
+      updates[familyPath('meta/model')] = APP_MODEL;
+      updates[familyPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
       return db.ref().update(updates);
     }
 
@@ -759,7 +848,7 @@
         if (targetMaternity[id]) return;
         const item = candidates[0];
         if (item) {
-          updates[childPath(`maternity/${id}`)] = item;
+          updates[childPath(`maternity/${id}`)] = normalizeMaternityItem(item, id);
           addedMaternity += 1;
         }
       });
@@ -767,14 +856,16 @@
       // 4) Perfil/metadados só são criados quando faltarem.
       if (!target.profile) updates[childPath('profile')] = canonicalChildProfile();
       updates[childPath('meta/schemaVersion')] = SCHEMA_VERSION;
-      updates[childPath('meta/model')] = 'v4.1-family-child';
+      updates[childPath('meta/model')] = APP_MODEL;
+      updates[childPath('meta/legacyMigrationComplete')] = true;
+      updates[childPath('meta/legacyMigrationCompletedAt')] = firebase.database.ServerValue.TIMESTAMP;
       if (changedItems || addedMaternity) {
         updates[childPath('meta/repairedAt')] = firebase.database.ServerValue.TIMESTAMP;
         updates[childPath('meta/repairedItems')] = changedItems;
         updates[childPath('meta/repairedAcquisitions')] = addedAcquisitions;
         updates[childPath('meta/repairedBudgets')] = restoredBudgets;
       }
-      updates[familyPath('meta/model')] = 'v4.1-family-child';
+      updates[familyPath('meta/model')] = APP_MODEL;
       updates[familyPath('meta/schemaVersion')] = SCHEMA_VERSION;
       if (changedItems || addedMaternity) {
         updates[familyPath('meta/repairedAt')] = firebase.database.ServerValue.TIMESTAMP;
@@ -809,37 +900,84 @@
     }
 
     async function normalizeChildSchema(root) {
-      const updates = {};
+      // V4.2: normalização registro a registro com transaction. Assim a atualização
+      // do schema não devolve ao Firebase uma cópia antiga de um item inteiro caso
+      // o outro celular grave algo durante o upgrade.
       const sourceItems = root.enxoval?.items || root.items || {};
-      const normalizedItems = Object.values(sourceItems).map(normalizeItem);
-      normalizedItems.forEach(item => {
-        updates[childPath(`enxoval/items/${item.id}`)] = item;
+      const itemJobs = Object.entries(sourceItems).map(([key, sourceItem]) => {
+        const id = sourceItem?.id || key;
+        const ref = db.ref(childPath(`enxoval/items/${id}`));
+        return ref.transaction(currentRaw => normalizeItem(currentRaw || { ...sourceItem, id }));
       });
-      Object.values(root.maternity || root.maternidade || {}).forEach(item => {
-        updates[childPath(`maternity/${item.id}`)] = item;
+
+      const sourceMaternity = root.maternity || root.maternidade || {};
+      const maternityJobs = Object.entries(sourceMaternity).map(([key, sourceItem]) => {
+        const id = sourceItem?.id || key;
+        const ref = db.ref(childPath(`maternity/${id}`));
+        return ref.transaction(currentRaw => normalizeMaternityItem(currentRaw || { ...sourceItem, id }, id));
       });
-      if (!Object.keys(root.maternity || root.maternidade || {}).length) {
-        MATERNIDADE_DEFAULT.forEach(item => {
-          updates[childPath(`maternity/${item.id}`)] = item;
+
+      if (!Object.keys(sourceMaternity).length) {
+        const now = Date.now();
+        MATERNIDADE_DEFAULT.forEach(source => {
+          const ref = db.ref(childPath(`maternity/${source.id}`));
+          maternityJobs.push(ref.transaction(currentRaw => {
+            if (currentRaw) return normalizeMaternityItem(currentRaw, source.id);
+            return {
+              ...normalizeMaternityItem(source, source.id),
+              revision: 1,
+              createdAt: now,
+              updatedAt: now
+            };
+          }));
         });
       }
+
+      await Promise.all([...itemJobs, ...maternityJobs]);
+
+      const updates = {};
       if (!root.profile) updates[childPath('profile')] = canonicalChildProfile();
       updates[childPath('meta/schemaVersion')] = SCHEMA_VERSION;
-      updates[childPath('meta/model')] = 'v4.1-family-child';
+      updates[childPath('meta/model')] = APP_MODEL;
+      updates[childPath('meta/legacyMigrationComplete')] = true;
+      if (!root.meta?.legacyMigrationCompletedAt) {
+        updates[childPath('meta/legacyMigrationCompletedAt')] = firebase.database.ServerValue.TIMESTAMP;
+      }
       updates[childPath('meta/normalizedAt')] = firebase.database.ServerValue.TIMESTAMP;
-      updates[familyPath('meta/model')] = 'v4.1-family-child';
+      updates[familyPath('meta/model')] = APP_MODEL;
       updates[familyPath('meta/schemaVersion')] = SCHEMA_VERSION;
+      updates[familyPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
       await db.ref().update(updates);
     }
 
     function validateCanonicalItem(item) {
-      const allowedItemKeys = ['id', 'name', 'category', 'essential', 'notes', 'sizeMode', 'unitEstimate', 'sizes', 'acquisitions'];
+      const allowedItemKeys = [
+        'id', 'name', 'category', 'essential', 'notes', 'sizeMode', 'unitEstimate',
+        'sizes', 'acquisitions', 'revision', 'createdAt', 'updatedAt'
+      ];
       const itemKeysOk = Object.keys(item || {}).every(key => allowedItemKeys.includes(key));
-      const sizesOk = Object.keys(item?.sizes || {}).every(size => Object.keys(item.sizes[size] || {}).every(k => k === 'target'));
+      const sizesOk = Object.keys(item?.sizes || {}).every(size =>
+        Object.keys(item.sizes[size] || {}).every(k => k === 'target')
+      );
+      const allowedAcquisitionKeys = [
+        'id', 'size', 'quantity', 'unitPrice', 'type', 'brand', 'notes',
+        'revision', 'createdAt', 'updatedAt'
+      ];
       const acquisitionsOk = Object.values(item?.acquisitions || {}).every(acq =>
-        Object.keys(acq || {}).every(k => ['id', 'size', 'quantity', 'unitPrice', 'type', 'brand', 'notes'].includes(k))
+        Object.keys(acq || {}).every(k => allowedAcquisitionKeys.includes(k))
       );
       return itemKeysOk && sizesOk && acquisitionsOk;
+    }
+
+    async function markV42Ready() {
+      const updates = {};
+      updates[childPath('meta/schemaVersion')] = SCHEMA_VERSION;
+      updates[childPath('meta/model')] = APP_MODEL;
+      updates[childPath('meta/legacyMigrationComplete')] = true;
+      updates[familyPath('meta/schemaVersion')] = SCHEMA_VERSION;
+      updates[familyPath('meta/model')] = APP_MODEL;
+      updates[familyPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
+      await db.ref().update(updates);
     }
 
     async function ensureDatabaseSchema() {
@@ -852,7 +990,10 @@
         if (!migratedChild.enxoval?.items || Object.keys(migratedChild.enxoval.items).length === 0) {
           // Só cria os itens iniciais quando não existe nenhum dado migrável.
           await seedDatabase();
+        } else {
+          await normalizeChildSchema(migratedChild);
         }
+        await markV42Ready();
         return result;
       }
 
@@ -860,41 +1001,386 @@
       const childRoot = familyRoot.children?.[CHILD_ID];
 
       if (!childRoot) {
-        // A família existe, mas a criança ainda não está na estrutura nova.
-        // Migrar primeiro; semear só se não houver dado legado algum.
+        // Família existente sem a criança canônica: tenta recuperar uma única vez.
         const result = await mergeLegacySourcesIntoChild();
         const afterRepair = await db.ref(CHILD_PATH).once('value');
         const repairedChild = afterRepair.val() || {};
         if (!repairedChild.enxoval?.items || Object.keys(repairedChild.enxoval.items).length === 0) {
           await seedDatabase();
+        } else {
+          await normalizeChildSchema(repairedChild);
         }
+        await markV42Ready();
         return result;
       }
 
       const version = Number(childRoot.meta?.schemaVersion || familyRoot.meta?.schemaVersion || 1);
-      const sourceItems = childRoot.enxoval?.items || childRoot.items || {};
-      const nonCanonical = Object.values(sourceItems).filter(item => !validateCanonicalItem(item));
-      const canonicalShapeOk = !!childRoot.profile && !!childRoot.enxoval && !!childRoot.maternity;
+      const migrationComplete = childRoot.meta?.legacyMigrationComplete === true;
 
-      if (version < SCHEMA_VERSION || nonCanonical.length || !canonicalShapeOk || familyRoot.meta?.model !== 'v4.1-family-child') {
-        await normalizeChildSchema(childRoot);
+      // Versões anteriores ao reparo V4.1 (schema 10) ainda podem ter dados
+      // espalhados. Nelas, fazemos a recuperação uma última vez. A partir do
+      // schema 10, o banco canônico é a única fonte de verdade: isso impede que
+      // um item excluído seja "ressuscitado" por uma raiz legada no próximo boot.
+      if (version < 10 && !migrationComplete) {
+        await mergeLegacySourcesIntoChild();
       }
 
-      // Mesmo com a estrutura nova presente, sempre faz uma mesclagem segura das
-      // fontes antigas. Isso é o mecanismo que recupera itens/aquisições/orçamentos
-      // que ficaram fora da migração anterior.
-      return mergeLegacySourcesIntoChild();
+      const latestSnapshot = await db.ref(CHILD_PATH).once('value');
+      const latestRoot = latestSnapshot.val() || {};
+      const sourceItems = latestRoot.enxoval?.items || latestRoot.items || {};
+      const nonCanonical = Object.values(sourceItems).filter(item => !validateCanonicalItem(item));
+      const canonicalShapeOk = !!latestRoot.profile && !!latestRoot.enxoval && !!latestRoot.maternity;
+
+      // Upgrade V4.1 -> V4.2 não regrava os itens quando eles já estão
+      // canônicos. Nesse caso apenas os metadados de schema/modelo são atualizados.
+      // A normalização de dados só roda quando existe forma antiga/incompleta.
+      if (nonCanonical.length || !canonicalShapeOk) {
+        await normalizeChildSchema(latestRoot);
+      }
+
+      if (version < SCHEMA_VERSION || familyRoot.meta?.model !== APP_MODEL || nonCanonical.length || !canonicalShapeOk) {
+        await markV42Ready();
+      }
+      return { migrated: version < 10 && !migrationComplete };
+    }
+
+    function itemComparable(item) {
+      const normalized = normalizeItem(item);
+      return {
+        id: normalized.id,
+        name: normalized.name,
+        category: normalized.category,
+        essential: normalized.essential,
+        notes: normalized.notes,
+        sizeMode: normalized.sizeMode,
+        unitEstimate: normalized.unitEstimate,
+        sizes: normalized.sizes,
+        acquisitions: Object.fromEntries(
+          Object.entries(normalized.acquisitions || {}).map(([id, acq]) => [id, acquisitionComparable(acq)])
+        )
+      };
+    }
+
+    function acquisitionComparable(acq) {
+      const normalized = normalizeAcquisition(acq, acq?.id);
+      return {
+        id: normalized.id,
+        size: normalized.size,
+        quantity: normalized.quantity,
+        unitPrice: normalized.unitPrice,
+        type: normalized.type,
+        brand: normalized.brand,
+        notes: normalized.notes
+      };
+    }
+
+    function itemDraftEquivalent(a, b) {
+      const left = normalizeItem(a);
+      const right = normalizeItem(b);
+      const fields = ['name', 'category', 'essential', 'notes', 'sizeMode', 'unitEstimate'];
+      if (fields.some(field => !sameValue(left[field], right[field]))) return false;
+      return SIZE_KEYS.every(size =>
+        Number(left.sizes?.[size]?.target || 0) === Number(right.sizes?.[size]?.target || 0)
+      );
+    }
+
+    function acquisitionDraftEquivalent(a, b) {
+      return sameValue(acquisitionComparable(a), acquisitionComparable(b));
+    }
+
+    function mergeItemDraft(latestRaw, baseRaw, requestedRaw) {
+      const latest = normalizeItem(latestRaw);
+      const base = normalizeItem(baseRaw);
+      const requested = normalizeItem(requestedRaw);
+      const conflicts = [];
+      let changed = false;
+
+      const fields = [
+        ['name', 'nome'],
+        ['category', 'categoria'],
+        ['essential', 'importância'],
+        ['notes', 'observações'],
+        ['sizeMode', 'modo de tamanho'],
+        ['unitEstimate', 'valor estimado']
+      ];
+
+      fields.forEach(([field, label]) => {
+        const userChanged = !sameValue(requested[field], base[field]);
+        if (!userChanged) return;
+        const serverChanged = !sameValue(latest[field], base[field]);
+        if (serverChanged && !sameValue(latest[field], requested[field])) {
+          conflicts.push(label);
+          return;
+        }
+        latest[field] = requested[field];
+        changed = true;
+      });
+
+      SIZE_KEYS.forEach(size => {
+        const baseTarget = Number(base.sizes?.[size]?.target || 0);
+        const requestedTarget = Number(requested.sizes?.[size]?.target || 0);
+        if (requestedTarget === baseTarget) return;
+        const latestTarget = Number(latest.sizes?.[size]?.target || 0);
+        if (latestTarget !== baseTarget && latestTarget !== requestedTarget) {
+          conflicts.push(`meta ${SIZE_LABELS[size]}`);
+          return;
+        }
+        latest.sizes[size] = { target: requestedTarget };
+        changed = true;
+      });
+
+      // Aquisições vêm sempre do estado mais recente do servidor. Editar um item
+      // nunca carrega de volta uma cópia antiga das aquisições.
+      latest.acquisitions = normalizeItem(latestRaw).acquisitions;
+      return { item: latest, conflicts, changed };
+    }
+
+    function mergeAcquisitionDraft(latestRaw, baseRaw, requestedRaw) {
+      const latest = normalizeAcquisition(latestRaw, latestRaw?.id || requestedRaw?.id);
+      const base = normalizeAcquisition(baseRaw, baseRaw?.id || requestedRaw?.id);
+      const requested = normalizeAcquisition(requestedRaw, requestedRaw?.id || latest.id);
+      const conflicts = [];
+      let changed = false;
+      const fields = [
+        ['type', 'tipo'],
+        ['size', 'tamanho'],
+        ['quantity', 'quantidade'],
+        ['unitPrice', 'preço'],
+        ['brand', 'marca/modelo'],
+        ['notes', 'observação']
+      ];
+
+      fields.forEach(([field, label]) => {
+        const userChanged = !sameValue(requested[field], base[field]);
+        if (!userChanged) return;
+        const serverChanged = !sameValue(latest[field], base[field]);
+        if (serverChanged && !sameValue(latest[field], requested[field])) {
+          conflicts.push(label);
+          return;
+        }
+        latest[field] = requested[field];
+        changed = true;
+      });
+
+      if (latest.type === 'gift') latest.unitPrice = 0;
+      return { acquisition: latest, conflicts, changed };
+    }
+
+    async function saveItemToFirebase(item, baseItem = null) {
+      const requested = normalizeItem(item);
+      const ref = db.ref(childPath(`enxoval/items/${requested.id}`));
+
+      if (baseItem) {
+        const warm = await ref.once('value');
+        if (!warm.exists()) {
+          throw createConcurrencyError('Este item foi excluído em outro aparelho enquanto estava aberto.');
+        }
+      }
+
+      let abortReason = null;
+      const result = await ref.transaction(currentRaw => {
+        abortReason = null;
+        const now = Date.now();
+
+        if (!baseItem) {
+          if (currentRaw) {
+            const current = normalizeItem(currentRaw);
+            // Repetição da mesma gravação: considera sucesso e não duplica.
+            if (itemDraftEquivalent(current, requested)) return currentRaw;
+            abortReason = 'Já existe um registro diferente com este identificador.';
+            return;
+          }
+          const created = normalizeItem(requested);
+          created.revision = 1;
+          created.createdAt = now;
+          created.updatedAt = now;
+          return created;
+        }
+
+        if (!currentRaw) {
+          abortReason = 'Este item foi excluído em outro aparelho enquanto você o editava.';
+          return;
+        }
+
+        const latest = normalizeItem(currentRaw);
+        const merged = mergeItemDraft(latest, baseItem, requested);
+        if (merged.conflicts.length) {
+          abortReason = `O item também foi alterado em outro aparelho (${merged.conflicts.join(', ')}).`;
+          return;
+        }
+        if (!merged.changed) return currentRaw;
+
+        merged.item.revision = Math.max(0, Number(latest.revision) || 0) + 1;
+        merged.item.createdAt = latest.createdAt || Number(baseItem?.createdAt) || now;
+        merged.item.updatedAt = now;
+        return merged.item;
+      });
+
+      if (!result.committed && abortReason) throw createConcurrencyError(abortReason);
+      return result.snapshot?.val();
+    }
+
+    async function deleteItemFromFirebase(id, expectedItem = null) {
+      const ref = db.ref(childPath(`enxoval/items/${id}`));
+      const warm = await ref.once('value');
+      if (!warm.exists()) return { alreadyDeleted: true };
+
+      let abortReason = null;
+      const result = await ref.transaction(currentRaw => {
+        abortReason = null;
+        if (!currentRaw) return currentRaw;
+        if (expectedItem) {
+          const current = normalizeItem(currentRaw);
+          const expected = normalizeItem(expectedItem);
+          const sameRevision = Number(current.revision || 0) === Number(expected.revision || 0);
+          const sameContent = sameValue(itemComparable(current), itemComparable(expected));
+          if (!sameRevision || !sameContent) {
+            abortReason = 'Este item mudou em outro aparelho. A exclusão foi cancelada para não apagar alterações novas.';
+            return;
+          }
+        }
+        return null;
+      });
+
+      if (!result.committed && abortReason) throw createConcurrencyError(abortReason);
+      return { deleted: result.committed };
+    }
+
+    async function saveAcquisitionToFirebase(itemId, acquisition, baseAcquisition = null) {
+      const requested = normalizeAcquisition(acquisition, acquisition.id);
+      const itemRef = db.ref(childPath(`enxoval/items/${itemId}`));
+      const warm = await itemRef.once('value');
+      if (!warm.exists()) {
+        throw createConcurrencyError('O item desta aquisição foi excluído em outro aparelho.');
+      }
+
+      let abortReason = null;
+      const result = await itemRef.transaction(currentRaw => {
+        abortReason = null;
+        if (!currentRaw) {
+          abortReason = 'O item desta aquisição foi excluído em outro aparelho.';
+          return;
+        }
+
+        const now = Date.now();
+        const currentItem = normalizeItem(currentRaw);
+        const latestAcquisition = currentItem.acquisitions?.[requested.id];
+        let nextAcquisition;
+        let changed = true;
+
+        if (!baseAcquisition) {
+          if (latestAcquisition) {
+            // Reenvio do mesmo ID após perda de conexão/ack: idempotente.
+            if (acquisitionDraftEquivalent(latestAcquisition, requested)) return currentRaw;
+            abortReason = 'Já existe uma aquisição diferente com este identificador.';
+            return;
+          }
+          nextAcquisition = normalizeAcquisition(requested, requested.id);
+          nextAcquisition.revision = 1;
+          nextAcquisition.createdAt = now;
+          nextAcquisition.updatedAt = now;
+        } else {
+          if (!latestAcquisition) {
+            abortReason = 'Esta aquisição foi excluída em outro aparelho enquanto você a editava.';
+            return;
+          }
+          const merged = mergeAcquisitionDraft(latestAcquisition, baseAcquisition, requested);
+          if (merged.conflicts.length) {
+            abortReason = `Esta aquisição também foi alterada em outro aparelho (${merged.conflicts.join(', ')}).`;
+            return;
+          }
+          changed = merged.changed;
+          if (!changed) return currentRaw;
+          nextAcquisition = merged.acquisition;
+          nextAcquisition.revision = Math.max(0, Number(latestAcquisition.revision) || 0) + 1;
+          nextAcquisition.createdAt = latestAcquisition.createdAt || Number(baseAcquisition?.createdAt) || now;
+          nextAcquisition.updatedAt = now;
+        }
+
+        currentItem.acquisitions[requested.id] = nextAcquisition;
+        if (changed) {
+          currentItem.revision = Math.max(0, Number(currentItem.revision) || 0) + 1;
+          currentItem.createdAt = currentItem.createdAt || now;
+          currentItem.updatedAt = now;
+        }
+        return currentItem;
+      });
+
+      if (!result.committed && abortReason) throw createConcurrencyError(abortReason);
+      return result.snapshot?.val();
+    }
+
+    async function deleteAcquisitionFromFirebase(itemId, acquisitionId, expectedAcquisition = null) {
+      const itemRef = db.ref(childPath(`enxoval/items/${itemId}`));
+      const warm = await itemRef.once('value');
+      if (!warm.exists()) return { alreadyDeleted: true };
+
+      let abortReason = null;
+      const result = await itemRef.transaction(currentRaw => {
+        abortReason = null;
+        if (!currentRaw) return currentRaw;
+        const now = Date.now();
+        const currentItem = normalizeItem(currentRaw);
+        const latest = currentItem.acquisitions?.[acquisitionId];
+        if (!latest) return currentRaw;
+
+        if (expectedAcquisition) {
+          const expected = normalizeAcquisition(expectedAcquisition, acquisitionId);
+          const sameRevision = Number(latest.revision || 0) === Number(expected.revision || 0);
+          const sameContent = acquisitionDraftEquivalent(latest, expected);
+          if (!sameRevision || !sameContent) {
+            abortReason = 'Esta aquisição mudou em outro aparelho. A exclusão foi cancelada para preservar a alteração nova.';
+            return;
+          }
+        }
+
+        delete currentItem.acquisitions[acquisitionId];
+        currentItem.revision = Math.max(0, Number(currentItem.revision) || 0) + 1;
+        currentItem.createdAt = currentItem.createdAt || now;
+        currentItem.updatedAt = now;
+        return currentItem;
+      });
+
+      if (!result.committed && abortReason) throw createConcurrencyError(abortReason);
+      return { deleted: result.committed };
+    }
+
+    async function toggleMaternidadeInFirebase(id) {
+      const ref = db.ref(childPath(`maternity/${id}`));
+      const warm = await ref.once('value');
+      if (!warm.exists()) throw createConcurrencyError('Este item da maternidade não existe mais no banco.');
+
+      return ref.transaction(currentRaw => {
+        if (!currentRaw) return currentRaw;
+        const now = Date.now();
+        const current = normalizeMaternityItem(currentRaw, id);
+        current.checked = !current.checked;
+        current.revision = Math.max(0, Number(current.revision) || 0) + 1;
+        current.createdAt = current.createdAt || now;
+        current.updatedAt = now;
+        return current;
+      });
     }
 
     function listenRealtime() {
-      db.ref(CHILD_PATH).on('value', snapshot => {
+      if (realtimeChildRef) realtimeChildRef.off();
+      if (realtimeConnectionRef) realtimeConnectionRef.off();
+
+      realtimeChildRef = db.ref(CHILD_PATH);
+      realtimeChildRef.on('value', snapshot => {
         const data = snapshot.val() || {};
         appState.items = Object.values(data.enxoval?.items || {}).map(normalizeItem);
-        appState.maternidade = Object.values(data.maternity || {});
+        appState.maternidade = Object.entries(data.maternity || {}).map(([id, item]) => normalizeMaternityItem(item, id));
         renderAll();
       }, error => {
         console.error('Erro de sincronização:', error);
         alert('Não foi possível sincronizar o enxoval. Verifique sua conexão.');
+      });
+
+      realtimeConnectionRef = db.ref('.info/connected');
+      realtimeConnectionRef.on('value', snapshot => {
+        appState.connected = snapshot.val() === true;
+        console.info(`[Cora V4.2] Firebase ${appState.connected ? 'conectado' : 'desconectado'}.`);
       });
     }
 
@@ -908,26 +1394,6 @@
         const message = error?.message ? `\n\nDetalhe técnico: ${error.message}` : '';
         alert(`Não foi possível conectar ao banco da Cora${code}. Verifique a configuração/permissão do Firebase.${message}`);
       }
-    }
-
-    function saveItemToFirebase(item) {
-      return db.ref(childPath(`enxoval/items/${item.id}`)).set(itemToFirebase(item));
-    }
-
-    function deleteItemFromFirebase(id) {
-      return db.ref(childPath(`enxoval/items/${id}`)).remove();
-    }
-
-    function saveMaternidadeItemToFirebase(item) {
-      return db.ref(childPath(`maternity/${item.id}`)).set(item);
-    }
-
-    function saveAcquisitionToFirebase(itemId, acquisition) {
-      return db.ref(childPath(`enxoval/items/${itemId}/acquisitions/${acquisition.id}`)).set(normalizeAcquisition(acquisition, acquisition.id));
-    }
-
-    function deleteAcquisitionFromFirebase(itemId, acquisitionId) {
-      return db.ref(childPath(`enxoval/items/${itemId}/acquisitions/${acquisitionId}`)).remove();
     }
 
     window.onload = function() {
@@ -1169,11 +1635,19 @@
         </label>`).join('');
     }
 
-    function toggleMaternidade(id) {
-      const item = appState.maternidade.find(i => i.id === id);
-      if (item) {
-        item.checked = !item.checked;
-        saveMaternidadeItemToFirebase(item);
+    async function toggleMaternidade(id) {
+      try {
+        await runWriteOnce(`maternity:${id}`, null, () => toggleMaternidadeInFirebase(id));
+      } catch (error) {
+        console.error('Erro ao atualizar maternidade:', error);
+        renderMaternidade();
+        if (isConcurrencyError(error)) {
+          alert(`${error.message}
+
+A lista foi preservada. Aguarde a sincronização e tente novamente.`);
+        } else {
+          alert('Não foi possível atualizar este item da maternidade. Tente novamente.');
+        }
       }
     }
 
@@ -1383,6 +1857,7 @@
 
     function openNewItemModal() {
       closeModal('modalAction');
+      appState.editingItemBase = null;
       document.getElementById('itemForm').reset();
       document.getElementById('itemId').value = '';
       document.getElementById('itemUnitEstimate').value = '';
@@ -1428,6 +1903,7 @@
       if (!item) return;
       closeModal('modalChooseAcquisition');
       closeModal('modalAction');
+      appState.editingAcquisitionBase = null;
       document.getElementById('acquisitionForm').reset();
       document.getElementById('acquisitionItemId').value = item.id;
       document.getElementById('acquisitionId').value = '';
@@ -1521,6 +1997,7 @@
       const item = appState.items.find(i => i.id === itemId);
       const acq = item?.acquisitions?.[acquisitionId];
       if (!item || !acq) return;
+      appState.editingAcquisitionBase = cloneData(normalizeAcquisition(acq, acquisitionId));
       closeModal('modalAcquisitionHistory');
       document.getElementById('acquisitionItemId').value = item.id;
       document.getElementById('acquisitionId').value = acquisitionId;
@@ -1541,9 +2018,18 @@
       e.preventDefault();
       const itemId = document.getElementById('acquisitionItemId').value;
       const item = appState.items.find(i => i.id === itemId);
-      if (!item) return;
+      if (!item) {
+        alert('Este item não está mais disponível. Aguarde a sincronização e tente novamente.');
+        return;
+      }
 
-      const id = document.getElementById('acquisitionId').value || `acq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      let id = document.getElementById('acquisitionId').value;
+      if (!id) {
+        id = newStableId('acq', childPath(`enxoval/items/${itemId}/acquisitions`));
+        // Mantém o mesmo ID caso a gravação precise ser reenviada após uma falha.
+        document.getElementById('acquisitionId').value = id;
+      }
+
       const type = document.getElementById('acquisitionType').value === 'gift' ? 'gift' : 'purchase';
       const quantity = Math.max(1, parseInt(document.getElementById('acquisitionQuantity').value, 10) || 1);
       const unitPrice = type === 'gift' ? 0 : Math.max(0, parseFloat(document.getElementById('acquisitionUnitPrice').value) || 0);
@@ -1558,11 +2044,21 @@
       }, id);
 
       try {
-        await saveAcquisitionToFirebase(itemId, acquisition);
+        const result = await runWriteOnce(
+          'acquisition-form',
+          'acquisitionSubmitButton',
+          () => saveAcquisitionToFirebase(itemId, acquisition, appState.editingAcquisitionBase)
+        );
+        if (result?.skipped) return;
+        appState.editingAcquisitionBase = null;
         closeModal('modalAcquisition');
       } catch (error) {
         console.error('Erro ao salvar aquisição:', error);
-        alert('Não foi possível salvar a aquisição. Tente novamente.');
+        if (isConcurrencyError(error)) {
+          alert(`${error.message}\n\nAs alterações do outro aparelho foram preservadas. Reabra a aquisição para conferir os dados antes de tentar novamente.`);
+        } else {
+          alert('Não foi possível salvar a aquisição. Tente novamente.');
+        }
       }
     }
 
@@ -1572,11 +2068,17 @@
       if (!item || !acq) return;
       if (!confirm(`Excluir esta aquisição de ${acq.quantity} peça(s)?`)) return;
       try {
-        await deleteAcquisitionFromFirebase(itemId, acquisitionId);
+        await runWriteOnce(
+          `delete-acquisition:${itemId}:${acquisitionId}`,
+          null,
+          () => deleteAcquisitionFromFirebase(itemId, acquisitionId, cloneData(acq)),
+          'Excluindo...'
+        );
         openAcquisitionHistory(itemId);
       } catch (error) {
         console.error('Erro ao excluir aquisição:', error);
-        alert('Não foi possível excluir a aquisição. Tente novamente.');
+        if (isConcurrencyError(error)) alert(error.message);
+        else alert('Não foi possível excluir a aquisição. Tente novamente.');
       }
     }
 
@@ -1587,17 +2089,25 @@
 
       const item = appState.items.find(i => i.id === itemId);
       const acq = item?.acquisitions?.[acquisitionId];
-      if (!item || !acq) return;
+      const expected = appState.editingAcquisitionBase || (acq ? cloneData(acq) : null);
+      if (!expected) return;
 
-      if (!confirm(`Excluir esta aquisição de ${acq.quantity} peça(s)?`)) return;
+      if (!confirm(`Excluir esta aquisição de ${expected.quantity} peça(s)?`)) return;
 
       try {
-        await deleteAcquisitionFromFirebase(itemId, acquisitionId);
+        await runWriteOnce(
+          `delete-acquisition:${itemId}:${acquisitionId}`,
+          null,
+          () => deleteAcquisitionFromFirebase(itemId, acquisitionId, expected),
+          'Excluindo...'
+        );
+        appState.editingAcquisitionBase = null;
         closeModal('modalAcquisition');
-        openAcquisitionHistory(itemId);
+        if (appState.items.some(i => i.id === itemId)) openAcquisitionHistory(itemId);
       } catch (error) {
         console.error('Erro ao excluir aquisição:', error);
-        alert('Não foi possível excluir a aquisição. Tente novamente.');
+        if (isConcurrencyError(error)) alert(error.message);
+        else alert('Não foi possível excluir a aquisição. Tente novamente.');
       }
     }
 
@@ -1610,6 +2120,7 @@
     function editItem(id) {
       const item = appState.items.find(i => i.id === id);
       if (!item) return;
+      appState.editingItemBase = cloneData(normalizeItem(item));
       document.getElementById('itemId').value = item.id;
       document.getElementById('itemName').value = item.name;
       document.getElementById('itemCategory').value = item.category;
@@ -1630,8 +2141,12 @@
 
     async function saveItem(e) {
       e.preventDefault();
-      const id = document.getElementById('itemId').value || `item_${Date.now()}`;
-      const existing = appState.items.find(i => i.id === id);
+      let id = document.getElementById('itemId').value;
+      if (!id) {
+        id = newStableId('item', childPath('enxoval/items'));
+        // O ID fica no formulário para que um eventual reenvio seja idempotente.
+        document.getElementById('itemId').value = id;
+      }
 
       const item = {
         id,
@@ -1642,7 +2157,7 @@
         unitEstimate: document.getElementById('itemUnitEstimate').value.trim() === '' ? null : Math.max(0, Number(document.getElementById('itemUnitEstimate').value.replace(',', '.')) || 0),
         sizeMode: document.getElementById('itemSizeMode').value === 'unique' ? 'unique' : 'multi',
         sizes: {},
-        acquisitions: existing?.acquisitions || {},
+        acquisitions: {}
       };
 
       SIZE_KEYS.forEach(size => {
@@ -1654,58 +2169,122 @@
       }
 
       try {
-        await saveItemToFirebase(item);
+        const result = await runWriteOnce(
+          'item-form',
+          'itemSubmitButton',
+          () => saveItemToFirebase(item, appState.editingItemBase)
+        );
+        if (result?.skipped) return;
+        appState.editingItemBase = null;
         closeModal('modalItem');
       } catch (error) {
         console.error('Erro ao salvar item:', error);
-        alert('Não foi possível salvar o item. Tente novamente.');
+        if (isConcurrencyError(error)) {
+          alert(`${error.message}\n\nAs alterações feitas no outro aparelho foram preservadas. Reabra o item para conferir a versão atual antes de salvar novamente.`);
+        } else {
+          alert('Não foi possível salvar o item. Tente novamente.');
+        }
       }
     }
 
     async function deleteItemFromEdit() {
       const id = document.getElementById('itemId').value;
       if (!id) return;
-      const item = appState.items.find(i => i.id === id);
-      if (!item) return;
-      if (!confirm(`Excluir “${item.name}” e todas as aquisições registradas nele?`)) return;
+      const current = appState.items.find(i => i.id === id);
+      const expected = appState.editingItemBase || (current ? cloneData(current) : null);
+      if (!expected) return;
+      if (!confirm(`Excluir “${expected.name}” e todas as aquisições registradas nele?`)) return;
       try {
-        await deleteItemFromFirebase(id);
+        await runWriteOnce(
+          `delete-item:${id}`,
+          null,
+          () => deleteItemFromFirebase(id, expected),
+          'Excluindo...'
+        );
+        appState.editingItemBase = null;
         closeModal('modalItem');
       } catch (error) {
         console.error('Erro ao excluir item:', error);
-        alert('Não foi possível excluir o item. Tente novamente.');
+        if (isConcurrencyError(error)) alert(error.message);
+        else alert('Não foi possível excluir o item. Tente novamente.');
       }
     }
 
     async function deleteItem(id) {
       const item = appState.items.find(i => i.id === id);
       if (!item) return;
+      const expected = cloneData(item);
       if (!confirm(`Excluir “${item.name}” e todas as aquisições registradas nele?`)) return;
       try {
-        await deleteItemFromFirebase(id);
+        await runWriteOnce(
+          `delete-item:${id}`,
+          null,
+          () => deleteItemFromFirebase(id, expected),
+          'Excluindo...'
+        );
       } catch (error) {
         console.error('Erro ao excluir item:', error);
-        alert('Não foi possível excluir o item. Tente novamente.');
+        if (isConcurrencyError(error)) alert(error.message);
+        else alert('Não foi possível excluir o item. Tente novamente.');
       }
     }
 
     function closeModal(id) {
       const el = document.getElementById(id);
       if (el) el.classList.add('hidden');
+      if (id === 'modalItem') appState.editingItemBase = null;
+      if (id === 'modalAcquisition') appState.editingAcquisitionBase = null;
+    }
+
+    async function resetDatabaseToDefaults() {
+      const childRef = db.ref(CHILD_PATH);
+      const now = Date.now();
+      await childRef.transaction(currentRaw => {
+        const current = currentRaw && typeof currentRaw === 'object' ? currentRaw : {};
+        const items = {};
+        INITIAL_ITEMS.forEach(source => {
+          const item = seedItemFromInitial(source);
+          item.revision = 1;
+          item.createdAt = now;
+          item.updatedAt = now;
+          items[item.id] = item;
+        });
+        const maternity = {};
+        MATERNIDADE_DEFAULT.forEach(source => {
+          maternity[source.id] = {
+            ...normalizeMaternityItem(source, source.id),
+            revision: 1,
+            createdAt: now,
+            updatedAt: now
+          };
+        });
+
+        return {
+          ...current,
+          profile: canonicalChildProfile(),
+          enxoval: { ...(current.enxoval || {}), items },
+          maternity,
+          meta: {
+            ...(current.meta || {}),
+            schemaVersion: SCHEMA_VERSION,
+            model: APP_MODEL,
+            legacyMigrationComplete: true,
+            resetAt: now
+          }
+        };
+      });
+
+      await db.ref(familyPath('meta')).update({
+        schemaVersion: SCHEMA_VERSION,
+        model: APP_MODEL,
+        updatedAt: firebase.database.ServerValue.TIMESTAMP
+      });
     }
 
     async function openSettingsModal() {
       if (!confirm('Deseja resetar o enxoval para os valores padrão? Isso substituirá os dados atuais da Cora no banco compartilhado.')) return;
       try {
-        const updates = {};
-        INITIAL_ITEMS.forEach(item => { updates[childPath(`enxoval/items/${item.id}`)] = seedItemFromInitial(item); });
-        MATERNIDADE_DEFAULT.forEach(item => { updates[childPath(`maternity/${item.id}`)] = item; });
-        updates[childPath('profile')] = canonicalChildProfile();
-        updates[childPath('meta/schemaVersion')] = SCHEMA_VERSION;
-        updates[childPath('meta/model')] = 'v4.1-family-child';
-        updates[childPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
-        updates[familyPath('meta')] = canonicalFamilyMeta();
-          await db.ref().update(updates);
+        await runWriteOnce('reset-database', null, resetDatabaseToDefaults, 'Resetando...');
       } catch (error) {
         console.error('Erro ao resetar:', error);
         alert('Não foi possível resetar o enxoval.');
@@ -2089,7 +2668,7 @@
 
         <div class="pt-2 flex space-x-2">
           <button type="button" onclick="closeModal('modalItem')" class="w-1/2 py-2.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl">Cancelar</button>
-          <button type="submit" class="w-1/2 py-2.5 text-xs font-bold text-white bg-rose-600 rounded-xl shadow-md">Salvar item</button>
+          <button type="submit" id="itemSubmitButton" class="w-1/2 py-2.5 text-xs font-bold text-white bg-rose-600 rounded-xl shadow-md disabled:pointer-events-none">Salvar item</button>
         </div>
       </form>
     </div>
@@ -2170,7 +2749,7 @@
 
         <div class="pt-2 flex space-x-2">
           <button type="button" onclick="closeModal('modalAcquisition')" class="w-1/2 py-2.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl">Cancelar</button>
-          <button type="submit" class="w-1/2 py-2.5 text-xs font-bold text-white bg-emerald-600 rounded-xl shadow-md">Salvar aquisição</button>
+          <button type="submit" id="acquisitionSubmitButton" class="w-1/2 py-2.5 text-xs font-bold text-white bg-emerald-600 rounded-xl shadow-md disabled:pointer-events-none">Salvar aquisição</button>
         </div>
       </form>
     </div>
