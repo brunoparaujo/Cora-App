@@ -31,7 +31,7 @@
     const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 7; // V4.0: modelo de dados consolidado
+    const SCHEMA_VERSION = 10; // V4.1: família -> crianças -> módulos + migração segura
 
     const INITIAL_ITEMS = [
       // VESTUÁRIO (COM OS DADOS INFORMADOS DA CORA)
@@ -532,60 +532,303 @@
       return itemToFirebase(item);
     }
 
-    async function seedDatabase() {
+    // V4.1 — Arquitetura: família -> membros + crianças -> módulos.
+    // O ID da família é um identificador interno estável. O perfil da criança
+    // representa para quem o aplicativo está sendo usado; membros serão ligados
+    // aos usuários na V4.3/V4.5.
+    const FAMILY_ID = 'cora';
+    const CHILD_ID = 'cora';
+    const FAMILY_PATH = `families/${FAMILY_ID}`;
+    const CHILD_PATH = `${FAMILY_PATH}/children/${CHILD_ID}`;
+
+    // Fontes legadas conhecidas. Nenhuma delas é apagada pela migração.
+    const LEGACY_V4_PATH = 'cora';
+    const LEGACY_V4_1_FAMILY_PATH = 'families/cora';
+    const LEGACY_V4_1_WRONG_FAMILY_PATH = 'families/cora-family';
+    const LEGACY_V3_PATH = 'enxoval_items';
+
+    function familyPath(relative = '') {
+      return relative ? `${FAMILY_PATH}/${relative}` : FAMILY_PATH;
+    }
+
+    function childPath(relative = '') {
+      return relative ? `${CHILD_PATH}/${relative}` : CHILD_PATH;
+    }
+
+    function canonicalChildProfile() {
+      return {
+        babyName: 'Cora'
+      };
+    }
+
+    function canonicalFamilyMeta() {
+      return {
+        schemaVersion: SCHEMA_VERSION,
+        model: 'v4.1-family-child',
+        updatedAt: firebase.database.ServerValue.TIMESTAMP
+      };
+    }
+
+    function seedDatabase() {
       const updates = {};
       INITIAL_ITEMS.forEach(item => {
-        updates[`cora/items/${item.id}`] = seedItemFromInitial(item);
+        updates[childPath(`enxoval/items/${item.id}`)] = seedItemFromInitial(item);
       });
       MATERNIDADE_DEFAULT.forEach(item => {
-        updates[`cora/maternidade/${item.id}`] = item;
+        updates[childPath(`maternity/${item.id}`)] = item;
       });
-      updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
-      updates['cora/meta/model'] = 'v4';
-      updates['cora/meta/updatedAt'] = firebase.database.ServerValue.TIMESTAMP;
-      await db.ref().update(updates);
+      updates[childPath('profile')] = canonicalChildProfile();
+      updates[childPath('meta/schemaVersion')] = SCHEMA_VERSION;
+      updates[childPath('meta/model')] = 'v4.1-family-child';
+      updates[childPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
+      updates[familyPath('meta')] = canonicalFamilyMeta();
+      return db.ref().update(updates);
     }
 
-    async function migrateLegacyDatabase() {
-      const oldSnapshot = await db.ref('enxoval_items').once('value');
-      const oldData = oldSnapshot.val();
-      if (!oldData || !oldData.items) {
-        await seedDatabase();
-        return;
+    async function readDatabaseSource(path) {
+      try {
+        const snapshot = await db.ref(path).once('value');
+        return snapshot.val();
+      } catch (error) {
+        // Uma regra futura do Firebase pode bloquear a leitura de uma raiz legada.
+        // Isso não deve impedir a abertura do aplicativo nem invalidar as demais fontes.
+        console.warn(`Não foi possível ler a fonte legada ${path}:`, error?.code || error);
+        return null;
+      }
+    }
+
+    function extractLegacyRoots(root) {
+      const roots = [];
+      if (!root || typeof root !== 'object') return roots;
+
+      // Estrutura antiga direta: items/maternity.
+      if (root.items || root.enxoval?.items || root.maternity || root.maternidade || root.profile) {
+        roots.push(root);
       }
 
+      // Estrutura intermediária família -> children -> cora.
+      const child = root.children?.[CHILD_ID];
+      if (child && typeof child === 'object') {
+        roots.push(child);
+      }
+
+      return roots;
+    }
+
+    function getLegacyItems(root) {
+      return root?.enxoval?.items || root?.items || {};
+    }
+
+    function getLegacyMaternity(root) {
+      return root?.maternity || root?.maternidade || {};
+    }
+
+    function mergeItemData(baseItem, sourceItem) {
+      const base = normalizeItem(baseItem);
+      const source = normalizeItem(sourceItem);
+      const merged = {
+        ...base,
+        sizes: { ...(base.sizes || {}) },
+        acquisitions: { ...(base.acquisitions || {}) }
+      };
+
+      // Nunca substitui informações já existentes no destino por dados antigos.
+      // Apenas completa lacunas reais.
+      if ((merged.name || '') === '' && source.name) merged.name = source.name;
+      if ((merged.category || '') === '' && source.category) merged.category = source.category;
+      if ((merged.notes || '') === '' && source.notes) merged.notes = source.notes;
+      if ((merged.unitEstimate === null || merged.unitEstimate === undefined) &&
+          source.unitEstimate !== null && source.unitEstimate !== undefined) {
+        merged.unitEstimate = source.unitEstimate;
+      }
+
+      // Tamanhos: só completa chaves ausentes. Zero é um valor válido e não deve
+      // ser interpretado automaticamente como dado perdido.
+      SIZE_KEYS.forEach(size => {
+        if (!merged.sizes[size] && source.sizes?.[size]) {
+          merged.sizes[size] = { target: Number(source.sizes[size].target) || 0 };
+        } else if (merged.sizes[size] && merged.sizes[size].target === undefined && source.sizes?.[size]) {
+          merged.sizes[size].target = Number(source.sizes[size].target) || 0;
+        }
+      });
+
+      // Aquisições são união por ID: o destino vence em caso de conflito.
+      Object.entries(source.acquisitions || {}).forEach(([id, acq]) => {
+        if (!merged.acquisitions[id]) merged.acquisitions[id] = normalizeAcquisition(acq, id);
+      });
+
+      return merged;
+    }
+
+    function itemChanged(a, b) {
+      return JSON.stringify(a) !== JSON.stringify(b);
+    }
+
+    function collectLegacyItemCandidates(sourceRoots) {
+      const byId = new Map();
+      sourceRoots.forEach(root => {
+        Object.values(getLegacyItems(root)).forEach(item => {
+          if (!item?.id) return;
+          if (!byId.has(item.id)) byId.set(item.id, []);
+          byId.get(item.id).push(item);
+        });
+      });
+      return byId;
+    }
+
+    function collectLegacyMaternityCandidates(sourceRoots) {
+      const byId = new Map();
+      sourceRoots.forEach(root => {
+        Object.values(getLegacyMaternity(root)).forEach(item => {
+          if (!item?.id) return;
+          if (!byId.has(item.id)) byId.set(item.id, []);
+          byId.get(item.id).push(item);
+        });
+      });
+      return byId;
+    }
+
+    async function mergeLegacySourcesIntoChild() {
+      // REPARO V4.1: os dados podem estar distribuídos entre V4.0, V4.1 antiga,
+      // tentativa com "cora-family" e versões V2/V3. A nova estrutura é preservada
+      // e os legados são usados somente para completar o que estiver faltando.
+      const [targetData, currentFamily, wrongFamily, v4Data, v3Data] = await Promise.all([
+        readDatabaseSource(CHILD_PATH),
+        readDatabaseSource(LEGACY_V4_1_FAMILY_PATH),
+        readDatabaseSource(LEGACY_V4_1_WRONG_FAMILY_PATH),
+        readDatabaseSource(LEGACY_V4_PATH),
+        readDatabaseSource(LEGACY_V3_PATH)
+      ]);
+
+      const target = targetData && typeof targetData === 'object' ? targetData : {};
+      const sourceRoots = [currentFamily, wrongFamily, v4Data, v3Data]
+        .flatMap(extractLegacyRoots)
+        .filter(Boolean);
+
+      const targetItems = target.enxoval?.items || {};
+      const targetMaternity = target.maternity || {};
+      const itemCandidates = collectLegacyItemCandidates(sourceRoots);
+      const maternityCandidates = collectLegacyMaternityCandidates(sourceRoots);
       const updates = {};
-      Object.values(oldData.items).forEach(item => {
-        const normalized = normalizeItem(item);
-        updates[`cora/items/${normalized.id}`] = normalized;
+      let changedItems = 0;
+      let addedAcquisitions = 0;
+      let restoredBudgets = 0;
+      let addedMaternity = 0;
+
+      // 1) Começa pelos itens já existentes no destino. Cada item é enriquecido
+      // com aquisições/orçamento ausentes encontrados nas versões anteriores.
+      Object.values(targetItems).forEach(existingItem => {
+        if (!existingItem?.id) return;
+        let merged = normalizeItem(existingItem);
+        const before = JSON.stringify(merged);
+        const candidates = itemCandidates.get(existingItem.id) || [];
+        let hadBudget = merged.unitEstimate !== null && merged.unitEstimate !== undefined;
+        candidates.forEach(sourceItem => {
+          const beforeAcqCount = Object.keys(merged.acquisitions || {}).length;
+          merged = mergeItemData(merged, sourceItem);
+          const afterAcqCount = Object.keys(merged.acquisitions || {}).length;
+          addedAcquisitions += Math.max(0, afterAcqCount - beforeAcqCount);
+          if (!hadBudget && merged.unitEstimate !== null && merged.unitEstimate !== undefined) {
+            restoredBudgets += 1;
+            hadBudget = true;
+          }
+        });
+        if (itemChanged(JSON.parse(before), merged)) {
+          updates[childPath(`enxoval/items/${merged.id}`)] = merged;
+          changedItems += 1;
+        }
       });
-      Object.values(oldData.maternidade || {}).forEach(item => {
-        updates[`cora/maternidade/${item.id}`] = item;
+
+      // 2) Itens que só existem nas versões anteriores são recuperados integralmente.
+      itemCandidates.forEach((candidates, id) => {
+        if (targetItems[id]) return;
+        let merged = null;
+        candidates.forEach(sourceItem => {
+          merged = merged ? mergeItemData(merged, sourceItem) : normalizeItem(sourceItem);
+        });
+        if (merged) {
+          updates[childPath(`enxoval/items/${id}`)] = merged;
+          changedItems += 1;
+          addedAcquisitions += Object.keys(merged.acquisitions || {}).length;
+          if (merged.unitEstimate !== null && merged.unitEstimate !== undefined) restoredBudgets += 1;
+        }
       });
-      if (!Object.keys(oldData.maternidade || {}).length) {
+
+      // 3) Maternidade segue a mesma regra: destino vence; legado completa lacunas.
+      maternityCandidates.forEach((candidates, id) => {
+        if (targetMaternity[id]) return;
+        const item = candidates[0];
+        if (item) {
+          updates[childPath(`maternity/${id}`)] = item;
+          addedMaternity += 1;
+        }
+      });
+
+      // 4) Perfil/metadados só são criados quando faltarem.
+      if (!target.profile) updates[childPath('profile')] = canonicalChildProfile();
+      updates[childPath('meta/schemaVersion')] = SCHEMA_VERSION;
+      updates[childPath('meta/model')] = 'v4.1-family-child';
+      if (changedItems || addedMaternity) {
+        updates[childPath('meta/repairedAt')] = firebase.database.ServerValue.TIMESTAMP;
+        updates[childPath('meta/repairedItems')] = changedItems;
+        updates[childPath('meta/repairedAcquisitions')] = addedAcquisitions;
+        updates[childPath('meta/repairedBudgets')] = restoredBudgets;
+      }
+      updates[familyPath('meta/model')] = 'v4.1-family-child';
+      updates[familyPath('meta/schemaVersion')] = SCHEMA_VERSION;
+      if (changedItems || addedMaternity) {
+        updates[familyPath('meta/repairedAt')] = firebase.database.ServerValue.TIMESTAMP;
+      }
+
+      // members nunca é zerado. Só recupera se a estrutura atual estiver vazia e
+      // uma fonte antiga possuir membros.
+      const familyCurrent = await readDatabaseSource(FAMILY_PATH);
+      const currentMembers = familyCurrent?.members;
+      if (!currentMembers || Object.keys(currentMembers).length === 0) {
+        for (const root of sourceRoots) {
+          if (root.members && Object.keys(root.members).length) {
+            updates[familyPath('members')] = root.members;
+            break;
+          }
+        }
+      }
+
+      if (Object.keys(updates).length) await db.ref().update(updates);
+
+      return {
+        changedItems,
+        addedAcquisitions,
+        restoredBudgets,
+        addedMaternity,
+        sourceCount: sourceRoots.length
+      };
+    }
+
+    async function migrateLegacyDatabaseToFamily() {
+      return mergeLegacySourcesIntoChild();
+    }
+
+    async function normalizeChildSchema(root) {
+      const updates = {};
+      const sourceItems = root.enxoval?.items || root.items || {};
+      const normalizedItems = Object.values(sourceItems).map(normalizeItem);
+      normalizedItems.forEach(item => {
+        updates[childPath(`enxoval/items/${item.id}`)] = item;
+      });
+      Object.values(root.maternity || root.maternidade || {}).forEach(item => {
+        updates[childPath(`maternity/${item.id}`)] = item;
+      });
+      if (!Object.keys(root.maternity || root.maternidade || {}).length) {
         MATERNIDADE_DEFAULT.forEach(item => {
-          updates[`cora/maternidade/${item.id}`] = item;
+          updates[childPath(`maternity/${item.id}`)] = item;
         });
       }
-      updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
-      updates['cora/meta/migratedAt'] = firebase.database.ServerValue.TIMESTAMP;
-      await db.ref().update(updates);
-    }
-
-    async function migrateToV7(root) {
-      // V4.0: reescreve os registros no modelo canônico e elimina campos legados.
-      const updates = {};
-      Object.values(root.items || {}).forEach(item => {
-        const normalized = normalizeItem(item);
-        updates[`cora/items/${normalized.id}`] = normalized;
-      });
-      Object.values(root.maternidade || {}).forEach(item => {
-        updates[`cora/maternidade/${item.id}`] = item;
-      });
-      updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
-      updates['cora/meta/model'] = 'v4';
-      updates['cora/meta/migratedFrom'] = Number(root.meta?.schemaVersion || 1);
-      updates['cora/meta/migratedAt'] = firebase.database.ServerValue.TIMESTAMP;
+      if (!root.profile) updates[childPath('profile')] = canonicalChildProfile();
+      updates[childPath('meta/schemaVersion')] = SCHEMA_VERSION;
+      updates[childPath('meta/model')] = 'v4.1-family-child';
+      updates[childPath('meta/normalizedAt')] = firebase.database.ServerValue.TIMESTAMP;
+      updates[familyPath('meta/model')] = 'v4.1-family-child';
+      updates[familyPath('meta/schemaVersion')] = SCHEMA_VERSION;
       await db.ref().update(updates);
     }
 
@@ -600,46 +843,54 @@
     }
 
     async function ensureDatabaseSchema() {
-      const rootRef = db.ref('cora');
-      const snapshot = await rootRef.once('value');
+      const familySnapshot = await db.ref(FAMILY_PATH).once('value');
 
-      if (!snapshot.exists()) {
-        await seedDatabase();
-        return;
+      if (!familySnapshot.exists()) {
+        const result = await migrateLegacyDatabaseToFamily();
+        const afterMigration = await db.ref(CHILD_PATH).once('value');
+        const migratedChild = afterMigration.val() || {};
+        if (!migratedChild.enxoval?.items || Object.keys(migratedChild.enxoval.items).length === 0) {
+          // Só cria os itens iniciais quando não existe nenhum dado migrável.
+          await seedDatabase();
+        }
+        return result;
       }
 
-      const root = snapshot.val() || {};
-      const version = Number(root.meta?.schemaVersion || 1);
+      const familyRoot = familySnapshot.val() || {};
+      const childRoot = familyRoot.children?.[CHILD_ID];
 
-      if (!root.items) {
-        await migrateLegacyDatabase();
-        return;
+      if (!childRoot) {
+        // A família existe, mas a criança ainda não está na estrutura nova.
+        // Migrar primeiro; semear só se não houver dado legado algum.
+        const result = await mergeLegacySourcesIntoChild();
+        const afterRepair = await db.ref(CHILD_PATH).once('value');
+        const repairedChild = afterRepair.val() || {};
+        if (!repairedChild.enxoval?.items || Object.keys(repairedChild.enxoval.items).length === 0) {
+          await seedDatabase();
+        }
+        return result;
       }
 
-      if (version < SCHEMA_VERSION) {
-        await migrateToV7(root);
-        return;
+      const version = Number(childRoot.meta?.schemaVersion || familyRoot.meta?.schemaVersion || 1);
+      const sourceItems = childRoot.enxoval?.items || childRoot.items || {};
+      const nonCanonical = Object.values(sourceItems).filter(item => !validateCanonicalItem(item));
+      const canonicalShapeOk = !!childRoot.profile && !!childRoot.enxoval && !!childRoot.maternity;
+
+      if (version < SCHEMA_VERSION || nonCanonical.length || !canonicalShapeOk || familyRoot.meta?.model !== 'v4.1-family-child') {
+        await normalizeChildSchema(childRoot);
       }
 
-      // Guard rail: corrige registros fora do contrato canônico sem resetar o enxoval.
-      const nonCanonical = Object.values(root.items || {}).filter(item => !validateCanonicalItem(item));
-      if (nonCanonical.length) {
-        const updates = {};
-        nonCanonical.forEach(item => {
-          const normalized = normalizeItem(item);
-          updates[`cora/items/${normalized.id}`] = normalized;
-        });
-        updates['cora/meta/model'] = 'v4';
-        updates['cora/meta/normalizedAt'] = firebase.database.ServerValue.TIMESTAMP;
-        await db.ref().update(updates);
-      }
+      // Mesmo com a estrutura nova presente, sempre faz uma mesclagem segura das
+      // fontes antigas. Isso é o mecanismo que recupera itens/aquisições/orçamentos
+      // que ficaram fora da migração anterior.
+      return mergeLegacySourcesIntoChild();
     }
 
     function listenRealtime() {
-      db.ref('cora').on('value', snapshot => {
+      db.ref(CHILD_PATH).on('value', snapshot => {
         const data = snapshot.val() || {};
-        appState.items = Object.values(data.items || {}).map(normalizeItem);
-        appState.maternidade = Object.values(data.maternidade || {});
+        appState.items = Object.values(data.enxoval?.items || {}).map(normalizeItem);
+        appState.maternidade = Object.values(data.maternity || {});
         renderAll();
       }, error => {
         console.error('Erro de sincronização:', error);
@@ -653,28 +904,30 @@
         listenRealtime();
       } catch (error) {
         console.error('Erro ao iniciar sincronização:', error);
-        alert('Não foi possível conectar ao banco da Cora. Verifique a internet e tente novamente.');
+        const code = error?.code ? ` (${error.code})` : '';
+        const message = error?.message ? `\n\nDetalhe técnico: ${error.message}` : '';
+        alert(`Não foi possível conectar ao banco da Cora${code}. Verifique a configuração/permissão do Firebase.${message}`);
       }
     }
 
     function saveItemToFirebase(item) {
-      return db.ref(`cora/items/${item.id}`).set(itemToFirebase(item));
+      return db.ref(childPath(`enxoval/items/${item.id}`)).set(itemToFirebase(item));
     }
 
     function deleteItemFromFirebase(id) {
-      return db.ref(`cora/items/${id}`).remove();
+      return db.ref(childPath(`enxoval/items/${id}`)).remove();
     }
 
     function saveMaternidadeItemToFirebase(item) {
-      return db.ref(`cora/maternidade/${item.id}`).set(item);
+      return db.ref(childPath(`maternity/${item.id}`)).set(item);
     }
 
     function saveAcquisitionToFirebase(itemId, acquisition) {
-      return db.ref(`cora/items/${itemId}/acquisitions/${acquisition.id}`).set(normalizeAcquisition(acquisition, acquisition.id));
+      return db.ref(childPath(`enxoval/items/${itemId}/acquisitions/${acquisition.id}`)).set(normalizeAcquisition(acquisition, acquisition.id));
     }
 
     function deleteAcquisitionFromFirebase(itemId, acquisitionId) {
-      return db.ref(`cora/items/${itemId}/acquisitions/${acquisitionId}`).remove();
+      return db.ref(childPath(`enxoval/items/${itemId}/acquisitions/${acquisitionId}`)).remove();
     }
 
     window.onload = function() {
@@ -987,25 +1240,21 @@
         const overAmount = over ? spent - planned : 0;
         const centerStrong = hasPlanned ? `${Math.round(rawProgress)}%` : money(spent);
         const centerSub = hasPlanned ? `${money(spent)} de ${money(planned)}` : 'sem orçamento';
+        const radius = 53;
+        const circumference = 2 * Math.PI * radius;
+        const dash = hasPlanned ? (circumference * progress / 100) : 0;
 
         chart.innerHTML = `
-          <div class="budget-total-ring budget-total-ring-track"></div>
-          <div class="budget-total-ring budget-total-ring-progress"></div>
-          ${over ? '<div class="budget-total-over-marker"></div>' : ''}
+          <svg class="budget-donut-svg" viewBox="0 0 140 140" role="img" aria-label="${escapeHtml(centerSub)}">
+            <circle cx="70" cy="70" r="${radius}" fill="none" stroke="rgba(225,29,72,0.16)" stroke-width="18"></circle>
+            <circle cx="70" cy="70" r="${radius}" fill="none" stroke="#e11d48" stroke-width="18" stroke-linecap="butt"
+              stroke-dasharray="${dash} ${circumference}" transform="rotate(-90 70 70)" class="budget-donut-progress"></circle>
+            ${over ? '<circle cx="70" cy="70" r="62" fill="none" stroke="#be123c" stroke-width="3"></circle>' : ''}
+          </svg>
           <div class="budget-total-center">
             <strong>${centerStrong}</strong>
             <span>${centerSub}</span>
           </div>`;
-
-        const track = chart.querySelector('.budget-total-ring-track');
-        const progressRing = chart.querySelector('.budget-total-ring-progress');
-        if (hasPlanned) {
-          track.style.background = 'conic-gradient(rgba(225,29,72,0.16) 0 100%)';
-          progressRing.style.background = `conic-gradient(#e11d48 0 ${progress}%, transparent ${progress}% 100%)`;
-        } else {
-          track.style.background = 'conic-gradient(#e5e7eb 0 100%)';
-          progressRing.style.background = 'transparent';
-        }
 
         if (status) {
           if (!hasPlanned) {
@@ -1022,7 +1271,12 @@
       }
 
       const rows = categoryData.filter(c => (Number(c.planned) || 0) > 0 || (Number(c.spent) || 0) > 0);
-      bars.innerHTML = rows.length ? rows.map(c => {
+      bars.innerHTML = rows.length ? `
+        <div class="flex items-center justify-center gap-4 pb-2 text-[9px] text-gray-500">
+          <span class="inline-flex items-center gap-1"><span class="legend-swatch legend-light"></span>Planejado</span>
+          <span class="inline-flex items-center gap-1"><span class="legend-swatch legend-dark"></span>Gasto</span>
+        </div>
+      ` + rows.map(c => {
         const catPlanned = Math.max(0, Number(c.planned) || 0);
         const catSpent = Math.max(0, Number(c.spent) || 0);
         const hasCatPlanned = catPlanned > 0;
@@ -1444,11 +1698,14 @@
       if (!confirm('Deseja resetar o enxoval para os valores padrão? Isso substituirá os dados atuais da Cora no banco compartilhado.')) return;
       try {
         const updates = {};
-        INITIAL_ITEMS.forEach(item => { updates[`cora/items/${item.id}`] = seedItemFromInitial(item); });
-        MATERNIDADE_DEFAULT.forEach(item => { updates[`cora/maternidade/${item.id}`] = item; });
-        updates['cora/meta/schemaVersion'] = SCHEMA_VERSION;
-          updates['cora/meta/updatedAt'] = firebase.database.ServerValue.TIMESTAMP;
-        await db.ref().update(updates);
+        INITIAL_ITEMS.forEach(item => { updates[childPath(`enxoval/items/${item.id}`)] = seedItemFromInitial(item); });
+        MATERNIDADE_DEFAULT.forEach(item => { updates[childPath(`maternity/${item.id}`)] = item; });
+        updates[childPath('profile')] = canonicalChildProfile();
+        updates[childPath('meta/schemaVersion')] = SCHEMA_VERSION;
+        updates[childPath('meta/model')] = 'v4.1-family-child';
+        updates[childPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
+        updates[familyPath('meta')] = canonicalFamilyMeta();
+          await db.ref().update(updates);
       } catch (error) {
         console.error('Erro ao resetar:', error);
         alert('Não foi possível resetar o enxoval.');
@@ -1484,10 +1741,7 @@
     .finance-bar-no-budget { background: repeating-linear-gradient(90deg, #e5e7eb 0 6px, transparent 6px 10px); }
     .donut-chart { width: 176px; height: 176px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; }
     .donut-ring { position: absolute; border-radius: 50%; }
-    .budget-total-ring { position:absolute; inset:0; border-radius:50%; }
-    .budget-total-ring-track { -webkit-mask:radial-gradient(circle, transparent 0 59%, #000 60% 74%, transparent 75%); mask:radial-gradient(circle, transparent 0 59%, #000 60% 74%, transparent 75%); }
-    .budget-total-ring-progress { -webkit-mask:radial-gradient(circle, transparent 0 59%, #000 60% 74%, transparent 75%); mask:radial-gradient(circle, transparent 0 59%, #000 60% 74%, transparent 75%); z-index:1; }
-    .budget-total-over-marker { position:absolute; inset:-5px; border:3px solid #be123c; border-radius:50%; z-index:2; }
+    .budget-donut-svg { position:absolute; inset:0; width:100%; height:100%; display:block; }
     .budget-total-center { position:relative; z-index:3; width:118px; text-align:center; display:flex; flex-direction:column; align-items:center; }
     .budget-total-center strong { font-size:23px; line-height:1.05; color:#1f2937; letter-spacing:-0.03em; }
     .budget-total-center span { font-size:9px; color:#9ca3af; margin-top:5px; line-height:1.25; }
