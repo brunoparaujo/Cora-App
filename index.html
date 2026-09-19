@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Enxoval da Cora - Sob Medida</title>
+  <title>Cora</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -11,6 +11,7 @@
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyCAhZfbA7UtRDIPy38crac_44WJ3jn-4Ag",
@@ -26,13 +27,18 @@
       firebase.initializeApp(firebaseConfig);
     }
     const db = firebase.database();
+    const auth = firebase.auth();
+    auth.languageCode = 'pt-BR';
 
     // V3.4 — Visualização de quantidade: itens com tamanho usam quebra por tamanho; itens tamanho único usam quantidade.
     const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 11; // V4.2: integridade, concorrência e gravações idempotentes
-    const APP_MODEL = 'v4.2-integrity-concurrency';
+    const SCHEMA_VERSION = 12; // V4.3: autenticação Firebase + sessão persistente
+    const APP_MODEL = 'v4.3-authentication-google-email';
+    // V4.3: Google é a opção principal; e-mail/senha permanece como alternativa.
+    // Na V4.4, após validar as contas, o acesso será reforçado pelas Firebase Rules.
+    const ALLOW_SELF_REGISTRATION = true;
 
     const INITIAL_ITEMS = [
       // VESTUÁRIO (COM OS DADOS INFORMADOS DA CORA)
@@ -315,7 +321,9 @@
       activeHistoryItemId: null,
       editingItemBase: null,
       editingAcquisitionBase: null,
-      connected: false
+      connected: false,
+      authReady: false,
+      user: null
     };
 
     // V4.2 — Estado de gravação local. Evita duplo clique/reenvio acidental
@@ -323,6 +331,8 @@
     const activeWrites = new Set();
     let realtimeChildRef = null;
     let realtimeConnectionRef = null;
+    let syncUserUid = null;
+    let authMode = 'login';
 
     function cloneData(value) {
       return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -360,6 +370,7 @@
     }
 
     async function runWriteOnce(key, buttonId, work, busyText = 'Salvando...') {
+      requireAuthenticatedUser();
       if (activeWrites.has(key)) return { skipped: true };
       activeWrites.add(key);
       if (buttonId) setBusy(buttonId, true, busyText);
@@ -969,7 +980,7 @@
       return itemKeysOk && sizesOk && acquisitionsOk;
     }
 
-    async function markV42Ready() {
+    async function markCurrentSchemaReady() {
       const updates = {};
       updates[childPath('meta/schemaVersion')] = SCHEMA_VERSION;
       updates[childPath('meta/model')] = APP_MODEL;
@@ -993,7 +1004,7 @@
         } else {
           await normalizeChildSchema(migratedChild);
         }
-        await markV42Ready();
+        await markCurrentSchemaReady();
         return result;
       }
 
@@ -1010,7 +1021,7 @@
         } else {
           await normalizeChildSchema(repairedChild);
         }
-        await markV42Ready();
+        await markCurrentSchemaReady();
         return result;
       }
 
@@ -1031,7 +1042,7 @@
       const nonCanonical = Object.values(sourceItems).filter(item => !validateCanonicalItem(item));
       const canonicalShapeOk = !!latestRoot.profile && !!latestRoot.enxoval && !!latestRoot.maternity;
 
-      // Upgrade V4.1 -> V4.2 não regrava os itens quando eles já estão
+      // Upgrade de schema não regrava os itens quando eles já estão
       // canônicos. Nesse caso apenas os metadados de schema/modelo são atualizados.
       // A normalização de dados só roda quando existe forma antiga/incompleta.
       if (nonCanonical.length || !canonicalShapeOk) {
@@ -1039,7 +1050,7 @@
       }
 
       if (version < SCHEMA_VERSION || familyRoot.meta?.model !== APP_MODEL || nonCanonical.length || !canonicalShapeOk) {
-        await markV42Ready();
+        await markCurrentSchemaReady();
       }
       return { migrated: version < 10 && !migrationComplete };
     }
@@ -1362,9 +1373,16 @@
       });
     }
 
-    function listenRealtime() {
+    function stopRealtimeSync() {
       if (realtimeChildRef) realtimeChildRef.off();
       if (realtimeConnectionRef) realtimeConnectionRef.off();
+      realtimeChildRef = null;
+      realtimeConnectionRef = null;
+      appState.connected = false;
+    }
+
+    function listenRealtime() {
+      stopRealtimeSync();
 
       realtimeChildRef = db.ref(CHILD_PATH);
       realtimeChildRef.on('value', snapshot => {
@@ -1374,31 +1392,300 @@
         renderAll();
       }, error => {
         console.error('Erro de sincronização:', error);
-        alert('Não foi possível sincronizar o enxoval. Verifique sua conexão.');
+        alert('Não foi possível sincronizar o enxoval. Verifique sua conexão ou as permissões da conta.');
       });
 
       realtimeConnectionRef = db.ref('.info/connected');
       realtimeConnectionRef.on('value', snapshot => {
         appState.connected = snapshot.val() === true;
-        console.info(`[Cora V4.2] Firebase ${appState.connected ? 'conectado' : 'desconectado'}.`);
+        console.info(`[Cora V4.3] Firebase ${appState.connected ? 'conectado' : 'desconectado'}.`);
       });
     }
 
     async function initRealtimeSync() {
       try {
+        requireAuthenticatedUser();
         await ensureDatabaseSchema();
         listenRealtime();
       } catch (error) {
         console.error('Erro ao iniciar sincronização:', error);
         const code = error?.code ? ` (${error.code})` : '';
         const message = error?.message ? `\n\nDetalhe técnico: ${error.message}` : '';
-        alert(`Não foi possível conectar ao banco da Cora${code}. Verifique a configuração/permissão do Firebase.${message}`);
+        alert(`Não foi possível conectar ao banco da Cora${code}. Verifique sua conexão/permissão no Firebase.${message}`);
       }
+    }
+
+    function requireAuthenticatedUser() {
+      const user = auth.currentUser;
+      if (!user) {
+        showAuthGate();
+        const error = new Error('É necessário entrar no Cora para continuar.');
+        error.code = 'CORA_AUTH_REQUIRED';
+        throw error;
+      }
+      return user;
+    }
+
+    function getAuthErrorMessage(error) {
+      const code = error?.code || '';
+      const messages = {
+        'auth/invalid-email': 'Digite um e-mail válido.',
+        'auth/missing-password': 'Digite sua senha.',
+        'auth/weak-password': 'A senha precisa ter pelo menos 6 caracteres.',
+        'auth/email-already-in-use': 'Já existe uma conta com este e-mail.',
+        'auth/invalid-credential': 'E-mail ou senha incorretos.',
+        'auth/user-not-found': 'E-mail ou senha incorretos.',
+        'auth/wrong-password': 'E-mail ou senha incorretos.',
+        'auth/too-many-requests': 'Muitas tentativas. Aguarde alguns minutos e tente novamente.',
+        'auth/network-request-failed': 'Sem conexão com a internet. Verifique a rede e tente novamente.',
+        'auth/operation-not-allowed': 'Este método de login ainda não está habilitado no Firebase Authentication.',
+        'auth/popup-blocked': 'O navegador bloqueou a janela do Google. Vamos tentar abrir o login por redirecionamento.',
+        'auth/popup-closed-by-user': 'Login com Google cancelado.',
+        'auth/cancelled-popup-request': 'A tentativa anterior de login com Google foi cancelada.',
+        'auth/unauthorized-domain': 'Este domínio não está autorizado no Firebase Authentication. Adicione o domínio do site em Authorized domains.',
+        'auth/account-exists-with-different-credential': 'Este e-mail já está cadastrado com outro método. Entre usando o método já vinculado a esta conta.',
+        'auth/credential-already-in-use': 'Esta conta Google já está vinculada a outro usuário.'
+      };
+      return messages[code] || error?.message || 'Não foi possível concluir a autenticação.';
+    }
+
+    function getUserProviderLabel(user) {
+      const providers = new Set((user?.providerData || []).map(p => p?.providerId).filter(Boolean));
+      const labels = [];
+      if (providers.has('google.com')) labels.push('Google');
+      if (providers.has('password')) labels.push('E-mail e senha');
+      return labels.length ? labels.join(' + ') : 'Firebase Authentication';
+    }
+
+    function setAuthStatus(message = '', kind = 'neutral') {
+      const el = document.getElementById('authStatus');
+      if (!el) return;
+      el.textContent = message;
+      el.className = 'text-[11px] min-h-[18px] text-center ' + (
+        kind === 'error' ? 'text-red-600' : kind === 'success' ? 'text-emerald-600' : 'text-gray-500'
+      );
+    }
+
+    function showAuthGate() {
+      const gate = document.getElementById('authGate');
+      const shell = document.getElementById('appShell');
+      if (shell) shell.classList.add('hidden');
+      if (gate) gate.classList.remove('hidden');
+      setTimeout(() => document.getElementById('googleAuthButton')?.focus(), 50);
+      lucide.createIcons();
+    }
+
+    function showAppShell(user) {
+      const gate = document.getElementById('authGate');
+      const shell = document.getElementById('appShell');
+      if (gate) gate.classList.add('hidden');
+      if (shell) shell.classList.remove('hidden');
+
+      const accountName = document.getElementById('settingsAccountName');
+      const accountEmail = document.getElementById('settingsAccountEmail');
+      const accountProvider = document.getElementById('settingsAccountProvider');
+      const displayName = user?.displayName?.trim();
+
+      if (accountName) accountName.textContent = displayName || user?.email || 'Conta autenticada';
+      if (accountEmail) {
+        accountEmail.textContent = displayName && user?.email ? user.email : '';
+        accountEmail.classList.toggle('hidden', !(displayName && user?.email));
+      }
+      if (accountProvider) accountProvider.textContent = getUserProviderLabel(user);
+      lucide.createIcons();
+    }
+
+    function setAuthMode(mode) {
+      authMode = mode === 'signup' && ALLOW_SELF_REGISTRATION ? 'signup' : 'login';
+      const isSignup = authMode === 'signup';
+      document.getElementById('authTitle').textContent = isSignup ? 'Criar acesso ao Cora' : 'Entrar no Cora';
+      document.getElementById('authSubtitle').textContent = isSignup
+        ? 'Use Google ou crie uma conta com e-mail e senha.'
+        : 'Google é a opção mais rápida. E-mail e senha continuam disponíveis.';
+      document.getElementById('authConfirmWrap').classList.toggle('hidden', !isSignup);
+      document.getElementById('authConfirmPassword').required = isSignup;
+      document.getElementById('authPassword').setAttribute('autocomplete', isSignup ? 'new-password' : 'current-password');
+      document.getElementById('authSubmitButton').textContent = isSignup ? 'Criar conta' : 'Entrar';
+      document.getElementById('authToggleText').textContent = isSignup ? 'Já tem uma conta?' : 'Primeiro acesso?';
+      document.getElementById('authToggleButton').textContent = isSignup ? 'Entrar' : 'Criar conta';
+      document.getElementById('authForgotButton').classList.toggle('hidden', isSignup);
+      const dividerText = document.getElementById('authEmailDividerText');
+      if (dividerText) dividerText.textContent = isSignup ? 'ou crie com e-mail e senha' : 'ou use e-mail e senha';
+      setAuthStatus('');
+    }
+
+    function toggleAuthMode() {
+      setAuthMode(authMode === 'login' ? 'signup' : 'login');
+    }
+
+    function setAuthBusy(busy, source = 'email') {
+      const emailButton = document.getElementById('authSubmitButton');
+      const googleButton = document.getElementById('googleAuthButton');
+      const googleText = document.getElementById('googleAuthButtonText');
+
+      [emailButton, googleButton].forEach(button => {
+        if (!button) return;
+        button.disabled = busy;
+        button.classList.toggle('opacity-60', busy);
+        button.classList.toggle('cursor-wait', busy);
+      });
+
+      if (emailButton) {
+        if (busy && source === 'email') emailButton.textContent = authMode === 'signup' ? 'Criando...' : 'Entrando...';
+        else emailButton.textContent = authMode === 'signup' ? 'Criar conta' : 'Entrar';
+      }
+      if (googleText) googleText.textContent = busy && source === 'google' ? 'Conectando...' : 'Continuar com Google';
+    }
+
+    function createGoogleProvider() {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
+      return provider;
+    }
+
+    async function signInWithGoogle() {
+      const provider = createGoogleProvider();
+      setAuthBusy(true, 'google');
+      setAuthStatus('Abrindo o login do Google...');
+
+      try {
+        await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+        await auth.signInWithPopup(provider);
+        setAuthStatus('');
+      } catch (error) {
+        console.error('Erro no login com Google:', error);
+
+        if (error?.code === 'auth/popup-blocked') {
+          setAuthStatus('O navegador bloqueou a janela. Redirecionando para o Google...');
+          try {
+            await auth.signInWithRedirect(provider);
+            return;
+          } catch (redirectError) {
+            console.error('Erro no redirecionamento do Google:', redirectError);
+            setAuthStatus(getAuthErrorMessage(redirectError), 'error');
+          }
+        } else if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
+          setAuthStatus(getAuthErrorMessage(error));
+        } else {
+          setAuthStatus(getAuthErrorMessage(error), 'error');
+        }
+      } finally {
+        setAuthBusy(false);
+      }
+    }
+
+    async function handleAuthSubmit(event) {
+      event.preventDefault();
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value;
+      const confirmPassword = document.getElementById('authConfirmPassword').value;
+
+      if (authMode === 'signup' && password !== confirmPassword) {
+        setAuthStatus('As duas senhas precisam ser iguais.', 'error');
+        return;
+      }
+
+      setAuthBusy(true, 'email');
+      setAuthStatus(authMode === 'signup' ? 'Criando acesso...' : 'Entrando...');
+      try {
+        await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+        if (authMode === 'signup') {
+          if (!ALLOW_SELF_REGISTRATION) throw new Error('Criação de novas contas desativada.');
+          await auth.createUserWithEmailAndPassword(email, password);
+        } else {
+          await auth.signInWithEmailAndPassword(email, password);
+        }
+        document.getElementById('authPassword').value = '';
+        document.getElementById('authConfirmPassword').value = '';
+      } catch (error) {
+        console.error('Erro de autenticação:', error);
+        setAuthStatus(getAuthErrorMessage(error), 'error');
+      } finally {
+        setAuthBusy(false);
+      }
+    }
+
+    async function sendPasswordReset() {
+      const email = document.getElementById('authEmail').value.trim();
+      if (!email) {
+        setAuthStatus('Digite seu e-mail primeiro.', 'error');
+        document.getElementById('authEmail').focus();
+        return;
+      }
+      try {
+        await auth.sendPasswordResetEmail(email);
+        setAuthStatus('Enviamos um e-mail para redefinir sua senha.', 'success');
+      } catch (error) {
+        console.error('Erro ao redefinir senha:', error);
+        setAuthStatus(getAuthErrorMessage(error), 'error');
+      }
+    }
+
+    async function signOutUser() {
+      try {
+        await auth.signOut();
+        closeModal('modalSettings');
+      } catch (error) {
+        console.error('Erro ao sair:', error);
+        alert('Não foi possível sair da conta. Tente novamente.');
+      }
+    }
+
+    async function handleAuthenticatedUser(user) {
+      appState.authReady = true;
+      appState.user = user;
+      showAppShell(user);
+      if (syncUserUid === user.uid && realtimeChildRef) return;
+      stopRealtimeSync();
+      syncUserUid = user.uid;
+      await initRealtimeSync();
+    }
+
+    function handleSignedOutUser() {
+      stopRealtimeSync();
+      syncUserUid = null;
+      appState.authReady = true;
+      appState.user = null;
+      appState.items = [];
+      appState.maternidade = [];
+      showAuthGate();
+    }
+
+    function initAuth() {
+      const toggleWrap = document.getElementById('authToggleWrap');
+      if (toggleWrap) toggleWrap.classList.toggle('hidden', !ALLOW_SELF_REGISTRATION);
+      setAuthMode('login');
+
+      // Consome um eventual retorno do fallback por redirecionamento usado no
+      // login Google quando o navegador bloqueia pop-ups. O onAuthStateChanged
+      // continua sendo a única porta de entrada para iniciar a sincronização.
+      auth.getRedirectResult().catch(error => {
+        console.error('Erro ao concluir redirecionamento do Google:', error);
+        showAuthGate();
+        setAuthStatus(getAuthErrorMessage(error), 'error');
+      });
+
+      auth.onAuthStateChanged(user => {
+        if (user) {
+          handleAuthenticatedUser(user).catch(error => {
+            console.error('Erro ao iniciar sessão do Cora:', error);
+            alert('A conta foi autenticada, mas o Cora não conseguiu iniciar a sincronização.');
+          });
+        } else {
+          handleSignedOutUser();
+        }
+      }, error => {
+        console.error('Erro ao observar autenticação:', error);
+        appState.authReady = true;
+        showAuthGate();
+        setAuthStatus(getAuthErrorMessage(error), 'error');
+      });
     }
 
     window.onload = function() {
       lucide.createIcons();
-      initRealtimeSync();
+      initAuth();
     };
 
     function renderAll() {
@@ -2281,10 +2568,20 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       });
     }
 
-    async function openSettingsModal() {
+    function openSettingsModal() {
+      const user = requireAuthenticatedUser();
+      const email = document.getElementById('settingsAccountEmail');
+      if (email) email.textContent = user.email || 'Conta autenticada';
+      document.getElementById('modalSettings').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    async function resetDatabaseFromSettings() {
       if (!confirm('Deseja resetar o enxoval para os valores padrão? Isso substituirá os dados atuais da Cora no banco compartilhado.')) return;
+      if (!confirm('Confirma o reset? Itens, aquisições e checklist atuais serão substituídos pelos valores padrão.')) return;
       try {
-        await runWriteOnce('reset-database', null, resetDatabaseToDefaults, 'Resetando...');
+        await runWriteOnce('reset-database', 'settingsResetButton', resetDatabaseToDefaults, 'Resetando...');
+        alert('Enxoval restaurado para os valores padrão.');
       } catch (error) {
         console.error('Erro ao resetar:', error);
         alert('Não foi possível resetar o enxoval.');
@@ -2336,6 +2633,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 </head>
 <body class="bg-[#FBF8F6] text-gray-800 font-sans pb-24 min-h-screen">
 
+  <div id="appShell" class="hidden">
+
   <!-- TOP HEADER -->
   <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-rose-100 px-4 py-3 shadow-sm">
     <div class="max-w-md mx-auto flex items-center justify-between">
@@ -2344,7 +2643,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           👶
         </div>
         <div>
-          <h1 class="text-lg font-bold text-gray-900 leading-tight">Enxoval da Cora</h1>
+          <h1 class="text-lg font-bold text-gray-900 leading-tight">Cora</h1>
           <p class="text-xs text-rose-600 font-medium">DPP: 21/Fev • Niterói, RJ</p>
         </div>
       </div>
@@ -2771,6 +3070,109 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     </div>
   </div>
 
+
+  <!-- MODAL: CONFIGURAÇÕES / CONTA -->
+  <div id="modalSettings" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md p-5 space-y-4 shadow-xl">
+      <div class="flex justify-between items-center border-b pb-2">
+        <div>
+          <h3 class="font-bold text-gray-900 text-base">Configurações</h3>
+          <p class="text-[11px] text-gray-500 mt-0.5">Conta e dados do Cora</p>
+        </div>
+        <button onclick="closeModal('modalSettings')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="rounded-2xl bg-rose-50 border border-rose-100 p-4 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-rose-600 shadow-sm">
+          <i data-lucide="user-round" class="w-5 h-5"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Conta conectada</p>
+          <p id="settingsAccountName" class="text-sm font-bold text-gray-800 truncate">—</p>
+          <p id="settingsAccountEmail" class="text-[11px] text-gray-500 truncate hidden"></p>
+          <p id="settingsAccountProvider" class="text-[10px] text-rose-600 font-semibold mt-0.5">Firebase Authentication</p>
+        </div>
+      </div>
+
+      <button type="button" onclick="signOutUser()" class="w-full py-3 text-xs font-bold text-gray-700 bg-gray-100 rounded-xl flex items-center justify-center gap-2">
+        <i data-lucide="log-out" class="w-4 h-4"></i> Sair desta conta
+      </button>
+
+      <div class="border-t border-gray-100 pt-4">
+        <p class="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-2">Área de manutenção</p>
+        <button type="button" id="settingsResetButton" onclick="resetDatabaseFromSettings()" class="w-full py-3 text-xs font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl flex items-center justify-center gap-2 disabled:pointer-events-none">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Restaurar dados padrão
+        </button>
+        <p class="text-[10px] text-gray-400 mt-2 text-center">Use apenas se quiser substituir o enxoval atual pelos dados iniciais.</p>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /appShell -->
+
+  <!-- V4.3: TELA DE AUTENTICAÇÃO -->
+  <div id="authGate" class="fixed inset-0 z-[100] bg-[#FBF8F6] hidden overflow-y-auto">
+    <div class="min-h-full flex items-center justify-center px-5 py-8">
+      <div class="w-full max-w-sm">
+        <div class="text-center mb-6">
+          <div class="w-16 h-16 mx-auto rounded-full bg-rose-100 flex items-center justify-center text-3xl shadow-sm">👶</div>
+          <h1 class="text-2xl font-extrabold text-gray-900 mt-3">Cora</h1>
+          <p class="text-xs text-rose-600 font-semibold mt-1">Acesso privado da família</p>
+        </div>
+
+        <div class="bg-white border border-rose-100 rounded-3xl shadow-sm p-5 space-y-4">
+          <div class="text-center">
+            <h2 id="authTitle" class="text-lg font-bold text-gray-900">Entrar no Cora</h2>
+            <p id="authSubtitle" class="text-[11px] text-gray-500 mt-1">Google é a opção mais rápida. E-mail e senha continuam disponíveis.</p>
+          </div>
+
+          <button type="button" id="googleAuthButton" onclick="signInWithGoogle()" class="w-full py-3 px-4 text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-xl shadow-sm flex items-center justify-center gap-3 disabled:pointer-events-none">
+            <svg aria-hidden="true" class="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.91h5.39a4.61 4.61 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.97-4.33 2.97-7.4Z"/>
+              <path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.63-2.37l-3.24-2.54c-.9.6-2.05.96-3.39.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.62A10 10 0 0 0 12 22Z"/>
+              <path fill="#FBBC05" d="M6.39 13.92A6 6 0 0 1 6.08 12c0-.67.12-1.31.31-1.92V7.46H3.04A10 10 0 0 0 2 12c0 1.61.38 3.14 1.04 4.54l3.35-2.62Z"/>
+              <path fill="#EA4335" d="M12 5.95c1.47 0 2.79.51 3.83 1.5l2.87-2.88A9.62 9.62 0 0 0 12 2a10 10 0 0 0-8.96 5.46l3.35 2.62C7.18 7.71 9.39 5.95 12 5.95Z"/>
+            </svg>
+            <span id="googleAuthButtonText">Continuar com Google</span>
+          </button>
+
+          <div class="flex items-center gap-3" aria-hidden="true">
+            <div class="h-px bg-gray-100 flex-1"></div>
+            <span id="authEmailDividerText" class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">ou use e-mail e senha</span>
+            <div class="h-px bg-gray-100 flex-1"></div>
+          </div>
+
+          <form onsubmit="handleAuthSubmit(event)" class="space-y-3">
+            <div>
+              <label for="authEmail" class="block text-xs font-semibold text-gray-700 mb-1">E-mail</label>
+              <input type="email" id="authEmail" autocomplete="email" required placeholder="seuemail@exemplo.com" class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-400 outline-none">
+            </div>
+            <div>
+              <label for="authPassword" class="block text-xs font-semibold text-gray-700 mb-1">Senha</label>
+              <input type="password" id="authPassword" autocomplete="current-password" minlength="6" required placeholder="Mínimo 6 caracteres" class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-400 outline-none">
+            </div>
+            <div id="authConfirmWrap" class="hidden">
+              <label for="authConfirmPassword" class="block text-xs font-semibold text-gray-700 mb-1">Confirmar senha</label>
+              <input type="password" id="authConfirmPassword" autocomplete="new-password" minlength="6" placeholder="Repita a senha" class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-400 outline-none">
+            </div>
+
+            <button type="submit" id="authSubmitButton" class="w-full py-3 text-sm font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl disabled:pointer-events-none">Entrar</button>
+          </form>
+
+          <button type="button" id="authForgotButton" onclick="sendPasswordReset()" class="w-full text-[11px] font-semibold text-gray-500 hover:text-rose-600">Esqueci minha senha</button>
+
+          <p id="authStatus" class="text-[11px] min-h-[18px] text-center text-gray-500"></p>
+
+          <div id="authToggleWrap" class="border-t border-gray-100 pt-3 text-center text-[11px] text-gray-500">
+            <span id="authToggleText">Primeiro acesso?</span>
+            <button type="button" id="authToggleButton" onclick="toggleAuthMode()" class="font-bold text-rose-600 ml-1">Criar conta</button>
+          </div>
+        </div>
+
+        <p class="text-[10px] text-gray-400 text-center mt-4 leading-relaxed">A sessão fica salva neste aparelho. Use “Sair desta conta” nas configurações se precisar trocar de usuário.</p>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>
