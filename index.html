@@ -14,13 +14,13 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script>
     const firebaseConfig = {
-      apiKey: "AIzaSyCAhZfbA7UtRDIPy38crac_44WJ3jn-4Ag",
+      apiKey: "AIzaSyCAhZFbA7UIRDIPy38crac_44WJ3Jn-4Ag",
       authDomain: "app-da-cora.firebaseapp.com",
       databaseURL: "https://app-da-cora-default-rtdb.firebaseio.com",
       projectId: "app-da-cora",
       storageBucket: "app-da-cora.firebasestorage.app",
       messagingSenderId: "632318857310",
-      appId: "1:632318857310:web:9e2e7d933f0d1d4ce664cf"
+      appId: "1:632318857310:web:9e2a7d933f0d1d4ce664cf"
     };
 
     if (!firebase.apps.length) {
@@ -1439,6 +1439,7 @@
         'auth/too-many-requests': 'Muitas tentativas. Aguarde alguns minutos e tente novamente.',
         'auth/network-request-failed': 'Sem conexão com a internet. Verifique a rede e tente novamente.',
         'auth/operation-not-allowed': 'Este método de login ainda não está habilitado no Firebase Authentication.',
+        'auth/api-key-not-valid': 'A configuração do Firebase deste arquivo está inválida. Atualize o app com a configuração correta do projeto Cora.',
         'auth/popup-blocked': 'O navegador bloqueou a janela do Google. Vamos tentar abrir o login por redirecionamento.',
         'auth/popup-closed-by-user': 'Login com Google cancelado.',
         'auth/cancelled-popup-request': 'A tentativa anterior de login com Google foi cancelada.',
@@ -1541,6 +1542,7 @@
       const provider = new firebase.auth.GoogleAuthProvider();
       provider.addScope('email');
       provider.addScope('profile');
+      provider.setCustomParameters({ prompt: 'select_account' });
       return provider;
     }
 
