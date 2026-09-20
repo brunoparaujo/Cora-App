@@ -34,8 +34,8 @@
     const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 16; // V4.6 mantém o schema; adiciona backup/export no cliente
-    const APP_MODEL = 'v4.6-backup-export';
+    const SCHEMA_VERSION = 16; // V4.6.1 mantém o schema; corrige backup/export no cliente
+    const APP_MODEL = 'v4.6.1-backup-fix';
     const PENDING_INVITE_STORAGE_KEY = 'cora_pending_invite_v451';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
     // V4.5.1 mantém autenticação separada da autorização e fecha o modelo em uma família por conta.
@@ -3396,7 +3396,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
             displayName: meta.displayName || appState.familyName || 'Família',
             defaultProfileId: meta.defaultChildId || appState.childId || null,
             activeProfileId: appState.childId || null,
-            profiles: clone(children)
+            profiles: cloneData(children)
           },
           notes: 'Este backup contém os dados dos perfis da família. Membros, autenticação e convites não são exportados.'
         };
@@ -3438,11 +3438,11 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         }
       }
       return {
-        profile: { ...clone(data.profile), babyName },
-        enxoval: { items: clone(items) },
-        maternity: clone(maternity),
+        profile: { ...cloneData(data.profile), babyName },
+        enxoval: { items: cloneData(items) },
+        maternity: cloneData(maternity),
         meta: {
-          ...(data.meta && typeof data.meta === 'object' ? clone(data.meta) : {}),
+          ...(data.meta && typeof data.meta === 'object' ? cloneData(data.meta) : {}),
           schemaVersion: SCHEMA_VERSION,
           model: APP_MODEL
         }
