@@ -34,8 +34,8 @@
     const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 15; // V4.5.2: ajustes de navegação e seleção de criança
-    const APP_MODEL = 'v4.5.2-family-admin-ux';
+    const SCHEMA_VERSION = 16; // V4.5.3: recuperação de vínculo e convites aceitos fora da lista
+    const APP_MODEL = 'v4.5.3-family-relink-invites';
     const PENDING_INVITE_STORAGE_KEY = 'cora_pending_invite_v451';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
     // V4.5.1 mantém autenticação separada da autorização e fecha o modelo em uma família por conta.
@@ -1659,6 +1659,7 @@
       if (inviteBox) inviteBox.classList.add('hidden');
       if (createBox) createBox.classList.add('hidden');
       setAccessActionStatus('');
+      refreshPrimaryRecoveryOption(user).catch(() => {});
       lucide.createIcons();
     }
 
@@ -1987,19 +1988,17 @@
         await db.ref(`users/${user.uid}/families/${familyId}`).remove().catch(() => {});
       }
 
-      // Recuperação da família histórica da Cora. As Rules permitem ao usuário ler
-      // o próprio registro de membro mesmo sem índice; recriamos primeiro o vínculo
-      // /users/{uid}/family e só então carregamos meta/children da família.
+      // Recuperação da família histórica da Cora. Primeiro restaura apenas o índice
+      // da própria conta. Não pressupõe qual criança está ativa; isso é resolvido depois
+      // a partir do meta/children da família.
       try {
-        const primaryMemberSnapshot = await db.ref(`families/${PRIMARY_FAMILY_ID}/members/${user.uid}`).once('value');
-        const primaryMember = primaryMemberSnapshot.val() || {};
-        if (primaryMemberSnapshot.exists() && primaryMember.status === 'active') {
+        const primaryMember = await getPrimaryFamilySelfMembership(user);
+        if (primaryMember) {
           await db.ref(`users/${user.uid}/family`).set({
             familyId: PRIMARY_FAMILY_ID,
             role: primaryMember.role === 'owner' ? 'owner' : 'member',
             status: 'active',
             displayName: 'Família Cora',
-            activeChildId: PRIMARY_CHILD_ID,
             updatedAt: Date.now()
           });
           const primary = await readFamilyMembership(user, PRIMARY_FAMILY_ID, {});
@@ -2020,6 +2019,57 @@
       if (current.familyId && (!current.status || current.status === 'active')) return true;
       const legacy = await db.ref(`users/${user.uid}/families`).once('value');
       return Object.values(legacy.val() || {}).some(value => !value?.status || value.status === 'active');
+    }
+
+    async function getPrimaryFamilySelfMembership(user) {
+      try {
+        const snapshot = await db.ref(`families/${PRIMARY_FAMILY_ID}/members/${user.uid}`).once('value');
+        if (!snapshot.exists()) return null;
+        const member = snapshot.val() || {};
+        return member.status === 'active' ? member : null;
+      } catch (error) {
+        console.warn('Não foi possível consultar o vínculo histórico da Família Cora:', error?.code || error);
+        return null;
+      }
+    }
+
+    async function refreshPrimaryRecoveryOption(user) {
+      const button = document.getElementById('accessRecoverCoraButton');
+      const hint = document.getElementById('accessRecoverCoraHint');
+      if (!button) return;
+      button.classList.add('hidden');
+      if (hint) hint.classList.add('hidden');
+      const member = await getPrimaryFamilySelfMembership(user);
+      if (!member) return;
+      button.classList.remove('hidden');
+      if (hint) hint.classList.remove('hidden');
+    }
+
+    async function recoverPrimaryFamilyFromAccessGate() {
+      const user = requireAuthenticatedUser();
+      const button = document.getElementById('accessRecoverCoraButton');
+      setBusy('accessRecoverCoraButton', true, 'Reconectando...');
+      setAccessActionStatus('Reconectando sua conta à Família Cora...');
+      try {
+        const member = await getPrimaryFamilySelfMembership(user);
+        if (!member) throw new Error('Esta conta não aparece como membro ativo da Família Cora.');
+        await db.ref(`users/${user.uid}/family`).set({
+          familyId: PRIMARY_FAMILY_ID,
+          role: member.role === 'owner' ? 'owner' : 'member',
+          status: 'active',
+          displayName: 'Família Cora',
+          updatedAt: Date.now()
+        });
+        localStorage.setItem(activeFamilyStorageKey(user), PRIMARY_FAMILY_ID);
+        setAccessActionStatus('Vínculo restaurado. Reabrindo a Família Cora...', 'success');
+        setTimeout(() => window.location.reload(), 250);
+      } catch (error) {
+        console.error('Erro ao recuperar Família Cora:', error);
+        setAccessActionStatus(error?.message || 'Não foi possível restaurar o vínculo.', 'error');
+        if (button) button.classList.remove('hidden');
+      } finally {
+        setBusy('accessRecoverCoraButton', false);
+      }
     }
 
     function generateInviteCode(length = 24) {
@@ -3590,9 +3640,11 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     function renderFamilyInvites() {
       const container = document.getElementById('familyInvitesList');
       if (!container) return;
-      const invites = Object.values(appState.familyInvites || {}).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+      const invites = Object.values(appState.familyInvites || {})
+        .filter(invite => invite?.status !== 'accepted')
+        .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
       if (!invites.length) {
-        container.innerHTML = '<p class="text-[10px] text-gray-400 text-center py-2">Nenhum convite criado ainda.</p>';
+        container.innerHTML = '<p class="text-[10px] text-gray-400 text-center py-2">Nenhum convite pendente.</p>';
         return;
       }
       container.innerHTML = invites.map(invite => {
@@ -4445,7 +4497,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
   </div><!-- /appShell -->
 
-  <!-- V4.5.1: CONTA AUTENTICADA, MAS SEM FAMÍLIA -->
+  <!-- V4.5.3: CONTA AUTENTICADA, MAS SEM FAMÍLIA -->
   <div id="accessGate" class="fixed inset-0 z-[100] bg-[#FBF8F6] hidden overflow-y-auto">
     <div class="min-h-full flex items-center justify-center px-5 py-8">
       <div class="w-full max-w-sm text-center">
@@ -4458,6 +4510,11 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
         <div class="bg-white border border-amber-100 rounded-2xl p-4 mt-5 text-left shadow-sm">
           <p id="accessGateMessage" class="text-xs text-gray-600 leading-relaxed">Sua conta ainda não pertence a uma família. Cada conta do Cora pode estar vinculada a apenas uma família.</p>
+        </div>
+
+        <div id="accessRecoverCoraHint" class="hidden mt-3 bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-left">
+          <p class="text-[10px] text-emerald-800 leading-relaxed">Encontramos seu cadastro na Família Cora, mas o atalho da sua conta precisa ser restaurado.</p>
+          <button type="button" id="accessRecoverCoraButton" onclick="recoverPrimaryFamilyFromAccessGate()" class="hidden w-full mt-2 py-2.5 text-xs font-bold text-white bg-emerald-600 rounded-lg disabled:pointer-events-none">Reconectar à Família Cora</button>
         </div>
 
         <div class="grid grid-cols-2 gap-2 mt-4">
