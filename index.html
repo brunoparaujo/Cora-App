@@ -34,10 +34,10 @@
     const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 13; // V4.4: segurança por família + isolamento por membro
-    const APP_MODEL = 'v4.4-family-security';
+    const SCHEMA_VERSION = 14; // V4.5: famílias, membros, convites e criação de família
+    const APP_MODEL = 'v4.5-family-members-invites';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
-    // V4.4 separa autenticação (ter conta) de autorização (pertencer à família).
+    // V4.5 mantém autenticação separada da autorização e adiciona famílias/convites.
     const ALLOW_SELF_REGISTRATION = true;
 
     const INITIAL_ITEMS = [
@@ -313,6 +313,15 @@
       mamae: '💡 **Pós-Parto Confortável:** Camisolas leves de algodão facilitam a amamentação no calor do verão.'
     };
 
+    const GENERIC_CATEGORY_TIPS = {
+      vestuario: '💡 Organize as peças por tamanho e ajuste as metas à estação e ao clima da sua região.',
+      quarto: '💡 Priorize itens seguros, laváveis e adequados ao espaço disponível.',
+      higiene: '💡 Comece pelo essencial e ajuste as quantidades conforme a rotina do bebê.',
+      alimentacao: '💡 Cadastre somente os itens que fizerem sentido para a rotina de alimentação da família.',
+      passeio: '💡 Considere segurança, praticidade e conforto nos itens de transporte e passeio.',
+      mamae: '💡 Priorize conforto e praticidade para o pós-parto e a rotina de cuidados.'
+    };
+
     let appState = {
       items: [],
       maternidade: [],
@@ -324,9 +333,12 @@
       connected: false,
       authReady: false,
       user: null,
-      familyId: 'cora',
+      familyId: null,
+      childId: null,
       familyRole: null,
-      familyName: 'Família Cora'
+      familyName: null,
+      familyMembers: {},
+      lastInvite: null
     };
 
     // V4.2 — Estado de gravação local. Evita duplo clique/reenvio acidental
@@ -334,6 +346,7 @@
     const activeWrites = new Set();
     let realtimeChildRef = null;
     let realtimeConnectionRef = null;
+    let realtimeMembershipRef = null;
     let syncUserUid = null;
     let authMode = 'login';
 
@@ -621,13 +634,13 @@
       return itemToFirebase(item);
     }
 
-    // V4.4 — Arquitetura estabilizada: família -> membros + crianças -> módulos.
-    // O ID atual permanece 'cora' para preservar os dados existentes. As Rules
-    // são genéricas por familyId e já ficam preparadas para múltiplas famílias.
-    const FAMILY_ID = 'cora';
-    const CHILD_ID = 'cora';
-    const FAMILY_PATH = `families/${FAMILY_ID}`;
-    const CHILD_PATH = `${FAMILY_PATH}/children/${CHILD_ID}`;
+    // V4.5 — caminhos ativos são dinâmicos. A família histórica da Cora
+    // continua usando os IDs 'cora'/'cora' para preservar os dados validados.
+    const PRIMARY_FAMILY_ID = 'cora';
+    const PRIMARY_CHILD_ID = 'cora';
+    const PRIMARY_FAMILY_PATH = `families/${PRIMARY_FAMILY_ID}`;
+    const PRIMARY_CHILD_PATH = `${PRIMARY_FAMILY_PATH}/children/${PRIMARY_CHILD_ID}`;
+    const FAMILY_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
     // Fontes legadas conhecidas. Nenhuma delas é apagada pela migração.
     const LEGACY_V4_PATH = 'cora';
@@ -635,28 +648,41 @@
     const LEGACY_V4_1_WRONG_FAMILY_PATH = 'families/cora-family';
     const LEGACY_V3_PATH = 'enxoval_items';
 
-    function familyPath(relative = '') {
-      return relative ? `${FAMILY_PATH}/${relative}` : FAMILY_PATH;
+    function activeFamilyId() {
+      return appState.familyId || PRIMARY_FAMILY_ID;
     }
 
-    function childPath(relative = '') {
-      return relative ? `${CHILD_PATH}/${relative}` : CHILD_PATH;
+    function activeChildId() {
+      return appState.childId || PRIMARY_CHILD_ID;
     }
 
-    function canonicalChildProfile() {
+    function familyPath(relative = '', familyId = activeFamilyId()) {
+      const base = `families/${familyId}`;
+      return relative ? `${base}/${relative}` : base;
+    }
+
+    function childPath(relative = '', familyId = activeFamilyId(), childId = activeChildId()) {
+      const base = `families/${familyId}/children/${childId}`;
+      return relative ? `${base}/${relative}` : base;
+    }
+
+    function canonicalChildProfile(name = 'Cora') {
       return {
-        babyName: 'Cora'
+        babyName: String(name || 'Bebê').trim() || 'Bebê'
       };
     }
 
-    function canonicalFamilyMeta() {
-      return {
+    function canonicalFamilyMeta(displayName = 'Família Cora', ownerUid = null, defaultChildId = PRIMARY_CHILD_ID) {
+      const meta = {
         schemaVersion: SCHEMA_VERSION,
         model: APP_MODEL,
         securityMode: 'members',
-        displayName: 'Família Cora',
+        displayName: String(displayName || 'Família').trim() || 'Família',
+        defaultChildId,
         updatedAt: firebase.database.ServerValue.TIMESTAMP
       };
+      if (ownerUid) meta.ownerUid = ownerUid;
+      return meta;
     }
 
     function seedDatabase() {
@@ -687,6 +713,7 @@
       updates[familyPath('meta/model')] = APP_MODEL;
       updates[familyPath('meta/securityMode')] = 'members';
       updates[familyPath('meta/displayName')] = 'Família Cora';
+      updates[familyPath('meta/defaultChildId')] = PRIMARY_CHILD_ID;
       updates[familyPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
       return db.ref().update(updates);
     }
@@ -713,7 +740,7 @@
       }
 
       // Estrutura intermediária família -> children -> cora.
-      const child = root.children?.[CHILD_ID];
+      const child = root.children?.[PRIMARY_CHILD_ID];
       if (child && typeof child === 'object') {
         roots.push(child);
       }
@@ -799,7 +826,7 @@
       // tentativa com "cora-family" e versões V2/V3. A nova estrutura é preservada
       // e os legados são usados somente para completar o que estiver faltando.
       const [targetData, currentFamily, wrongFamily, v4Data, v3Data] = await Promise.all([
-        readDatabaseSource(CHILD_PATH),
+        readDatabaseSource(PRIMARY_CHILD_PATH),
         readDatabaseSource(LEGACY_V4_1_FAMILY_PATH),
         readDatabaseSource(LEGACY_V4_1_WRONG_FAMILY_PATH),
         readDatabaseSource(LEGACY_V4_PATH),
@@ -890,7 +917,7 @@
 
       // members nunca é zerado. Só recupera se a estrutura atual estiver vazia e
       // uma fonte antiga possuir membros.
-      const familyCurrent = await readDatabaseSource(FAMILY_PATH);
+      const familyCurrent = await readDatabaseSource(PRIMARY_FAMILY_PATH);
       const currentMembers = familyCurrent?.members;
       if (!currentMembers || Object.keys(currentMembers).length === 0) {
         for (const root of sourceRoots) {
@@ -990,21 +1017,69 @@
       const updates = {};
       updates[childPath('meta/schemaVersion')] = SCHEMA_VERSION;
       updates[childPath('meta/model')] = APP_MODEL;
-      updates[childPath('meta/legacyMigrationComplete')] = true;
+      if (activeFamilyId() === PRIMARY_FAMILY_ID) {
+        updates[childPath('meta/legacyMigrationComplete')] = true;
+      }
       updates[familyPath('meta/schemaVersion')] = SCHEMA_VERSION;
       updates[familyPath('meta/model')] = APP_MODEL;
       updates[familyPath('meta/securityMode')] = 'members';
-      updates[familyPath('meta/displayName')] = 'Família Cora';
+      updates[familyPath('meta/displayName')] = appState.familyName || (activeFamilyId() === PRIMARY_FAMILY_ID ? 'Família Cora' : 'Família');
+      updates[familyPath('meta/defaultChildId')] = activeChildId();
       updates[familyPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
       await db.ref().update(updates);
     }
 
+    async function ensureSecondaryFamilySchema() {
+      const familySnapshot = await db.ref(familyPath()).once('value');
+      if (!familySnapshot.exists()) {
+        throw new Error('A família vinculada não existe mais.');
+      }
+
+      const familyRoot = familySnapshot.val() || {};
+      const meta = familyRoot.meta || {};
+      const defaultChildId = meta.defaultChildId || appState.childId;
+      if (!defaultChildId) {
+        throw new Error('A família não possui uma criança principal configurada.');
+      }
+
+      appState.childId = defaultChildId;
+      appState.familyName = meta.displayName || appState.familyName || 'Família';
+
+      const childSnapshot = await db.ref(childPath()).once('value');
+      if (!childSnapshot.exists()) {
+        throw new Error('O perfil da criança principal não foi encontrado.');
+      }
+
+      const childRoot = childSnapshot.val() || {};
+      const updates = {};
+      if (!childRoot.profile?.babyName) {
+        updates[childPath('profile')] = canonicalChildProfile('Bebê');
+      }
+      if (Number(childRoot.meta?.schemaVersion || 0) < SCHEMA_VERSION || childRoot.meta?.model !== APP_MODEL) {
+        updates[childPath('meta/schemaVersion')] = SCHEMA_VERSION;
+        updates[childPath('meta/model')] = APP_MODEL;
+      }
+      if (Number(meta.schemaVersion || 0) < SCHEMA_VERSION || meta.model !== APP_MODEL || meta.defaultChildId !== defaultChildId) {
+        updates[familyPath('meta/schemaVersion')] = SCHEMA_VERSION;
+        updates[familyPath('meta/model')] = APP_MODEL;
+        updates[familyPath('meta/securityMode')] = 'members';
+        updates[familyPath('meta/defaultChildId')] = defaultChildId;
+        updates[familyPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
+      }
+      if (Object.keys(updates).length) await db.ref().update(updates);
+      return { migrated: false };
+    }
+
     async function ensureDatabaseSchema() {
-      const familySnapshot = await db.ref(FAMILY_PATH).once('value');
+      if (activeFamilyId() !== PRIMARY_FAMILY_ID) {
+        return ensureSecondaryFamilySchema();
+      }
+
+      const familySnapshot = await db.ref(PRIMARY_FAMILY_PATH).once('value');
 
       if (!familySnapshot.exists()) {
         const result = await migrateLegacyDatabaseToFamily();
-        const afterMigration = await db.ref(CHILD_PATH).once('value');
+        const afterMigration = await db.ref(PRIMARY_CHILD_PATH).once('value');
         const migratedChild = afterMigration.val() || {};
         if (!migratedChild.enxoval?.items || Object.keys(migratedChild.enxoval.items).length === 0) {
           // Só cria os itens iniciais quando não existe nenhum dado migrável.
@@ -1017,12 +1092,14 @@
       }
 
       const familyRoot = familySnapshot.val() || {};
-      const childRoot = familyRoot.children?.[CHILD_ID];
+      const childRoot = familyRoot.children?.[PRIMARY_CHILD_ID];
+      appState.familyName = familyRoot.meta?.displayName || 'Família Cora';
+      appState.childId = familyRoot.meta?.defaultChildId || PRIMARY_CHILD_ID;
 
       if (!childRoot) {
         // Família existente sem a criança canônica: tenta recuperar uma única vez.
         const result = await mergeLegacySourcesIntoChild();
-        const afterRepair = await db.ref(CHILD_PATH).once('value');
+        const afterRepair = await db.ref(PRIMARY_CHILD_PATH).once('value');
         const repairedChild = afterRepair.val() || {};
         if (!repairedChild.enxoval?.items || Object.keys(repairedChild.enxoval.items).length === 0) {
           await seedDatabase();
@@ -1044,20 +1121,18 @@
         await mergeLegacySourcesIntoChild();
       }
 
-      const latestSnapshot = await db.ref(CHILD_PATH).once('value');
+      const latestSnapshot = await db.ref(PRIMARY_CHILD_PATH).once('value');
       const latestRoot = latestSnapshot.val() || {};
       const sourceItems = latestRoot.enxoval?.items || latestRoot.items || {};
       const nonCanonical = Object.values(sourceItems).filter(item => !validateCanonicalItem(item));
       const canonicalShapeOk = !!latestRoot.profile && !!latestRoot.enxoval && !!latestRoot.maternity;
 
-      // Upgrade de schema não regrava os itens quando eles já estão
-      // canônicos. Nesse caso apenas os metadados de schema/modelo são atualizados.
-      // A normalização de dados só roda quando existe forma antiga/incompleta.
+      // Upgrade de schema não regrava os itens quando eles já estão canônicos.
       if (nonCanonical.length || !canonicalShapeOk) {
         await normalizeChildSchema(latestRoot);
       }
 
-      if (version < SCHEMA_VERSION || familyRoot.meta?.model !== APP_MODEL || nonCanonical.length || !canonicalShapeOk) {
+      if (version < SCHEMA_VERSION || familyRoot.meta?.model !== APP_MODEL || familyRoot.meta?.defaultChildId !== PRIMARY_CHILD_ID || nonCanonical.length || !canonicalShapeOk) {
         await markCurrentSchemaReady();
       }
       return { migrated: version < 10 && !migrationComplete };
@@ -1384,29 +1459,69 @@
     function stopRealtimeSync() {
       if (realtimeChildRef) realtimeChildRef.off();
       if (realtimeConnectionRef) realtimeConnectionRef.off();
+      if (realtimeMembershipRef) realtimeMembershipRef.off();
       realtimeChildRef = null;
       realtimeConnectionRef = null;
+      realtimeMembershipRef = null;
       appState.connected = false;
     }
 
     function listenRealtime() {
       stopRealtimeSync();
 
-      realtimeChildRef = db.ref(CHILD_PATH);
+      realtimeChildRef = db.ref(childPath());
       realtimeChildRef.on('value', snapshot => {
         const data = snapshot.val() || {};
         appState.items = Object.values(data.enxoval?.items || {}).map(normalizeItem);
         appState.maternidade = Object.entries(data.maternity || {}).map(([id, item]) => normalizeMaternityItem(item, id));
+        const babyName = data.profile?.babyName || 'Bebê';
+        const headerContext = document.getElementById('headerContext');
+        if (headerContext) {
+          headerContext.textContent = appState.familyId === PRIMARY_FAMILY_ID
+            ? 'DPP: 21/Fev • Niterói, RJ'
+            : `Perfil: ${babyName}`;
+        }
+        const coraSeasonWidget = document.getElementById('coraSeasonWidget');
+        if (coraSeasonWidget) coraSeasonWidget.classList.toggle('hidden', appState.familyId !== PRIMARY_FAMILY_ID);
+        const tips = appState.familyId === PRIMARY_FAMILY_ID ? CATEGORY_TIPS : GENERIC_CATEGORY_TIPS;
+        const tip = document.getElementById('categoryTipText');
+        if (tip) tip.textContent = tips[appState.activeCategory] || 'Organize as compras de forma inteligente.';
         renderAll();
       }, error => {
         console.error('Erro de sincronização:', error);
+        if (error?.code === 'PERMISSION_DENIED' || error?.code === 'permission_denied') {
+          stopRealtimeSync();
+          appState.familyRole = null;
+          showAccessGate(auth.currentUser, 'Seu acesso a esta família foi removido. Você pode aceitar outro convite ou criar uma nova família.');
+          prefillInviteFromUrl();
+          return;
+        }
         alert('Não foi possível sincronizar o enxoval. Verifique sua conexão ou as permissões da conta.');
+      });
+
+      realtimeMembershipRef = db.ref(familyPath(`members/${syncUserUid || auth.currentUser?.uid || ''}`));
+      realtimeMembershipRef.on('value', snapshot => {
+        const member = snapshot.val();
+        if (!member || member.status !== 'active') {
+          stopRealtimeSync();
+          appState.familyRole = null;
+          showAccessGate(auth.currentUser, 'Seu acesso a esta família foi removido. Você pode aceitar outro convite ou criar uma nova família.');
+          prefillInviteFromUrl();
+        }
+      }, error => {
+        if (error?.code === 'PERMISSION_DENIED' || error?.code === 'permission_denied') {
+          stopRealtimeSync();
+          appState.familyRole = null;
+          showAccessGate(auth.currentUser, 'Seu acesso a esta família foi removido. Você pode aceitar outro convite ou criar uma nova família.');
+        } else {
+          console.warn('Erro ao observar vínculo familiar:', error);
+        }
       });
 
       realtimeConnectionRef = db.ref('.info/connected');
       realtimeConnectionRef.on('value', snapshot => {
         appState.connected = snapshot.val() === true;
-        console.info(`[Cora V4.4] Firebase ${appState.connected ? 'conectado' : 'desconectado'}.`);
+        console.info(`[Cora V4.5] Firebase ${appState.connected ? 'conectado' : 'desconectado'}.`);
       });
     }
 
@@ -1500,7 +1615,12 @@
       const email = document.getElementById('accessGateEmail');
       const detail = document.getElementById('accessGateMessage');
       if (email) email.textContent = user?.email || user?.displayName || 'Conta autenticada';
-      if (detail) detail.textContent = message || 'Esta conta ainda não pertence à Família Cora.';
+      if (detail) detail.textContent = message || 'Esta conta ainda não pertence a nenhuma família.';
+      const inviteBox = document.getElementById('accessInviteBox');
+      const createBox = document.getElementById('accessCreateFamilyBox');
+      if (inviteBox) inviteBox.classList.add('hidden');
+      if (createBox) createBox.classList.add('hidden');
+      setAccessActionStatus('');
       lucide.createIcons();
     }
 
@@ -1531,7 +1651,7 @@
       if (accountProvider) accountProvider.textContent = getUserProviderLabel(user);
       if (familyName) familyName.textContent = appState.familyName || 'Família Cora';
       if (familyRole) familyRole.textContent = roleLabel(appState.familyRole);
-      if (maintenanceArea) maintenanceArea.classList.toggle('hidden', appState.familyRole !== 'owner');
+      if (maintenanceArea) maintenanceArea.classList.toggle('hidden', appState.familyRole !== 'owner' || appState.familyId !== PRIMARY_FAMILY_ID);
       lucide.createIcons();
     }
 
@@ -1663,87 +1783,358 @@
       }
     }
 
-    function currentMemberRecord(user, role = 'member') {
+    function normalizeEmail(email) {
+      return String(email || '').trim().toLowerCase();
+    }
+
+    function currentMemberRecord(user, role = 'member', inviteCode = null) {
       const now = Date.now();
-      return {
+      const record = {
         uid: user.uid,
         role,
         status: 'active',
-        email: user.email || '',
+        email: normalizeEmail(user.email),
         displayName: user.displayName || '',
         joinedAt: now,
         updatedAt: now
       };
+      if (inviteCode) record.inviteCode = normalizeInviteCode(inviteCode);
+      return record;
     }
 
-    async function ensureOwnUserIndex(user, role) {
+    function activeFamilyStorageKey(user) {
+      return `cora_active_family_${user.uid}`;
+    }
+
+    function buildOwnUserIndexUpdates(user, familyId, role, familyMeta = {}) {
       const now = Date.now();
       const updates = {};
       updates[`users/${user.uid}/profile/uid`] = user.uid;
-      updates[`users/${user.uid}/profile/email`] = user.email || '';
+      updates[`users/${user.uid}/profile/email`] = normalizeEmail(user.email);
       updates[`users/${user.uid}/profile/displayName`] = user.displayName || '';
       updates[`users/${user.uid}/profile/updatedAt`] = now;
-      updates[`users/${user.uid}/families/${FAMILY_ID}/role`] = role;
-      updates[`users/${user.uid}/families/${FAMILY_ID}/status`] = 'active';
-      updates[`users/${user.uid}/families/${FAMILY_ID}/updatedAt`] = now;
-      await db.ref().update(updates);
+      updates[`users/${user.uid}/families/${familyId}/role`] = role;
+      updates[`users/${user.uid}/families/${familyId}/status`] = 'active';
+      updates[`users/${user.uid}/families/${familyId}/displayName`] = familyMeta.displayName || appState.familyName || 'Família';
+      if (familyMeta.defaultChildId || appState.childId) {
+        updates[`users/${user.uid}/families/${familyId}/defaultChildId`] = familyMeta.defaultChildId || appState.childId;
+      }
+      updates[`users/${user.uid}/families/${familyId}/updatedAt`] = now;
+      return updates;
     }
 
-    async function ensureCurrentFamilyAccess(user) {
-      const memberRef = db.ref(familyPath(`members/${user.uid}`));
+    async function ensureOwnUserIndex(user, familyId, role, familyMeta = {}) {
+      await db.ref().update(buildOwnUserIndexUpdates(user, familyId, role, familyMeta));
+    }
 
+    async function removeOwnFamilyIndex(user, familyId) {
       try {
-        // Com as Rules V4.4 publicadas, esta leitura só funciona se o UID já for
-        // membro. Antes das Rules, ela também permite fazer o bootstrap inicial.
-        const memberSnapshot = await memberRef.once('value');
-        if (memberSnapshot.exists()) {
-          const member = memberSnapshot.val() || {};
-          if (member.status && member.status !== 'active') return null;
-          const role = member.role === 'owner' ? 'owner' : 'member';
-          appState.familyRole = role;
-          await ensureOwnUserIndex(user, role);
-          return { ...member, role };
-        }
+        await db.ref(`users/${user.uid}/families/${familyId}`).remove();
       } catch (error) {
-        if (error?.code === 'PERMISSION_DENIED' || error?.code === 'permission_denied') {
-          return null;
-        }
-        throw error;
+        console.warn('Não foi possível limpar índice antigo da família:', familyId, error?.code || error);
       }
+    }
 
-      // Bootstrap único da família existente: deve ser executado ANTES de
-      // publicar as Rules fechadas. A transaction garante que apenas a primeira
-      // conta autenticada possa se tornar proprietária se members ainda estiver vazio.
-      let claimAttempted = false;
+    async function readFamilyMembership(user, familyId) {
       try {
-        const membersRef = db.ref(familyPath('members'));
-        const result = await membersRef.transaction(current => {
-          if (current && Object.keys(current).length) return current;
-          claimAttempted = true;
-          return { [user.uid]: currentMemberRecord(user, 'owner') };
-        });
+        const memberSnapshot = await db.ref(familyPath(`members/${user.uid}`, familyId)).once('value');
+        if (!memberSnapshot.exists()) return null;
+        const member = memberSnapshot.val() || {};
+        if (member.status !== 'active') return null;
 
-        const members = result.snapshot?.val() || {};
-        const member = members[user.uid];
-        if (!member) return null;
-
-        const role = member.role === 'owner' ? 'owner' : 'member';
-        appState.familyRole = role;
-        const updates = {};
-        if (role === 'owner') {
-          updates[familyPath('meta/ownerUid')] = user.uid;
-          updates[familyPath('meta/securityBootstrapComplete')] = true;
-          updates[familyPath('meta/securityBootstrapAt')] = firebase.database.ServerValue.TIMESTAMP;
-          updates[familyPath('meta/securityMode')] = 'members';
-          updates[familyPath('meta/displayName')] = 'Família Cora';
-        }
-        if (Object.keys(updates).length) await db.ref().update(updates);
-        await ensureOwnUserIndex(user, role);
-        if (claimAttempted && role === 'owner') console.info('[Cora V4.4] Família vinculada ao primeiro proprietário.');
-        return { ...member, role };
+        const metaSnapshot = await db.ref(familyPath('meta', familyId)).once('value');
+        const meta = metaSnapshot.val() || {};
+        const defaultChildId = meta.defaultChildId || (familyId === PRIMARY_FAMILY_ID ? PRIMARY_CHILD_ID : null);
+        if (!defaultChildId) return null;
+        return {
+          member: { ...member, role: member.role === 'owner' ? 'owner' : 'member' },
+          meta: {
+            ...meta,
+            displayName: meta.displayName || (familyId === PRIMARY_FAMILY_ID ? 'Família Cora' : 'Família'),
+            defaultChildId
+          }
+        };
       } catch (error) {
         if (error?.code === 'PERMISSION_DENIED' || error?.code === 'permission_denied') return null;
         throw error;
+      }
+    }
+
+    async function activateFamily(user, familyId, membership, meta) {
+      if (appState.familyId !== familyId) {
+        appState.familyMembers = {};
+        appState.lastInvite = null;
+      }
+      appState.familyId = familyId;
+      appState.familyRole = membership.role === 'owner' ? 'owner' : 'member';
+      appState.familyName = meta.displayName || (familyId === PRIMARY_FAMILY_ID ? 'Família Cora' : 'Família');
+      appState.childId = meta.defaultChildId || (familyId === PRIMARY_FAMILY_ID ? PRIMARY_CHILD_ID : null);
+      localStorage.setItem(activeFamilyStorageKey(user), familyId);
+      await ensureOwnUserIndex(user, familyId, appState.familyRole, meta);
+      if (membership.inviteCode) finalizeInviteForMember(user, membership.inviteCode).catch(() => {});
+      return membership;
+    }
+
+    async function finalizeInviteForMember(user, code) {
+      const normalizedCode = normalizeInviteCode(code);
+      if (!normalizedCode) return;
+      try {
+        const ref = db.ref(`invites/${normalizedCode}`);
+        const snapshot = await ref.once('value');
+        const invite = snapshot.val() || {};
+        if (invite.status === 'claimed' && invite.acceptedByUid === user.uid) {
+          await ref.update({ status: 'accepted', acceptedAt: Date.now(), acceptedByUid: user.uid });
+        }
+      } catch (error) {
+        console.warn('Não foi possível finalizar um convite pendente:', error?.code || error);
+      }
+    }
+
+    async function resolveUserFamily(user) {
+      const ownFamiliesSnapshot = await db.ref(`users/${user.uid}/families`).once('value');
+      const ownFamilies = ownFamiliesSnapshot.val() || {};
+      const indexedIds = Object.entries(ownFamilies)
+        .filter(([, value]) => !value?.status || value.status === 'active')
+        .map(([familyId]) => familyId);
+
+      const preferred = localStorage.getItem(activeFamilyStorageKey(user));
+      const candidates = [];
+      if (preferred && indexedIds.includes(preferred)) candidates.push(preferred);
+      if (indexedIds.includes(PRIMARY_FAMILY_ID) && !candidates.includes(PRIMARY_FAMILY_ID)) candidates.push(PRIMARY_FAMILY_ID);
+      indexedIds.forEach(id => { if (!candidates.includes(id)) candidates.push(id); });
+
+      for (const familyId of candidates) {
+        const resolved = await readFamilyMembership(user, familyId);
+        if (resolved) {
+          await activateFamily(user, familyId, resolved.member, resolved.meta);
+          return resolved.member;
+        }
+        await removeOwnFamilyIndex(user, familyId);
+      }
+
+      // Compatibilidade com a V4.4: caso o índice /users tenha sido perdido,
+      // tenta a família histórica da Cora diretamente.
+      if (!candidates.includes(PRIMARY_FAMILY_ID)) {
+        const primary = await readFamilyMembership(user, PRIMARY_FAMILY_ID);
+        if (primary) {
+          await activateFamily(user, PRIMARY_FAMILY_ID, primary.member, primary.meta);
+          return primary.member;
+        }
+      }
+
+      return null;
+    }
+
+    function generateInviteCode(length = 24) {
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      const bytes = new Uint8Array(length);
+      if (window.crypto?.getRandomValues) window.crypto.getRandomValues(bytes);
+      else for (let i = 0; i < length; i++) bytes[i] = Math.floor(Math.random() * 256);
+      return Array.from(bytes, value => alphabet[value % alphabet.length]).join('');
+    }
+
+    function normalizeInviteCode(value) {
+      return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    }
+
+    function inviteLink(code) {
+      const url = new URL(window.location.href);
+      url.search = '';
+      url.hash = '';
+      url.searchParams.set('invite', code);
+      return url.toString();
+    }
+
+    function prefillInviteFromUrl() {
+      const code = normalizeInviteCode(new URLSearchParams(window.location.search).get('invite'));
+      const input = document.getElementById('accessInviteCode');
+      if (code && input) {
+        input.value = code;
+        showAccessAction('invite');
+      }
+    }
+
+    function showAccessAction(action) {
+      const inviteBox = document.getElementById('accessInviteBox');
+      const createBox = document.getElementById('accessCreateFamilyBox');
+      if (inviteBox) inviteBox.classList.toggle('hidden', action !== 'invite');
+      if (createBox) createBox.classList.toggle('hidden', action !== 'create');
+      setAccessActionStatus('');
+      if (action === 'invite') setTimeout(() => document.getElementById('accessInviteCode')?.focus(), 30);
+      if (action === 'create') setTimeout(() => document.getElementById('accessFamilyName')?.focus(), 30);
+    }
+
+    function setAccessActionStatus(message = '', type = 'info') {
+      const el = document.getElementById('accessActionStatus');
+      if (!el) return;
+      el.textContent = message;
+      el.className = 'text-[11px] min-h-[18px] text-center ' + (type === 'error' ? 'text-red-600' : type === 'success' ? 'text-emerald-600' : 'text-gray-500');
+    }
+
+    async function createFamilyFromAccessGate() {
+      const user = requireAuthenticatedUser();
+      const familyName = String(document.getElementById('accessFamilyName')?.value || '').trim();
+      const childName = String(document.getElementById('accessChildName')?.value || '').trim();
+      if (!familyName) return setAccessActionStatus('Digite o nome da família.', 'error');
+      if (!childName) return setAccessActionStatus('Digite o nome da criança.', 'error');
+
+      setBusy('accessCreateFamilyButton', true, 'Criando...');
+      setAccessActionStatus('Criando a família...');
+      try {
+        const familyKey = db.ref('families').push().key;
+        const familyId = `fam_${familyKey}`;
+        const childKey = db.ref(`families/${familyId}/children`).push().key;
+        const childId = `child_${childKey}`;
+        const now = Date.now();
+        const maternity = {};
+        MATERNIDADE_DEFAULT.forEach(source => {
+          maternity[source.id] = {
+            ...normalizeMaternityItem({ ...source, checked: false }, source.id),
+            revision: 1,
+            createdAt: now,
+            updatedAt: now
+          };
+        });
+        const payload = {
+          meta: {
+            schemaVersion: SCHEMA_VERSION,
+            model: APP_MODEL,
+            securityMode: 'members',
+            displayName: familyName,
+            ownerUid: user.uid,
+            defaultChildId: childId,
+            createdAt: now,
+            updatedAt: now
+          },
+          members: {
+            [user.uid]: currentMemberRecord(user, 'owner')
+          },
+          children: {
+            [childId]: {
+              profile: canonicalChildProfile(childName),
+              maternity,
+              meta: {
+                schemaVersion: SCHEMA_VERSION,
+                model: APP_MODEL,
+                createdAt: now,
+                updatedAt: now
+              }
+            }
+          }
+        };
+
+        // Cria família e índice do proprietário numa única gravação atômica.
+        // Assim não existe o risco de a família ser criada e ficar "órfã" se a
+        // conexão cair antes de /users/{uid}/families ser atualizado.
+        await db.ref().update({
+          [`families/${familyId}`]: payload,
+          ...buildOwnUserIndexUpdates(user, familyId, 'owner', payload.meta)
+        });
+        await activateFamily(user, familyId, payload.members[user.uid], payload.meta);
+        syncUserUid = user.uid;
+        showAppShell(user);
+        await initRealtimeSync();
+        setAccessActionStatus('Família criada.', 'success');
+      } catch (error) {
+        console.error('Erro ao criar família:', error);
+        setAccessActionStatus('Não foi possível criar a família. Verifique as Rules V4.5.', 'error');
+      } finally {
+        setBusy('accessCreateFamilyButton', false);
+      }
+    }
+
+    async function reserveInviteForUser(user, code) {
+      const inviteRef = db.ref(`invites/${code}`);
+      const result = await inviteRef.transaction(current => {
+        if (!current) return;
+        if (current.status === 'claimed' && current.acceptedByUid === user.uid) return current;
+        if (current.status !== 'pending') return;
+        return {
+          ...current,
+          status: 'claimed',
+          acceptedByUid: user.uid,
+          claimedAt: Date.now()
+        };
+      });
+      const reserved = result.snapshot?.val() || {};
+      if (!result.committed || reserved.acceptedByUid !== user.uid || reserved.status !== 'claimed') {
+        throw new Error('Este convite já foi utilizado ou não está mais disponível.');
+      }
+      return reserved;
+    }
+
+    async function acceptInviteFromAccessGate() {
+      const user = requireAuthenticatedUser();
+      const code = normalizeInviteCode(document.getElementById('accessInviteCode')?.value);
+      if (!code) return setAccessActionStatus('Digite ou cole o código do convite.', 'error');
+      if (!user.email) return setAccessActionStatus('Sua conta precisa ter um e-mail para aceitar o convite.', 'error');
+
+      setBusy('accessAcceptInviteButton', true, 'Aceitando...');
+      setAccessActionStatus('Verificando convite...');
+      try {
+        const inviteRef = db.ref(`invites/${code}`);
+        const snapshot = await inviteRef.once('value');
+        if (!snapshot.exists()) throw new Error('Convite inválido ou expirado.');
+        let invite = snapshot.val() || {};
+        const email = normalizeEmail(user.email);
+        if (normalizeEmail(invite.email) !== email) throw new Error('Este convite foi criado para outro e-mail.');
+        if (Number(invite.expiresAt || 0) <= Date.now()) throw new Error('Este convite expirou. Peça um novo convite.');
+        if (invite.status === 'accepted') throw new Error('Este convite já foi utilizado.');
+        if (invite.status === 'claimed' && invite.acceptedByUid !== user.uid) throw new Error('Este convite já está sendo utilizado por outra conta.');
+
+        const familyId = invite.familyId;
+        if (!familyId) throw new Error('Convite sem família válida.');
+        if (invite.status === 'pending') invite = await reserveInviteForUser(user, code);
+
+        const member = currentMemberRecord(user, 'member', code);
+        // Vínculo + índice mínimo são gravados juntos. Se a conexão cair depois,
+        // o Cora ainda consegue reencontrar a família no próximo login.
+        await db.ref().update({
+          [`families/${familyId}/members/${user.uid}`]: member,
+          ...buildOwnUserIndexUpdates(user, familyId, 'member', {
+            displayName: invite.familyName || 'Família'
+          })
+        });
+
+        const metaSnapshot = await db.ref(`families/${familyId}/meta`).once('value');
+        const meta = metaSnapshot.val() || {};
+        const defaultChildId = meta.defaultChildId;
+        if (!defaultChildId) throw new Error('A família convidante não possui criança principal configurada.');
+
+        appState.familyId = familyId;
+        appState.childId = defaultChildId;
+        appState.familyName = meta.displayName || invite.familyName || 'Família';
+        appState.familyRole = 'member';
+        await ensureOwnUserIndex(user, familyId, 'member', meta);
+        localStorage.setItem(activeFamilyStorageKey(user), familyId);
+
+        // O vínculo familiar é a parte crítica. Finalizar o estado do convite é
+        // best-effort para que uma falha secundária não deixe o usuário preso na tela.
+        try {
+          await inviteRef.update({
+            status: 'accepted',
+            acceptedByUid: user.uid,
+            acceptedAt: Date.now()
+          });
+        } catch (finalizeError) {
+          console.warn('Vínculo criado, mas não foi possível finalizar o convite:', finalizeError);
+        }
+        const url = new URL(window.location.href);
+        url.searchParams.delete('invite');
+        history.replaceState({}, '', url.pathname + (url.search ? url.search : '') + url.hash);
+
+        syncUserUid = user.uid;
+        showAppShell(user);
+        await initRealtimeSync();
+      } catch (error) {
+        console.error('Erro ao aceitar convite:', error);
+        const denied = error?.code === 'PERMISSION_DENIED' || error?.code === 'permission_denied';
+        setAccessActionStatus(
+          denied ? 'Convite inválido, expirado ou destinado a outro e-mail.' : (error?.message || 'Não foi possível aceitar o convite.'),
+          'error'
+        );
+      } finally {
+        setBusy('accessAcceptInviteButton', false);
       }
     }
 
@@ -1751,6 +2142,7 @@
       try {
         await auth.signOut();
         closeModal('modalSettings');
+        closeModal('modalFamily');
       } catch (error) {
         console.error('Erro ao sair:', error);
         alert('Não foi possível sair da conta. Tente novamente.');
@@ -1763,14 +2155,17 @@
       stopRealtimeSync();
       syncUserUid = null;
 
-      const member = await ensureCurrentFamilyAccess(user);
+      const member = await resolveUserFamily(user);
       if (!member) {
+        appState.familyId = null;
+        appState.childId = null;
         appState.familyRole = null;
-        showAccessGate(user, 'Esta conta está autenticada, mas ainda não pertence à Família Cora. Na próxima etapa você poderá aceitar convite ou criar uma família.');
+        appState.familyName = null;
+        showAccessGate(user, 'Sua conta está autenticada, mas ainda não pertence a nenhuma família. Você pode aceitar um convite ou criar uma nova família.');
+        prefillInviteFromUrl();
         return;
       }
 
-      appState.familyRole = member.role === 'owner' ? 'owner' : 'member';
       syncUserUid = user.uid;
       showAppShell(user);
       await initRealtimeSync();
@@ -1781,7 +2176,12 @@
       syncUserUid = null;
       appState.authReady = true;
       appState.user = null;
+      appState.familyId = null;
+      appState.childId = null;
       appState.familyRole = null;
+      appState.familyName = null;
+      appState.familyMembers = {};
+      appState.lastInvite = null;
       appState.items = [];
       appState.maternidade = [];
       hideAccessGate();
@@ -1858,7 +2258,8 @@
 
     function filterCategory(cat) {
       appState.activeCategory = cat;
-      document.getElementById('categoryTipText').innerHTML = CATEGORY_TIPS[cat] || 'Organize as compras de forma inteligente.';
+      const tips = appState.familyId === PRIMARY_FAMILY_ID ? CATEGORY_TIPS : GENERIC_CATEGORY_TIPS;
+      document.getElementById('categoryTipText').textContent = tips[cat] || 'Organize as compras de forma inteligente.';
       renderItems();
     }
 
@@ -2660,7 +3061,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     }
 
     async function resetDatabaseToDefaults() {
-      const childRef = db.ref(CHILD_PATH);
+      if (appState.familyId !== PRIMARY_FAMILY_ID || appState.familyRole !== 'owner') {
+        throw new Error('O reset dos dados padrão existe apenas para a família histórica da Cora.');
+      }
+      const childRef = db.ref(childPath());
       const now = Date.now();
       await childRef.transaction(currentRaw => {
         const current = currentRaw && typeof currentRaw === 'object' ? currentRaw : {};
@@ -2713,7 +3117,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       if (email && user.email) email.textContent = user.email;
       if (familyName) familyName.textContent = appState.familyName || 'Família Cora';
       if (familyRole) familyRole.textContent = roleLabel(appState.familyRole);
-      if (maintenanceArea) maintenanceArea.classList.toggle('hidden', appState.familyRole !== 'owner');
+      if (maintenanceArea) maintenanceArea.classList.toggle('hidden', appState.familyRole !== 'owner' || appState.familyId !== PRIMARY_FAMILY_ID);
       document.getElementById('modalSettings').classList.remove('hidden');
       lucide.createIcons();
     }
@@ -2727,6 +3131,199 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       } catch (error) {
         console.error('Erro ao resetar:', error);
         alert('Não foi possível resetar o enxoval.');
+      }
+    }
+
+    function setFamilyStatus(message = '', type = 'info') {
+      const el = document.getElementById('familyStatus');
+      if (!el) return;
+      el.textContent = message;
+      el.className = 'text-[11px] min-h-[18px] text-center ' + (type === 'error' ? 'text-red-600' : type === 'success' ? 'text-emerald-600' : 'text-gray-500');
+    }
+
+    async function loadFamilyMembers() {
+      const user = requireAuthenticatedUser();
+      if (!appState.familyId) return;
+      try {
+        const snapshot = await db.ref(familyPath('members')).once('value');
+        appState.familyMembers = snapshot.val() || {};
+        renderFamilyMembers();
+        const leaveButton = document.getElementById('familyLeaveButton');
+        const inviteArea = document.getElementById('familyInviteArea');
+        if (leaveButton) leaveButton.classList.toggle('hidden', appState.familyRole === 'owner');
+        if (inviteArea) inviteArea.classList.toggle('hidden', appState.familyRole !== 'owner');
+      } catch (error) {
+        console.error('Erro ao carregar membros:', error);
+        setFamilyStatus('Não foi possível carregar os membros.', 'error');
+      }
+    }
+
+    function renderFamilyMembers() {
+      const container = document.getElementById('familyMembersList');
+      if (!container) return;
+      const members = Object.values(appState.familyMembers || {}).sort((a, b) => {
+        if (a.role === b.role) return String(a.displayName || a.email || '').localeCompare(String(b.displayName || b.email || ''), 'pt-BR');
+        return a.role === 'owner' ? -1 : 1;
+      });
+      if (!members.length) {
+        container.innerHTML = '<p class="text-xs text-gray-400 text-center py-3">Nenhum membro encontrado.</p>';
+        return;
+      }
+      container.innerHTML = members.map(member => {
+        const isOwner = member.role === 'owner';
+        const isSelf = member.uid === auth.currentUser?.uid;
+        const name = member.displayName || member.email || 'Membro';
+        return `
+          <div class="flex items-center gap-3 p-3 bg-gray-50 border border-gray-100 rounded-xl">
+            <div class="w-9 h-9 rounded-full ${isOwner ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'} flex items-center justify-center shrink-0">
+              <i data-lucide="${isOwner ? 'crown' : 'user-round'}" class="w-4 h-4"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-xs font-bold text-gray-800 truncate">${escapeHtml(name)}${isSelf ? ' <span class="text-[9px] text-gray-400">(você)</span>' : ''}</p>
+              ${member.displayName && member.email ? `<p class="text-[10px] text-gray-500 truncate">${escapeHtml(member.email)}</p>` : ''}
+              <p class="text-[9px] ${isOwner ? 'text-amber-700' : 'text-emerald-700'} font-semibold mt-0.5">${isOwner ? 'Proprietário' : 'Membro'}</p>
+            </div>
+            ${appState.familyRole === 'owner' && !isOwner ? `<button type="button" onclick="removeFamilyMember('${escapeHtml(member.uid)}')" class="p-2 text-red-500 bg-red-50 rounded-lg" title="Remover membro"><i data-lucide="user-minus" class="w-4 h-4"></i></button>` : ''}
+          </div>
+        `;
+      }).join('');
+      lucide.createIcons();
+    }
+
+    async function openFamilyModal() {
+      requireAuthenticatedUser();
+      if (!appState.familyId) return;
+      const title = document.getElementById('familyModalName');
+      const role = document.getElementById('familyModalRole');
+      if (title) title.textContent = appState.familyName || 'Família';
+      if (role) role.textContent = roleLabel(appState.familyRole);
+      const invitePanel = document.getElementById('familyInviteResult');
+      if (invitePanel) invitePanel.classList.add('hidden');
+      const inviteEmail = document.getElementById('familyInviteEmail');
+      if (inviteEmail) inviteEmail.value = '';
+      setFamilyStatus('');
+      document.getElementById('modalFamily')?.classList.remove('hidden');
+      await loadFamilyMembers();
+      lucide.createIcons();
+    }
+
+    async function createFamilyInvite() {
+      const user = requireAuthenticatedUser();
+      if (appState.familyRole !== 'owner') return setFamilyStatus('Somente o proprietário pode convidar membros.', 'error');
+      const input = document.getElementById('familyInviteEmail');
+      const email = normalizeEmail(input?.value);
+      if (!email || !email.includes('@')) return setFamilyStatus('Digite um e-mail válido.', 'error');
+      if (email === normalizeEmail(user.email)) return setFamilyStatus('Você já é o proprietário desta família.', 'error');
+      const duplicate = Object.values(appState.familyMembers || {}).some(member => normalizeEmail(member.email) === email && member.status === 'active');
+      if (duplicate) return setFamilyStatus('Este e-mail já pertence à família.', 'error');
+
+      setBusy('familyInviteButton', true, 'Criando...');
+      try {
+        const code = generateInviteCode();
+        const ref = db.ref(`invites/${code}`);
+        const now = Date.now();
+        const invite = {
+          code,
+          familyId: appState.familyId,
+          familyName: appState.familyName || 'Família',
+          email,
+          invitedByUid: user.uid,
+          invitedByName: user.displayName || user.email || 'Proprietário',
+          status: 'pending',
+          createdAt: now,
+          expiresAt: now + FAMILY_INVITE_TTL_MS
+        };
+        await ref.set(invite);
+        appState.lastInvite = { ...invite, link: inviteLink(code) };
+        const result = document.getElementById('familyInviteResult');
+        const codeEl = document.getElementById('familyInviteCode');
+        const linkEl = document.getElementById('familyInviteLink');
+        if (codeEl) codeEl.textContent = code;
+        if (linkEl) linkEl.value = appState.lastInvite.link;
+        if (result) result.classList.remove('hidden');
+        if (input) input.value = '';
+        setFamilyStatus('Convite criado. Compartilhe o link com a pessoa convidada.', 'success');
+        lucide.createIcons();
+      } catch (error) {
+        console.error('Erro ao criar convite:', error);
+        setFamilyStatus('Não foi possível criar o convite. Verifique as Rules V4.5.', 'error');
+      } finally {
+        setBusy('familyInviteButton', false);
+      }
+    }
+
+    async function copyFamilyInvite() {
+      if (!appState.lastInvite?.link) return;
+      try {
+        await navigator.clipboard.writeText(appState.lastInvite.link);
+        setFamilyStatus('Link copiado.', 'success');
+      } catch (error) {
+        const input = document.getElementById('familyInviteLink');
+        input?.select();
+        document.execCommand?.('copy');
+        setFamilyStatus('Link selecionado para copiar.', 'success');
+      }
+    }
+
+    async function shareFamilyInvite() {
+      if (!appState.lastInvite?.link) return;
+      const text = `Convite para entrar em ${appState.familyName || 'minha família'} no Cora.`;
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: 'Convite do Cora', text, url: appState.lastInvite.link });
+          return;
+        } catch (error) {
+          if (error?.name === 'AbortError') return;
+        }
+      }
+      await copyFamilyInvite();
+    }
+
+    async function removeFamilyMember(uid) {
+      if (appState.familyRole !== 'owner') return;
+      const member = appState.familyMembers?.[uid];
+      if (!member || member.role === 'owner') return;
+      const label = member.displayName || member.email || 'este membro';
+      if (!confirm(`Remover ${label} da família? A conta continuará existindo, mas perderá acesso a estes dados.`)) return;
+      try {
+        await db.ref(familyPath(`members/${uid}`)).remove();
+        setFamilyStatus('Membro removido.', 'success');
+        await loadFamilyMembers();
+      } catch (error) {
+        console.error('Erro ao remover membro:', error);
+        setFamilyStatus('Não foi possível remover o membro.', 'error');
+      }
+    }
+
+    async function leaveCurrentFamily() {
+      const user = requireAuthenticatedUser();
+      if (appState.familyRole === 'owner') {
+        alert('O proprietário não pode sair da família nesta versão.');
+        return;
+      }
+      if (!confirm(`Sair de ${appState.familyName || 'esta família'}? Você perderá o acesso aos dados compartilhados.`)) return;
+      const familyId = appState.familyId;
+      try {
+        stopRealtimeSync();
+        await db.ref(familyPath(`members/${user.uid}`, familyId)).remove();
+        await removeOwnFamilyIndex(user, familyId);
+        localStorage.removeItem(activeFamilyStorageKey(user));
+        appState.familyId = null;
+        appState.childId = null;
+        appState.familyRole = null;
+        appState.familyName = null;
+        appState.familyMembers = {};
+        appState.lastInvite = null;
+        appState.items = [];
+        appState.maternidade = [];
+        closeModal('modalFamily');
+        closeModal('modalSettings');
+        showAccessGate(user, 'Você saiu da família. Agora pode aceitar outro convite ou criar uma nova família.');
+        prefillInviteFromUrl();
+      } catch (error) {
+        console.error('Erro ao sair da família:', error);
+        alert('Não foi possível sair da família.');
+        await initRealtimeSync().catch(() => {});
       }
     }
 
@@ -2786,7 +3383,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         </div>
         <div>
           <h1 class="text-lg font-bold text-gray-900 leading-tight">Cora</h1>
-          <p class="text-xs text-rose-600 font-medium">DPP: 21/Fev • Niterói, RJ</p>
+          <p id="headerContext" class="text-xs text-rose-600 font-medium">DPP: 21/Fev • Niterói, RJ</p>
         </div>
       </div>
       <div class="flex items-center space-x-2">
@@ -2817,7 +3414,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       </div>
 
       <!-- WIDGET CLIMA & DP -->
-      <div class="bg-white/80 rounded-xl p-3 border border-rose-100 text-xs">
+      <div id="coraSeasonWidget" class="bg-white/80 rounded-xl p-3 border border-rose-100 text-xs">
         <div class="flex items-center justify-between text-gray-600 mb-2 font-medium">
           <span class="flex items-center gap-1"><i data-lucide="sun-medium" class="w-3.5 h-3.5 text-amber-500"></i> Estações do Crescimento (RJ):</span>
           <span id="seasonTip" class="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full font-semibold">Análise Ativa</span>
@@ -3247,6 +3844,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         </div>
       </div>
 
+      <button type="button" onclick="closeModal('modalSettings'); openFamilyModal();" class="w-full py-3 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center gap-2">
+        <i data-lucide="users" class="w-4 h-4"></i> Gerenciar família
+      </button>
+
       <button type="button" onclick="signOutUser()" class="w-full py-3 text-xs font-bold text-gray-700 bg-gray-100 rounded-xl flex items-center justify-center gap-2">
         <i data-lucide="log-out" class="w-4 h-4"></i> Sair desta conta
       </button>
@@ -3261,28 +3862,107 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     </div>
   </div>
 
+  <!-- V4.5: FAMÍLIA E MEMBROS -->
+  <div id="modalFamily" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[92vh] overflow-y-auto p-5 space-y-4 shadow-xl">
+      <div class="flex justify-between items-center border-b pb-2">
+        <div>
+          <h3 id="familyModalName" class="font-bold text-gray-900 text-base">Família</h3>
+          <p id="familyModalRole" class="text-[10px] text-emerald-700 font-semibold mt-0.5">—</p>
+        </div>
+        <button onclick="closeModal('modalFamily')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div>
+        <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-2">Membros</p>
+        <div id="familyMembersList" class="space-y-2"></div>
+      </div>
+
+      <div id="familyInviteArea" class="border-t border-gray-100 pt-4 space-y-3 hidden">
+        <div>
+          <p class="text-xs font-bold text-gray-800">Convidar membro</p>
+          <p class="text-[10px] text-gray-500 mt-1">Digite o e-mail da pessoa. O Cora cria um link privado para você compartilhar.</p>
+        </div>
+        <div class="flex gap-2">
+          <input type="email" id="familyInviteEmail" placeholder="email@exemplo.com" class="flex-1 min-w-0 text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+          <button type="button" id="familyInviteButton" onclick="createFamilyInvite()" class="px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 rounded-xl disabled:pointer-events-none">Convidar</button>
+        </div>
+
+        <div id="familyInviteResult" class="hidden bg-emerald-50 border border-emerald-100 rounded-2xl p-3 space-y-2">
+          <div>
+            <p class="text-[9px] uppercase tracking-wider text-emerald-700 font-bold">Código do convite</p>
+            <p id="familyInviteCode" class="text-xs font-mono font-bold text-gray-800 break-all mt-1"></p>
+          </div>
+          <input id="familyInviteLink" type="text" readonly class="w-full text-[10px] p-2 bg-white border border-emerald-100 rounded-lg text-gray-600">
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" onclick="copyFamilyInvite()" class="py-2 text-[11px] font-bold text-emerald-700 bg-white border border-emerald-200 rounded-lg flex items-center justify-center gap-1"><i data-lucide="copy" class="w-3.5 h-3.5"></i> Copiar link</button>
+            <button type="button" onclick="shareFamilyInvite()" class="py-2 text-[11px] font-bold text-white bg-emerald-600 rounded-lg flex items-center justify-center gap-1"><i data-lucide="share-2" class="w-3.5 h-3.5"></i> Compartilhar</button>
+          </div>
+          <p class="text-[9px] text-gray-400">O convite expira em 7 dias e só funciona com o e-mail informado.</p>
+        </div>
+      </div>
+
+      <p id="familyStatus" class="text-[11px] min-h-[18px] text-center text-gray-500"></p>
+
+      <button type="button" id="familyLeaveButton" onclick="leaveCurrentFamily()" class="hidden w-full py-3 text-xs font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl flex items-center justify-center gap-2">
+        <i data-lucide="log-out" class="w-4 h-4"></i> Sair desta família
+      </button>
+    </div>
+  </div>
+
   </div><!-- /appShell -->
 
-  <!-- V4.4: CONTA AUTENTICADA, MAS SEM FAMÍLIA -->
+  <!-- V4.5: CONTA AUTENTICADA, MAS SEM FAMÍLIA -->
   <div id="accessGate" class="fixed inset-0 z-[100] bg-[#FBF8F6] hidden overflow-y-auto">
     <div class="min-h-full flex items-center justify-center px-5 py-8">
       <div class="w-full max-w-sm text-center">
         <div class="w-16 h-16 mx-auto rounded-full bg-amber-100 flex items-center justify-center text-amber-700 shadow-sm">
-          <i data-lucide="shield-alert" class="w-8 h-8"></i>
+          <i data-lucide="users-round" class="w-8 h-8"></i>
         </div>
         <h1 class="text-2xl font-extrabold text-gray-900 mt-4">Cora</h1>
-        <p class="text-sm font-bold text-gray-800 mt-5">Conta sem família vinculada</p>
+        <p class="text-sm font-bold text-gray-800 mt-5">Escolha sua família</p>
         <p id="accessGateEmail" class="text-[11px] text-gray-500 mt-1 break-all"></p>
+
         <div class="bg-white border border-amber-100 rounded-2xl p-4 mt-5 text-left shadow-sm">
-          <p id="accessGateMessage" class="text-xs text-gray-600 leading-relaxed">Esta conta ainda não pertence à Família Cora.</p>
-          <p class="text-[10px] text-gray-400 mt-2">Na V4.5 adicionaremos convites e a opção de criar uma nova família.</p>
+          <p id="accessGateMessage" class="text-xs text-gray-600 leading-relaxed">Sua conta ainda não pertence a nenhuma família.</p>
         </div>
-        <button type="button" onclick="signOutUser()" class="w-full mt-4 py-3 text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-xl">Sair desta conta</button>
+
+        <div class="grid grid-cols-2 gap-2 mt-4">
+          <button type="button" onclick="showAccessAction('invite')" class="py-3 px-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center gap-1.5">
+            <i data-lucide="mail-check" class="w-4 h-4"></i> Tenho convite
+          </button>
+          <button type="button" onclick="showAccessAction('create')" class="py-3 px-2 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-100 rounded-xl flex items-center justify-center gap-1.5">
+            <i data-lucide="home" class="w-4 h-4"></i> Criar família
+          </button>
+        </div>
+
+        <div id="accessInviteBox" class="hidden bg-white border border-emerald-100 rounded-2xl p-4 mt-3 text-left shadow-sm space-y-3">
+          <div>
+            <p class="text-xs font-bold text-gray-800">Aceitar convite</p>
+            <p class="text-[10px] text-gray-500 mt-1">Cole o código recebido. Se você abriu o link do convite, ele já aparece preenchido.</p>
+          </div>
+          <input type="text" id="accessInviteCode" autocomplete="off" placeholder="Código do convite" class="w-full text-sm font-mono p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none uppercase">
+          <button type="button" id="accessAcceptInviteButton" onclick="acceptInviteFromAccessGate()" class="w-full py-3 text-xs font-bold text-white bg-emerald-600 rounded-xl disabled:pointer-events-none">Entrar na família</button>
+        </div>
+
+        <div id="accessCreateFamilyBox" class="hidden bg-white border border-rose-100 rounded-2xl p-4 mt-3 text-left shadow-sm space-y-3">
+          <div>
+            <p class="text-xs font-bold text-gray-800">Criar nova família</p>
+            <p class="text-[10px] text-gray-500 mt-1">Você será o proprietário e poderá convidar outras pessoas depois.</p>
+          </div>
+          <input type="text" id="accessFamilyName" maxlength="60" placeholder="Ex.: Família Araujo" class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+          <input type="text" id="accessChildName" maxlength="60" placeholder="Nome da criança" class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+          <button type="button" id="accessCreateFamilyButton" onclick="createFamilyFromAccessGate()" class="w-full py-3 text-xs font-bold text-white bg-rose-600 rounded-xl disabled:pointer-events-none">Criar família</button>
+          <p class="text-[9px] text-gray-400">Uma nova família começa sem itens do enxoval para não copiar dados pessoais da Cora.</p>
+        </div>
+
+        <p id="accessActionStatus" class="text-[11px] min-h-[18px] text-center text-gray-500 mt-3"></p>
+        <button type="button" onclick="signOutUser()" class="w-full mt-2 py-3 text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-xl">Sair desta conta</button>
       </div>
     </div>
   </div>
 
-  <!-- V4.4: TELA DE AUTENTICAÇÃO -->
+  <!-- V4.5: TELA DE AUTENTICAÇÃO -->
   <div id="authGate" class="fixed inset-0 z-[100] bg-[#FBF8F6] hidden overflow-y-auto">
     <div class="min-h-full flex items-center justify-center px-5 py-8">
       <div class="w-full max-w-sm">
