@@ -34,8 +34,8 @@
     const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 15; // V4.5.1: convites revisados, perfil editável e gestão de crianças
-    const APP_MODEL = 'v4.5.1-family-admin-invites';
+    const SCHEMA_VERSION = 15; // V4.5.2: ajustes de navegação e seleção de criança
+    const APP_MODEL = 'v4.5.2-family-admin-ux';
     const PENDING_INVITE_STORAGE_KEY = 'cora_pending_invite_v451';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
     // V4.5.1 mantém autenticação separada da autorização e fecha o modelo em uma família por conta.
@@ -1987,11 +1987,29 @@
         await db.ref(`users/${user.uid}/families/${familyId}`).remove().catch(() => {});
       }
 
-      // Compatibilidade com V4.4: tenta a família histórica caso não exista índice.
-      const primary = await readFamilyMembership(user, PRIMARY_FAMILY_ID, {});
-      if (primary) {
-        await activateFamily(user, PRIMARY_FAMILY_ID, primary.member, primary.meta, primary.activeChildId);
-        return primary.member;
+      // Recuperação da família histórica da Cora. As Rules permitem ao usuário ler
+      // o próprio registro de membro mesmo sem índice; recriamos primeiro o vínculo
+      // /users/{uid}/family e só então carregamos meta/children da família.
+      try {
+        const primaryMemberSnapshot = await db.ref(`families/${PRIMARY_FAMILY_ID}/members/${user.uid}`).once('value');
+        const primaryMember = primaryMemberSnapshot.val() || {};
+        if (primaryMemberSnapshot.exists() && primaryMember.status === 'active') {
+          await db.ref(`users/${user.uid}/family`).set({
+            familyId: PRIMARY_FAMILY_ID,
+            role: primaryMember.role === 'owner' ? 'owner' : 'member',
+            status: 'active',
+            displayName: 'Família Cora',
+            activeChildId: PRIMARY_CHILD_ID,
+            updatedAt: Date.now()
+          });
+          const primary = await readFamilyMembership(user, PRIMARY_FAMILY_ID, {});
+          if (primary) {
+            await activateFamily(user, PRIMARY_FAMILY_ID, primary.member, primary.meta, primary.activeChildId);
+            return primary.member;
+          }
+        }
+      } catch (error) {
+        console.warn('Não foi possível restaurar automaticamente o vínculo com a Família Cora:', error?.code || error);
       }
       return null;
     }
@@ -3373,16 +3391,16 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       }
       container.innerHTML = children.map(child => {
         const active = child.id === appState.childId;
+        const rowAction = active ? '' : `onclick="switchActiveChild('${escapeHtml(child.id)}')" role="button" tabindex="0"`;
         return `
-          <div class="flex items-center gap-2 p-3 bg-gray-50 border ${active ? 'border-rose-200' : 'border-gray-100'} rounded-xl">
+          <div ${rowAction} class="flex items-center gap-2 p-3 bg-gray-50 border ${active ? 'border-rose-200' : 'border-gray-100'} rounded-xl ${active ? '' : 'cursor-pointer hover:border-rose-200 active:bg-rose-50/40'}">
             <div class="w-9 h-9 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">👶</div>
             <div class="min-w-0 flex-1">
               <p class="text-xs font-bold text-gray-800 truncate">${escapeHtml(child.babyName)}</p>
-              <p class="text-[9px] ${active ? 'text-rose-600' : 'text-gray-400'} font-semibold">${active ? 'Perfil em uso' : 'Outro perfil'}</p>
+              <p class="text-[9px] ${active ? 'text-rose-600' : 'text-gray-400'} font-semibold">${active ? 'Selecionada' : 'Toque para selecionar'}</p>
             </div>
-            ${!active ? `<button type="button" onclick="switchActiveChild('${escapeHtml(child.id)}')" class="px-2.5 py-2 text-[10px] font-bold text-rose-700 bg-rose-50 rounded-lg">Usar</button>` : ''}
-            ${appState.familyRole === 'owner' ? `<button type="button" onclick="editFamilyChildName('${escapeHtml(child.id)}')" class="p-2 text-gray-500 bg-white border border-gray-200 rounded-lg"><i data-lucide="pencil" class="w-4 h-4"></i></button>` : ''}
-            ${appState.familyRole === 'owner' && children.length > 1 ? `<button type="button" onclick="removeFamilyChild('${escapeHtml(child.id)}')" class="p-2 text-red-500 bg-red-50 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+            ${appState.familyRole === 'owner' ? `<button type="button" onclick="event.stopPropagation(); editFamilyChildName('${escapeHtml(child.id)}')" class="p-2 text-gray-500 bg-white border border-gray-200 rounded-lg" aria-label="Editar nome"><i data-lucide="pencil" class="w-4 h-4"></i></button>` : ''}
+            ${appState.familyRole === 'owner' && children.length > 1 ? `<button type="button" onclick="event.stopPropagation(); removeFamilyChild('${escapeHtml(child.id)}')" class="p-2 text-red-500 bg-red-50 rounded-lg" aria-label="Excluir criança"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
           </div>
         `;
       }).join('');
@@ -3489,6 +3507,11 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         console.error('Erro ao remover criança:', error);
         setFamilyStatus('Não foi possível excluir a criança.', 'error');
       }
+    }
+
+    function backToSettingsFromFamily() {
+      closeModal('modalFamily');
+      openSettingsModal();
     }
 
     async function openFamilyModal() {
@@ -4350,15 +4373,17 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     </div>
   </div>
 
-  <!-- V4.5.1: FAMÍLIA, MEMBROS, CRIANÇAS E CONVITES -->
+  <!-- V4.5.2: FAMÍLIA, MEMBROS, CRIANÇAS E CONVITES -->
   <div id="modalFamily" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[92vh] overflow-y-auto p-5 space-y-4 shadow-xl">
-      <div class="flex justify-between items-center border-b pb-2">
-        <div>
-          <h3 id="familyModalName" class="font-bold text-gray-900 text-base">Família</h3>
+      <div class="flex items-center gap-3 border-b pb-2">
+        <button type="button" onclick="backToSettingsFromFamily()" class="p-1.5 -ml-1 text-gray-500 hover:text-gray-700 rounded-lg" aria-label="Voltar às configurações">
+          <i data-lucide="arrow-left" class="w-5 h-5"></i>
+        </button>
+        <div class="min-w-0">
+          <h3 id="familyModalName" class="font-bold text-gray-900 text-base truncate">Família</h3>
           <p id="familyModalRole" class="text-[10px] text-emerald-700 font-semibold mt-0.5">—</p>
         </div>
-        <button onclick="closeModal('modalFamily')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
 
       <div>
