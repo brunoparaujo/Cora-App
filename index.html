@@ -34,8 +34,8 @@
     const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 16; // V4.5.3: recuperação de vínculo e convites aceitos fora da lista
-    const APP_MODEL = 'v4.5.3-family-relink-invites';
+    const SCHEMA_VERSION = 16; // V4.6 mantém o schema; adiciona backup/export no cliente
+    const APP_MODEL = 'v4.6-backup-export';
     const PENDING_INVITE_STORAGE_KEY = 'cora_pending_invite_v451';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
     // V4.5.1 mantém autenticação separada da autorização e fecha o modelo em uma família por conta.
@@ -1046,7 +1046,7 @@
       const requestedChildId = appState.childId && availableChildren[appState.childId] ? appState.childId : null;
       const selectedChildId = requestedChildId || defaultChildId;
       if (!selectedChildId) {
-        throw new Error('A família não possui uma criança configurada.');
+        throw new Error('A família não possui um perfil configurado.');
       }
 
       appState.childId = selectedChildId;
@@ -1054,7 +1054,7 @@
 
       const childSnapshot = await db.ref(childPath()).once('value');
       if (!childSnapshot.exists()) {
-        throw new Error('O perfil da criança principal não foi encontrado.');
+        throw new Error('O perfil principal não foi encontrado.');
       }
 
       const childRoot = childSnapshot.val() || {};
@@ -1511,7 +1511,7 @@
           loadFamilyChildren().then(() => {
             const fallback = Object.keys(appState.familyChildren || {})[0];
             if (fallback && fallback !== appState.childId) switchActiveChild(fallback);
-          }).catch(error => console.warn('Não foi possível selecionar outra criança:', error));
+          }).catch(error => console.warn('Não foi possível selecionar outro perfil:', error));
           return;
         }
         const data = snapshot.val() || {};
@@ -2143,7 +2143,7 @@
       const familyName = String(document.getElementById('accessFamilyName')?.value || '').trim();
       const childName = String(document.getElementById('accessChildName')?.value || '').trim();
       if (!familyName) return setAccessActionStatus('Digite o nome da família.', 'error');
-      if (!childName) return setAccessActionStatus('Digite o nome da criança.', 'error');
+      if (!childName) return setAccessActionStatus('Digite o nome do perfil.', 'error');
 
       setBusy('accessCreateFamilyButton', true, 'Criando...');
       setAccessActionStatus('Criando a família...');
@@ -3270,6 +3270,13 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       if (familyName) familyName.textContent = appState.familyName || 'Família Cora';
       if (familyRole) familyRole.textContent = roleLabel(appState.familyRole);
       if (maintenanceArea) maintenanceArea.classList.toggle('hidden', appState.familyRole !== 'owner' || appState.familyId !== PRIMARY_FAMILY_ID || appState.childId !== PRIMARY_CHILD_ID);
+      const restoreButton = document.getElementById('settingsBackupRestoreButton');
+      const restoreHint = document.getElementById('settingsBackupRestoreHint');
+      if (restoreButton) restoreButton.classList.toggle('hidden', appState.familyRole !== 'owner');
+      if (restoreHint) restoreHint.textContent = appState.familyRole === 'owner'
+        ? 'A restauração substitui somente os perfis presentes no arquivo; membros e convites ficam intactos.'
+        : 'Qualquer membro pode exportar. Somente o proprietário pode restaurar.';
+      updateBackupStatus();
       document.getElementById('modalSettings').classList.remove('hidden');
       await loadFamilyChildren().catch(() => {});
       refreshChildSelectors();
@@ -3313,6 +3320,241 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       } catch (error) {
         console.error('Erro ao resetar:', error);
         alert('Não foi possível resetar o enxoval.');
+      }
+    }
+
+
+    // V4.6 — BACKUP / EXPORT
+    const CORA_BACKUP_FORMAT = 'cora-family-backup';
+    const CORA_BACKUP_VERSION = 1;
+
+    function backupLastExportKey(user = appState.user) {
+      return user?.uid ? `cora:lastBackup:${user.uid}` : 'cora:lastBackup';
+    }
+
+    function safeFilePart(value, fallback = 'familia') {
+      const clean = String(value || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      return clean || fallback;
+    }
+
+    function localDateStamp(date = new Date()) {
+      const pad = value => String(value).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}-${pad(date.getMinutes())}`;
+    }
+
+    function downloadJson(data, filename) {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function updateBackupStatus() {
+      const el = document.getElementById('settingsBackupStatus');
+      if (!el) return;
+      const raw = localStorage.getItem(backupLastExportKey());
+      if (!raw) {
+        el.textContent = 'Nenhum backup registrado neste dispositivo.';
+        return;
+      }
+      const date = new Date(raw);
+      el.textContent = Number.isNaN(date.getTime())
+        ? 'Backup anterior registrado neste dispositivo.'
+        : `Último backup neste dispositivo: ${date.toLocaleString('pt-BR')}`;
+    }
+
+    async function exportFamilyBackup() {
+      const user = requireAuthenticatedUser();
+      if (!appState.familyId) return alert('Nenhuma família vinculada.');
+      setBusy('settingsBackupExportButton', true, 'Gerando...');
+      try {
+        const [metaSnapshot, childrenSnapshot] = await Promise.all([
+          db.ref(familyPath('meta')).once('value'),
+          db.ref(familyPath('children')).once('value')
+        ]);
+        const meta = metaSnapshot.val() || {};
+        const children = childrenSnapshot.val() || {};
+        if (!Object.keys(children).length) throw new Error('A família não possui perfis para exportar.');
+
+        const payload = {
+          format: CORA_BACKUP_FORMAT,
+          backupVersion: CORA_BACKUP_VERSION,
+          exportedAt: new Date().toISOString(),
+          app: {
+            model: APP_MODEL,
+            schemaVersion: SCHEMA_VERSION
+          },
+          family: {
+            id: appState.familyId,
+            displayName: meta.displayName || appState.familyName || 'Família',
+            defaultProfileId: meta.defaultChildId || appState.childId || null,
+            activeProfileId: appState.childId || null,
+            profiles: clone(children)
+          },
+          notes: 'Este backup contém os dados dos perfis da família. Membros, autenticação e convites não são exportados.'
+        };
+
+        const filename = `cora_backup_${safeFilePart(payload.family.displayName)}_${localDateStamp()}.json`;
+        downloadJson(payload, filename);
+        const nowIso = new Date().toISOString();
+        localStorage.setItem(backupLastExportKey(user), nowIso);
+        updateBackupStatus();
+      } catch (error) {
+        console.error('Erro ao exportar backup:', error);
+        alert(error?.message || 'Não foi possível gerar o backup.');
+      } finally {
+        setBusy('settingsBackupExportButton', false);
+      }
+    }
+
+    function validFirebasePathKey(value) {
+      return typeof value === 'string' && value.length > 0 && !/[.#$\[\]\/]/.test(value);
+    }
+
+    function validateBackupProfile(profileId, data) {
+      if (!validFirebasePathKey(profileId)) throw new Error(`ID de perfil inválido no backup: ${profileId}`);
+      if (!data || typeof data !== 'object') throw new Error(`Perfil ${profileId} inválido.`);
+      const babyName = String(data.profile?.babyName || '').trim();
+      if (!babyName || babyName.length > 60) throw new Error(`Nome inválido no perfil ${profileId}.`);
+      const items = data.enxoval?.items || {};
+      if (typeof items !== 'object' || Array.isArray(items)) throw new Error(`Enxoval inválido no perfil ${babyName}.`);
+      for (const [itemId, item] of Object.entries(items)) {
+        if (!validFirebasePathKey(itemId) || !item || item.id !== itemId || !validateCanonicalItem(item)) {
+          throw new Error(`Item inválido no backup do perfil ${babyName}.`);
+        }
+      }
+      const maternity = data.maternity || {};
+      if (typeof maternity !== 'object' || Array.isArray(maternity)) throw new Error(`Maternidade inválida no perfil ${babyName}.`);
+      for (const [itemId, item] of Object.entries(maternity)) {
+        if (!validFirebasePathKey(itemId) || !item || item.id !== itemId || typeof item.title !== 'string' || typeof item.checked !== 'boolean') {
+          throw new Error(`Checklist inválido no backup do perfil ${babyName}.`);
+        }
+      }
+      return {
+        profile: { ...clone(data.profile), babyName },
+        enxoval: { items: clone(items) },
+        maternity: clone(maternity),
+        meta: {
+          ...(data.meta && typeof data.meta === 'object' ? clone(data.meta) : {}),
+          schemaVersion: SCHEMA_VERSION,
+          model: APP_MODEL
+        }
+      };
+    }
+
+    function parseAndValidateBackup(text) {
+      let parsed;
+      try { parsed = JSON.parse(text); }
+      catch { throw new Error('O arquivo não contém um JSON válido.'); }
+      if (parsed?.format !== CORA_BACKUP_FORMAT) throw new Error('Este arquivo não é um backup do Cora.');
+      if (Number(parsed?.backupVersion) !== CORA_BACKUP_VERSION) throw new Error('Versão de backup não suportada por esta versão do Cora.');
+      const profiles = parsed?.family?.profiles;
+      if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles) || !Object.keys(profiles).length) {
+        throw new Error('O backup não contém perfis válidos.');
+      }
+      const validatedProfiles = {};
+      Object.entries(profiles).forEach(([id, data]) => { validatedProfiles[id] = validateBackupProfile(id, data); });
+      return {
+        familyName: String(parsed.family?.displayName || '').trim().slice(0, 60) || appState.familyName || 'Família',
+        defaultProfileId: parsed.family?.defaultProfileId && validatedProfiles[parsed.family.defaultProfileId] ? parsed.family.defaultProfileId : Object.keys(validatedProfiles)[0],
+        activeProfileId: parsed.family?.activeProfileId && validatedProfiles[parsed.family.activeProfileId] ? parsed.family.activeProfileId : null,
+        profiles: validatedProfiles,
+        exportedAt: parsed.exportedAt || null
+      };
+    }
+
+    function backupSummary(backup) {
+      const profiles = Object.values(backup.profiles || {});
+      const itemCount = profiles.reduce((sum, profile) => sum + Object.keys(profile.enxoval?.items || {}).length, 0);
+      const acquisitionCount = profiles.reduce((sum, profile) => sum + Object.values(profile.enxoval?.items || {}).reduce((inner, item) => inner + Object.keys(item.acquisitions || {}).length, 0), 0);
+      return `${profiles.length} ${profiles.length === 1 ? 'perfil' : 'perfis'}, ${itemCount} itens e ${acquisitionCount} aquisições`;
+    }
+
+    function chooseBackupFile() {
+      if (appState.familyRole !== 'owner') return alert('Somente o proprietário pode restaurar um backup.');
+      document.getElementById('settingsBackupFile')?.click();
+    }
+
+    async function restoreBackupFromFile(event) {
+      const input = event?.target;
+      const file = input?.files?.[0];
+      if (input) input.value = '';
+      if (!file) return;
+      if (appState.familyRole !== 'owner') return alert('Somente o proprietário pode restaurar um backup.');
+      if (file.size > 10 * 1024 * 1024) return alert('O arquivo de backup é grande demais.');
+
+      let backup;
+      try {
+        backup = parseAndValidateBackup(await file.text());
+      } catch (error) {
+        console.error('Backup inválido:', error);
+        return alert(error?.message || 'Não foi possível ler o backup.');
+      }
+
+      const summary = backupSummary(backup);
+      if (!confirm(`Restaurar este backup?\n\n${summary}\n\nMembros e convites atuais não serão alterados.`)) return;
+      if (!confirm('Os dados dos perfis presentes no backup serão substituídos pelos valores do arquivo. Perfis atuais que não existam no backup serão preservados. Deseja continuar?')) return;
+
+      const user = requireAuthenticatedUser();
+      setBusy('settingsBackupRestoreButton', true, 'Restaurando...');
+      try {
+        const existingSnapshot = await db.ref(familyPath('children')).once('value');
+        const existing = existingSnapshot.val() || {};
+        const updates = {};
+        const now = Date.now();
+
+        Object.entries(backup.profiles).forEach(([profileId, profile]) => {
+          const base = `families/${appState.familyId}/children/${profileId}`;
+          if (!existing[profileId]) {
+            updates[base] = {
+              profile: profile.profile,
+              enxoval: profile.enxoval,
+              maternity: profile.maternity,
+              meta: { ...profile.meta, restoredAt: now }
+            };
+          } else {
+            updates[`${base}/profile`] = profile.profile;
+            updates[`${base}/enxoval`] = profile.enxoval;
+            updates[`${base}/maternity`] = profile.maternity;
+            updates[`${base}/meta/schemaVersion`] = SCHEMA_VERSION;
+            updates[`${base}/meta/model`] = APP_MODEL;
+            updates[`${base}/meta/restoredAt`] = now;
+          }
+        });
+
+        updates[`families/${appState.familyId}/meta/displayName`] = backup.familyName;
+        updates[`families/${appState.familyId}/meta/defaultChildId`] = backup.defaultProfileId;
+        updates[`families/${appState.familyId}/meta/schemaVersion`] = SCHEMA_VERSION;
+        updates[`families/${appState.familyId}/meta/model`] = APP_MODEL;
+        updates[`families/${appState.familyId}/meta/updatedAt`] = firebase.database.ServerValue.TIMESTAMP;
+
+        const targetProfileId = backup.activeProfileId || backup.defaultProfileId;
+        updates[`users/${user.uid}/family/activeChildId`] = targetProfileId;
+        updates[`users/${user.uid}/family/displayName`] = backup.familyName;
+        updates[`users/${user.uid}/family/updatedAt`] = now;
+
+        stopRealtimeSync();
+        await db.ref().update(updates);
+        appState.familyName = backup.familyName;
+        appState.childId = targetProfileId;
+        localStorage.setItem(activeFamilyStorageKey(user), appState.familyId);
+        await loadFamilyChildren().catch(() => {});
+        refreshChildSelectors();
+        await initRealtimeSync();
+        alert(`Backup restaurado com sucesso: ${summary}.`);
+      } catch (error) {
+        console.error('Erro ao restaurar backup:', error);
+        alert(error?.message || 'Não foi possível restaurar o backup.');
+        await initRealtimeSync().catch(() => {});
+      } finally {
+        setBusy('settingsBackupRestoreButton', false);
       }
     }
 
@@ -3422,7 +3664,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           select.value = appState.childId && appState.familyChildren[appState.childId] ? appState.childId : children[0].id;
           select.disabled = children.length <= 1;
         } else {
-          select.innerHTML = '<option value="">Nenhuma criança</option>';
+          select.innerHTML = '<option value="">Nenhum perfil</option>';
           select.disabled = true;
         }
       }
@@ -3436,7 +3678,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       if (!container) return;
       const children = Object.values(appState.familyChildren || {});
       if (!children.length) {
-        container.innerHTML = '<p class="text-xs text-gray-400 text-center py-3">Nenhuma criança cadastrada.</p>';
+        container.innerHTML = '<p class="text-xs text-gray-400 text-center py-3">Nenhum perfil cadastrada.</p>';
         return;
       }
       container.innerHTML = children.map(child => {
@@ -3450,7 +3692,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
               <p class="text-[9px] ${active ? 'text-rose-600' : 'text-gray-400'} font-semibold">${active ? 'Selecionada' : 'Toque para selecionar'}</p>
             </div>
             ${appState.familyRole === 'owner' ? `<button type="button" onclick="event.stopPropagation(); editFamilyChildName('${escapeHtml(child.id)}')" class="p-2 text-gray-500 bg-white border border-gray-200 rounded-lg" aria-label="Editar nome"><i data-lucide="pencil" class="w-4 h-4"></i></button>` : ''}
-            ${appState.familyRole === 'owner' && children.length > 1 ? `<button type="button" onclick="event.stopPropagation(); removeFamilyChild('${escapeHtml(child.id)}')" class="p-2 text-red-500 bg-red-50 rounded-lg" aria-label="Excluir criança"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+            ${appState.familyRole === 'owner' && children.length > 1 ? `<button type="button" onclick="event.stopPropagation(); removeFamilyChild('${escapeHtml(child.id)}')" class="p-2 text-red-500 bg-red-50 rounded-lg" aria-label="Excluir perfil"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
           </div>
         `;
       }).join('');
@@ -3470,14 +3712,14 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         listenRealtime();
       } catch (error) {
         console.error('Erro ao trocar criança:', error);
-        alert('Não foi possível trocar o perfil da criança.');
+        alert('Não foi possível trocar o perfil selecionado.');
         await initRealtimeSync().catch(() => {});
       }
     }
 
     async function createFamilyChild() {
       if (appState.familyRole !== 'owner') return;
-      const name = prompt('Nome da criança:');
+      const name = prompt('Nome do perfil:');
       if (name === null) return;
       const clean = String(name).trim();
       if (clean.length < 2) return alert('Digite um nome com pelo menos 2 caracteres.');
@@ -3504,7 +3746,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         setFamilyStatus(`${clean} foi adicionado(a).`, 'success');
       } catch (error) {
         console.error('Erro ao criar criança:', error);
-        setFamilyStatus('Não foi possível adicionar a criança.', 'error');
+        setFamilyStatus('Não foi possível adicionar o perfil.', 'error');
       }
     }
 
@@ -3512,7 +3754,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       if (appState.familyRole !== 'owner') return;
       const child = appState.familyChildren?.[childId];
       if (!child) return;
-      const nextName = prompt('Nome da criança:', child.babyName);
+      const nextName = prompt('Nome do perfil:', child.babyName);
       if (nextName === null) return;
       const clean = String(nextName).trim();
       if (clean.length < 2) return alert('Digite um nome com pelo menos 2 caracteres.');
@@ -3524,17 +3766,17 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         refreshChildSelectors();
       } catch (error) {
         console.error('Erro ao renomear criança:', error);
-        setFamilyStatus('Não foi possível alterar o nome da criança.', 'error');
+        setFamilyStatus('Não foi possível alterar o nome do perfil.', 'error');
       }
     }
 
     async function removeFamilyChild(childId) {
       if (appState.familyRole !== 'owner') return;
       const children = Object.values(appState.familyChildren || {});
-      if (children.length <= 1) return alert('A família precisa manter pelo menos uma criança. Para remover tudo, exclua a família.');
+      if (children.length <= 1) return alert('A família precisa manter pelo menos um perfil. Para remover todos, exclua a família.');
       const child = appState.familyChildren?.[childId];
       if (!child) return;
-      if (!confirm(`Excluir o perfil de ${child.babyName}? Todos os dados dessa criança, incluindo enxoval e maternidade, serão apagados.`)) return;
+      if (!confirm(`Excluir o perfil de ${child.babyName}? Todos os dados desse perfil, incluindo enxoval e maternidade, serão apagados.`)) return;
       if (!confirm(`Confirma a exclusão definitiva de ${child.babyName}?`)) return;
       const user = requireAuthenticatedUser();
       const replacement = children.find(item => item.id !== childId)?.id;
@@ -3552,10 +3794,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           stopRealtimeSync();
           listenRealtime();
         }
-        setFamilyStatus('Perfil da criança excluído.', 'success');
+        setFamilyStatus('Perfil excluído.', 'success');
       } catch (error) {
         console.error('Erro ao remover criança:', error);
-        setFamilyStatus('Não foi possível excluir a criança.', 'error');
+        setFamilyStatus('Não foi possível excluir o perfil.', 'error');
       }
     }
 
@@ -3842,7 +4084,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const user = requireAuthenticatedUser();
       const familyId = appState.familyId;
       const familyName = appState.familyName || 'esta família';
-      if (!confirm(`Excluir ${familyName}? Todos os perfis de crianças, enxoval, maternidade, membros e convites serão apagados.`)) return;
+      if (!confirm(`Excluir ${familyName}? Todos os perfis, enxoval, maternidade, membros e convites serão apagados.`)) return;
       if (!confirm('Esta ação é definitiva. Confirma a exclusão da família?')) return;
       try {
         await loadFamilyInvites().catch(() => {});
@@ -4364,7 +4606,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       <div class="flex justify-between items-center border-b pb-2">
         <div>
           <h3 class="font-bold text-gray-900 text-base">Configurações</h3>
-          <p class="text-[11px] text-gray-500 mt-0.5">Conta, família e perfil da criança</p>
+          <p class="text-[11px] text-gray-500 mt-0.5">Conta, família e perfis</p>
         </div>
         <button onclick="closeModal('modalSettings')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
@@ -4396,7 +4638,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       <div class="rounded-2xl bg-amber-50 border border-amber-100 p-4">
         <div class="flex items-center justify-between gap-3 mb-2">
           <div>
-            <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Criança ativa</p>
+            <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Perfil selecionado</p>
             <p id="settingsChildName" class="text-sm font-bold text-gray-800">—</p>
           </div>
           <i data-lucide="baby" class="w-5 h-5 text-amber-600"></i>
@@ -4404,12 +4646,28 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         <select id="settingsChildSelect" onchange="switchActiveChild(this.value)" class="w-full text-xs p-2.5 bg-white border border-amber-200 rounded-xl outline-none">
           <option value="">Carregando...</option>
         </select>
-        <p class="text-[9px] text-gray-400 mt-1.5">Cada criança tem seu próprio enxoval, maternidade e financeiro.</p>
+        <p class="text-[9px] text-gray-400 mt-1.5">Cada perfil tem seu próprio enxoval, maternidade e financeiro.</p>
       </div>
 
       <button type="button" onclick="closeModal('modalSettings'); openFamilyModal();" class="w-full py-3 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center gap-2">
         <i data-lucide="users" class="w-4 h-4"></i> Gerenciar família
       </button>
+
+      <div class="border-t border-gray-100 pt-4 space-y-2">
+        <div>
+          <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Backup e recuperação</p>
+          <p class="text-[10px] text-gray-500 mt-1">O arquivo inclui todos os perfis, enxoval, aquisições, maternidade e dados financeiros. Não inclui membros, login nem convites.</p>
+        </div>
+        <button type="button" id="settingsBackupExportButton" onclick="exportFamilyBackup()" class="w-full py-3 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center gap-2 disabled:pointer-events-none">
+          <i data-lucide="download" class="w-4 h-4"></i> Baixar backup da família
+        </button>
+        <button type="button" id="settingsBackupRestoreButton" onclick="chooseBackupFile()" class="w-full py-3 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-center gap-2 disabled:pointer-events-none">
+          <i data-lucide="upload" class="w-4 h-4"></i> Restaurar backup
+        </button>
+        <input type="file" id="settingsBackupFile" accept="application/json,.json" class="hidden" onchange="restoreBackupFromFile(event)">
+        <p id="settingsBackupRestoreHint" class="text-[9px] text-gray-400 leading-relaxed"></p>
+        <p id="settingsBackupStatus" class="text-[9px] text-gray-400">Nenhum backup registrado neste dispositivo.</p>
+      </div>
 
       <button type="button" onclick="signOutUser()" class="w-full py-3 text-xs font-bold text-gray-700 bg-gray-100 rounded-xl flex items-center justify-center gap-2">
         <i data-lucide="log-out" class="w-4 h-4"></i> Sair desta conta
@@ -4425,7 +4683,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     </div>
   </div>
 
-  <!-- V4.5.2: FAMÍLIA, MEMBROS, CRIANÇAS E CONVITES -->
+  <!-- V4.6: FAMÍLIA, MEMBROS, PERFIS E CONVITES -->
   <div id="modalFamily" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[92vh] overflow-y-auto p-5 space-y-4 shadow-xl">
       <div class="flex items-center gap-3 border-b pb-2">
@@ -4445,8 +4703,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
       <div class="border-t border-gray-100 pt-4">
         <div class="flex items-center justify-between gap-2 mb-2">
-          <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Crianças</p>
-          <button type="button" id="familyAddChildButton" onclick="createFamilyChild()" class="hidden px-2.5 py-1.5 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-100 rounded-lg">+ Adicionar</button>
+          <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Perfis</p>
+          <button type="button" id="familyAddChildButton" onclick="createFamilyChild()" class="hidden px-2.5 py-1.5 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-100 rounded-lg">+ Adicionar perfil</button>
         </div>
         <div id="familyChildrenList" class="space-y-2"></div>
       </div>
@@ -4497,7 +4755,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
   </div><!-- /appShell -->
 
-  <!-- V4.5.3: CONTA AUTENTICADA, MAS SEM FAMÍLIA -->
+  <!-- V4.6: CONTA AUTENTICADA, MAS SEM FAMÍLIA -->
   <div id="accessGate" class="fixed inset-0 z-[100] bg-[#FBF8F6] hidden overflow-y-auto">
     <div class="min-h-full flex items-center justify-center px-5 py-8">
       <div class="w-full max-w-sm text-center">
@@ -4541,7 +4799,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
             <p class="text-[10px] text-gray-500 mt-1">Você será o proprietário. Cada conta pode pertencer a apenas uma família.</p>
           </div>
           <input type="text" id="accessFamilyName" maxlength="60" placeholder="Ex.: Família Araujo" class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none">
-          <input type="text" id="accessChildName" maxlength="60" placeholder="Nome da criança" class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+          <input type="text" id="accessChildName" maxlength="60" placeholder="Nome do perfil (ex.: Cora)" class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none">
           <button type="button" id="accessCreateFamilyButton" onclick="createFamilyFromAccessGate()" class="w-full py-3 text-xs font-bold text-white bg-rose-600 rounded-xl disabled:pointer-events-none">Criar família</button>
           <p class="text-[9px] text-gray-400">Uma nova família começa sem itens do enxoval para não copiar dados pessoais da Cora.</p>
         </div>
