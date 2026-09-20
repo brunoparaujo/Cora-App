@@ -34,10 +34,10 @@
     const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 12; // V4.3: autenticação Firebase + sessão persistente
-    const APP_MODEL = 'v4.3-authentication-google-email';
-    // V4.3: Google é a opção principal; e-mail/senha permanece como alternativa.
-    // Na V4.4, após validar as contas, o acesso será reforçado pelas Firebase Rules.
+    const SCHEMA_VERSION = 13; // V4.4: segurança por família + isolamento por membro
+    const APP_MODEL = 'v4.4-family-security';
+    // Google continua como opção principal; e-mail/senha permanece como alternativa.
+    // V4.4 separa autenticação (ter conta) de autorização (pertencer à família).
     const ALLOW_SELF_REGISTRATION = true;
 
     const INITIAL_ITEMS = [
@@ -323,7 +323,10 @@
       editingAcquisitionBase: null,
       connected: false,
       authReady: false,
-      user: null
+      user: null,
+      familyId: 'cora',
+      familyRole: null,
+      familyName: 'Família Cora'
     };
 
     // V4.2 — Estado de gravação local. Evita duplo clique/reenvio acidental
@@ -618,10 +621,9 @@
       return itemToFirebase(item);
     }
 
-    // V4.2 — Arquitetura estabilizada: família -> membros + crianças -> módulos.
-    // O ID da família é um identificador interno estável. O perfil da criança
-    // representa para quem o aplicativo está sendo usado; membros serão ligados
-    // aos usuários na V4.3/V4.5.
+    // V4.4 — Arquitetura estabilizada: família -> membros + crianças -> módulos.
+    // O ID atual permanece 'cora' para preservar os dados existentes. As Rules
+    // são genéricas por familyId e já ficam preparadas para múltiplas famílias.
     const FAMILY_ID = 'cora';
     const CHILD_ID = 'cora';
     const FAMILY_PATH = `families/${FAMILY_ID}`;
@@ -651,6 +653,8 @@
       return {
         schemaVersion: SCHEMA_VERSION,
         model: APP_MODEL,
+        securityMode: 'members',
+        displayName: 'Família Cora',
         updatedAt: firebase.database.ServerValue.TIMESTAMP
       };
     }
@@ -681,6 +685,8 @@
       updates[childPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
       updates[familyPath('meta/schemaVersion')] = SCHEMA_VERSION;
       updates[familyPath('meta/model')] = APP_MODEL;
+      updates[familyPath('meta/securityMode')] = 'members';
+      updates[familyPath('meta/displayName')] = 'Família Cora';
       updates[familyPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
       return db.ref().update(updates);
     }
@@ -987,6 +993,8 @@
       updates[childPath('meta/legacyMigrationComplete')] = true;
       updates[familyPath('meta/schemaVersion')] = SCHEMA_VERSION;
       updates[familyPath('meta/model')] = APP_MODEL;
+      updates[familyPath('meta/securityMode')] = 'members';
+      updates[familyPath('meta/displayName')] = 'Família Cora';
       updates[familyPath('meta/updatedAt')] = firebase.database.ServerValue.TIMESTAMP;
       await db.ref().update(updates);
     }
@@ -1398,7 +1406,7 @@
       realtimeConnectionRef = db.ref('.info/connected');
       realtimeConnectionRef.on('value', snapshot => {
         appState.connected = snapshot.val() === true;
-        console.info(`[Cora V4.3] Firebase ${appState.connected ? 'conectado' : 'desconectado'}.`);
+        console.info(`[Cora V4.4] Firebase ${appState.connected ? 'conectado' : 'desconectado'}.`);
       });
     }
 
@@ -1467,24 +1475,52 @@
       );
     }
 
+    function hideAccessGate() {
+      const accessGate = document.getElementById('accessGate');
+      if (accessGate) accessGate.classList.add('hidden');
+    }
+
     function showAuthGate() {
       const gate = document.getElementById('authGate');
       const shell = document.getElementById('appShell');
       if (shell) shell.classList.add('hidden');
+      hideAccessGate();
       if (gate) gate.classList.remove('hidden');
       setTimeout(() => document.getElementById('googleAuthButton')?.focus(), 50);
       lucide.createIcons();
+    }
+
+    function showAccessGate(user, message = '') {
+      const authGate = document.getElementById('authGate');
+      const shell = document.getElementById('appShell');
+      const accessGate = document.getElementById('accessGate');
+      if (authGate) authGate.classList.add('hidden');
+      if (shell) shell.classList.add('hidden');
+      if (accessGate) accessGate.classList.remove('hidden');
+      const email = document.getElementById('accessGateEmail');
+      const detail = document.getElementById('accessGateMessage');
+      if (email) email.textContent = user?.email || user?.displayName || 'Conta autenticada';
+      if (detail) detail.textContent = message || 'Esta conta ainda não pertence à Família Cora.';
+      lucide.createIcons();
+    }
+
+    function roleLabel(role) {
+      return role === 'owner' ? 'Proprietário' : role === 'member' ? 'Membro' : 'Sem vínculo';
     }
 
     function showAppShell(user) {
       const gate = document.getElementById('authGate');
       const shell = document.getElementById('appShell');
       if (gate) gate.classList.add('hidden');
+      hideAccessGate();
       if (shell) shell.classList.remove('hidden');
 
       const accountName = document.getElementById('settingsAccountName');
       const accountEmail = document.getElementById('settingsAccountEmail');
       const accountProvider = document.getElementById('settingsAccountProvider');
+      const familyName = document.getElementById('settingsFamilyName');
+      const familyRole = document.getElementById('settingsFamilyRole');
+      const maintenanceArea = document.getElementById('settingsMaintenanceArea');
       const displayName = user?.displayName?.trim();
 
       if (accountName) accountName.textContent = displayName || user?.email || 'Conta autenticada';
@@ -1493,6 +1529,9 @@
         accountEmail.classList.toggle('hidden', !(displayName && user?.email));
       }
       if (accountProvider) accountProvider.textContent = getUserProviderLabel(user);
+      if (familyName) familyName.textContent = appState.familyName || 'Família Cora';
+      if (familyRole) familyRole.textContent = roleLabel(appState.familyRole);
+      if (maintenanceArea) maintenanceArea.classList.toggle('hidden', appState.familyRole !== 'owner');
       lucide.createIcons();
     }
 
@@ -1624,6 +1663,90 @@
       }
     }
 
+    function currentMemberRecord(user, role = 'member') {
+      const now = Date.now();
+      return {
+        uid: user.uid,
+        role,
+        status: 'active',
+        email: user.email || '',
+        displayName: user.displayName || '',
+        joinedAt: now,
+        updatedAt: now
+      };
+    }
+
+    async function ensureOwnUserIndex(user, role) {
+      const now = Date.now();
+      const updates = {};
+      updates[`users/${user.uid}/profile/uid`] = user.uid;
+      updates[`users/${user.uid}/profile/email`] = user.email || '';
+      updates[`users/${user.uid}/profile/displayName`] = user.displayName || '';
+      updates[`users/${user.uid}/profile/updatedAt`] = now;
+      updates[`users/${user.uid}/families/${FAMILY_ID}/role`] = role;
+      updates[`users/${user.uid}/families/${FAMILY_ID}/status`] = 'active';
+      updates[`users/${user.uid}/families/${FAMILY_ID}/updatedAt`] = now;
+      await db.ref().update(updates);
+    }
+
+    async function ensureCurrentFamilyAccess(user) {
+      const memberRef = db.ref(familyPath(`members/${user.uid}`));
+
+      try {
+        // Com as Rules V4.4 publicadas, esta leitura só funciona se o UID já for
+        // membro. Antes das Rules, ela também permite fazer o bootstrap inicial.
+        const memberSnapshot = await memberRef.once('value');
+        if (memberSnapshot.exists()) {
+          const member = memberSnapshot.val() || {};
+          if (member.status && member.status !== 'active') return null;
+          const role = member.role === 'owner' ? 'owner' : 'member';
+          appState.familyRole = role;
+          await ensureOwnUserIndex(user, role);
+          return { ...member, role };
+        }
+      } catch (error) {
+        if (error?.code === 'PERMISSION_DENIED' || error?.code === 'permission_denied') {
+          return null;
+        }
+        throw error;
+      }
+
+      // Bootstrap único da família existente: deve ser executado ANTES de
+      // publicar as Rules fechadas. A transaction garante que apenas a primeira
+      // conta autenticada possa se tornar proprietária se members ainda estiver vazio.
+      let claimAttempted = false;
+      try {
+        const membersRef = db.ref(familyPath('members'));
+        const result = await membersRef.transaction(current => {
+          if (current && Object.keys(current).length) return current;
+          claimAttempted = true;
+          return { [user.uid]: currentMemberRecord(user, 'owner') };
+        });
+
+        const members = result.snapshot?.val() || {};
+        const member = members[user.uid];
+        if (!member) return null;
+
+        const role = member.role === 'owner' ? 'owner' : 'member';
+        appState.familyRole = role;
+        const updates = {};
+        if (role === 'owner') {
+          updates[familyPath('meta/ownerUid')] = user.uid;
+          updates[familyPath('meta/securityBootstrapComplete')] = true;
+          updates[familyPath('meta/securityBootstrapAt')] = firebase.database.ServerValue.TIMESTAMP;
+          updates[familyPath('meta/securityMode')] = 'members';
+          updates[familyPath('meta/displayName')] = 'Família Cora';
+        }
+        if (Object.keys(updates).length) await db.ref().update(updates);
+        await ensureOwnUserIndex(user, role);
+        if (claimAttempted && role === 'owner') console.info('[Cora V4.4] Família vinculada ao primeiro proprietário.');
+        return { ...member, role };
+      } catch (error) {
+        if (error?.code === 'PERMISSION_DENIED' || error?.code === 'permission_denied') return null;
+        throw error;
+      }
+    }
+
     async function signOutUser() {
       try {
         await auth.signOut();
@@ -1637,10 +1760,19 @@
     async function handleAuthenticatedUser(user) {
       appState.authReady = true;
       appState.user = user;
-      showAppShell(user);
-      if (syncUserUid === user.uid && realtimeChildRef) return;
       stopRealtimeSync();
+      syncUserUid = null;
+
+      const member = await ensureCurrentFamilyAccess(user);
+      if (!member) {
+        appState.familyRole = null;
+        showAccessGate(user, 'Esta conta está autenticada, mas ainda não pertence à Família Cora. Na próxima etapa você poderá aceitar convite ou criar uma família.');
+        return;
+      }
+
+      appState.familyRole = member.role === 'owner' ? 'owner' : 'member';
       syncUserUid = user.uid;
+      showAppShell(user);
       await initRealtimeSync();
     }
 
@@ -1649,8 +1781,10 @@
       syncUserUid = null;
       appState.authReady = true;
       appState.user = null;
+      appState.familyRole = null;
       appState.items = [];
       appState.maternidade = [];
+      hideAccessGate();
       showAuthGate();
     }
 
@@ -2573,7 +2707,13 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     function openSettingsModal() {
       const user = requireAuthenticatedUser();
       const email = document.getElementById('settingsAccountEmail');
-      if (email) email.textContent = user.email || 'Conta autenticada';
+      const familyName = document.getElementById('settingsFamilyName');
+      const familyRole = document.getElementById('settingsFamilyRole');
+      const maintenanceArea = document.getElementById('settingsMaintenanceArea');
+      if (email && user.email) email.textContent = user.email;
+      if (familyName) familyName.textContent = appState.familyName || 'Família Cora';
+      if (familyRole) familyRole.textContent = roleLabel(appState.familyRole);
+      if (maintenanceArea) maintenanceArea.classList.toggle('hidden', appState.familyRole !== 'owner');
       document.getElementById('modalSettings').classList.remove('hidden');
       lucide.createIcons();
     }
@@ -3096,11 +3236,22 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         </div>
       </div>
 
+      <div class="rounded-2xl bg-emerald-50 border border-emerald-100 p-4 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-600 shadow-sm">
+          <i data-lucide="users-round" class="w-5 h-5"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Família vinculada</p>
+          <p id="settingsFamilyName" class="text-sm font-bold text-gray-800 truncate">Família Cora</p>
+          <p id="settingsFamilyRole" class="text-[10px] text-emerald-700 font-semibold mt-0.5">—</p>
+        </div>
+      </div>
+
       <button type="button" onclick="signOutUser()" class="w-full py-3 text-xs font-bold text-gray-700 bg-gray-100 rounded-xl flex items-center justify-center gap-2">
         <i data-lucide="log-out" class="w-4 h-4"></i> Sair desta conta
       </button>
 
-      <div class="border-t border-gray-100 pt-4">
+      <div id="settingsMaintenanceArea" class="border-t border-gray-100 pt-4">
         <p class="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-2">Área de manutenção</p>
         <button type="button" id="settingsResetButton" onclick="resetDatabaseFromSettings()" class="w-full py-3 text-xs font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl flex items-center justify-center gap-2 disabled:pointer-events-none">
           <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Restaurar dados padrão
@@ -3112,7 +3263,26 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
   </div><!-- /appShell -->
 
-  <!-- V4.3: TELA DE AUTENTICAÇÃO -->
+  <!-- V4.4: CONTA AUTENTICADA, MAS SEM FAMÍLIA -->
+  <div id="accessGate" class="fixed inset-0 z-[100] bg-[#FBF8F6] hidden overflow-y-auto">
+    <div class="min-h-full flex items-center justify-center px-5 py-8">
+      <div class="w-full max-w-sm text-center">
+        <div class="w-16 h-16 mx-auto rounded-full bg-amber-100 flex items-center justify-center text-amber-700 shadow-sm">
+          <i data-lucide="shield-alert" class="w-8 h-8"></i>
+        </div>
+        <h1 class="text-2xl font-extrabold text-gray-900 mt-4">Cora</h1>
+        <p class="text-sm font-bold text-gray-800 mt-5">Conta sem família vinculada</p>
+        <p id="accessGateEmail" class="text-[11px] text-gray-500 mt-1 break-all"></p>
+        <div class="bg-white border border-amber-100 rounded-2xl p-4 mt-5 text-left shadow-sm">
+          <p id="accessGateMessage" class="text-xs text-gray-600 leading-relaxed">Esta conta ainda não pertence à Família Cora.</p>
+          <p class="text-[10px] text-gray-400 mt-2">Na V4.5 adicionaremos convites e a opção de criar uma nova família.</p>
+        </div>
+        <button type="button" onclick="signOutUser()" class="w-full mt-4 py-3 text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-xl">Sair desta conta</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- V4.4: TELA DE AUTENTICAÇÃO -->
   <div id="authGate" class="fixed inset-0 z-[100] bg-[#FBF8F6] hidden overflow-y-auto">
     <div class="min-h-full flex items-center justify-center px-5 py-8">
       <div class="w-full max-w-sm">
