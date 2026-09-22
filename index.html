@@ -2,7 +2,17 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#be123c">
+  <meta name="application-name" content="Cora">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Cora">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="description" content="Cora — organização privada da família para enxoval, maternidade e financeiro.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <title>Cora</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -34,8 +44,8 @@
     const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 16; // V4.6.1 mantém o schema; corrige backup/export no cliente
-    const APP_MODEL = 'v4.6.1-backup-fix';
+    const SCHEMA_VERSION = 16; // V4.7 mantém o schema de dados; adiciona instalação PWA no cliente
+    const APP_MODEL = 'v4.7-pwa';
     const PENDING_INVITE_STORAGE_KEY = 'cora_pending_invite_v451';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
     // V4.5.1 mantém autenticação separada da autorização e fecha o modelo em uma família por conta.
@@ -2344,6 +2354,77 @@
       showAuthGate();
     }
 
+    // V4.7 — PWA: instalação como aplicativo sem alterar o comportamento online.
+    // O cache/offline completo fica reservado para a V4.8.
+    let deferredInstallPrompt = null;
+
+    function isRunningAsPwa() {
+      return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    }
+
+    function updatePwaInstallUI() {
+      const button = document.getElementById('settingsInstallAppButton');
+      const status = document.getElementById('settingsPwaStatus');
+      if (!button || !status) return;
+
+      if (isRunningAsPwa()) {
+        button.classList.add('hidden');
+        status.textContent = 'Cora está aberto como aplicativo neste dispositivo.';
+        status.className = 'text-[9px] text-emerald-700 leading-relaxed';
+        return;
+      }
+
+      if (deferredInstallPrompt) {
+        button.classList.remove('hidden');
+        button.disabled = false;
+        status.textContent = 'Instale o Cora para abrir pela tela inicial, sem precisar entrar pelo navegador.';
+        status.className = 'text-[9px] text-gray-500 leading-relaxed';
+        return;
+      }
+
+      button.classList.add('hidden');
+      status.textContent = 'Se o botão de instalação não aparecer, use o menu do navegador e escolha “Adicionar à tela inicial” ou “Instalar app”.';
+      status.className = 'text-[9px] text-gray-400 leading-relaxed';
+    }
+
+    async function installCoraApp() {
+      if (isRunningAsPwa()) {
+        updatePwaInstallUI();
+        return;
+      }
+      if (!deferredInstallPrompt) {
+        alert('O navegador ainda não liberou a instalação automática. Use o menu do navegador e escolha “Adicionar à tela inicial” ou “Instalar app”.');
+        return;
+      }
+      try {
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+      } catch (error) {
+        console.warn('Instalação do Cora não concluída:', error);
+      } finally {
+        deferredInstallPrompt = null;
+        updatePwaInstallUI();
+      }
+    }
+
+    function registerCoraServiceWorker() {
+      if (!('serviceWorker' in navigator)) return;
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost') return;
+      navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .catch(error => console.warn('Service Worker do Cora não pôde ser registrado:', error));
+    }
+
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      updatePwaInstallUI();
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      updatePwaInstallUI();
+    });
+
     function initAuth() {
       const toggleWrap = document.getElementById('authToggleWrap');
       if (toggleWrap) toggleWrap.classList.toggle('hidden', !ALLOW_SELF_REGISTRATION);
@@ -2377,6 +2458,8 @@
 
     window.onload = function() {
       lucide.createIcons();
+      registerCoraServiceWorker();
+      updatePwaInstallUI();
       initAuth();
     };
 
@@ -3277,6 +3360,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         ? 'A restauração substitui somente os perfis presentes no arquivo; membros e convites ficam intactos.'
         : 'Qualquer membro pode exportar. Somente o proprietário pode restaurar.';
       updateBackupStatus();
+      updatePwaInstallUI();
       document.getElementById('modalSettings').classList.remove('hidden');
       await loadFamilyChildren().catch(() => {});
       refreshChildSelectors();
@@ -4652,6 +4736,17 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       <button type="button" onclick="closeModal('modalSettings'); openFamilyModal();" class="w-full py-3 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center gap-2">
         <i data-lucide="users" class="w-4 h-4"></i> Gerenciar família
       </button>
+
+      <div class="border-t border-gray-100 pt-4 space-y-2">
+        <div>
+          <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Aplicativo</p>
+          <p class="text-[10px] text-gray-500 mt-1">Instale o Cora na tela inicial para abrir em modo de aplicativo. O funcionamento offline completo será implementado na próxima etapa.</p>
+        </div>
+        <button type="button" id="settingsInstallAppButton" onclick="installCoraApp()" class="hidden w-full py-3 text-xs font-bold text-violet-700 bg-violet-50 border border-violet-100 rounded-xl flex items-center justify-center gap-2 disabled:pointer-events-none">
+          <i data-lucide="download" class="w-4 h-4"></i> Instalar Cora neste dispositivo
+        </button>
+        <p id="settingsPwaStatus" class="text-[9px] text-gray-400 leading-relaxed">Verificando disponibilidade de instalação...</p>
+      </div>
 
       <div class="border-t border-gray-100 pt-4 space-y-2">
         <div>
