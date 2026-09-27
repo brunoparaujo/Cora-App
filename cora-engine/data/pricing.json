@@ -1,0 +1,2602 @@
+{
+  "metadata": {
+    "app": "Cora",
+    "version": "4.8A3",
+    "status": "frozen_validated",
+    "currency": "BRL",
+    "market": "BR",
+    "calibrationDate": "2026-09-23",
+    "defaultTier": "intermediate",
+    "tierLabels": {
+      "economic": "Econômico",
+      "intermediate": "Intermediário",
+      "premium": "Premium"
+    },
+    "principles": [
+      "Faixas representam posicionamento de mercado e nível de gasto, não ruim/normal/bom.",
+      "Promoção é registrada por produto e por faixa, nunca como preço promocional genérico do item.",
+      "Preço de referência e exemplos de mercado são entidades diferentes.",
+      "V4.8 usa produtos reais como exemplos; V5 poderá trazer ofertas atuais.",
+      "Referências sem URL confiável usam null; não inventar links."
+    ],
+    "coverageNote": "Preços principais e de maior impacto estão calibrados. Itens opcionais/condicionais sem pricingKey não entram automaticamente no orçamento base.",
+    "revision": "r2-complete-catalog-pricing-audit",
+    "revisedAt": "2026-09-23",
+    "optionalStyleRevision": {
+      "status": "examples_collected_tiers_not_frozen",
+      "rule": "Itens novos de estilo não entram no orçamento até serem aceitos. Não criar preço de referência sem calibração A3 específica.",
+      "items": [
+        "vestido_estilo_menina",
+        "saia_estilo_menina",
+        "laco_faixa_estilo_menina"
+      ]
+    },
+    "coveragePolicy": {
+      "allCatalogItemsMustHavePricingKey": true,
+      "doNotRecommendItemsMayHaveInformationalPriceButAreExcludedFromBudget": true,
+      "optionalItemsAreBudgetedOnlyAfterAcceptance": true,
+      "conditionalItemsAreBudgetedOnlyWhenConditionIsActive": true,
+      "formulaUsesActualProductPricingInsteadOfTiers": true
+    }
+  },
+  "priceReferences": {
+    "body_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 35
+      },
+      "intermediate": {
+        "reference": 60
+      },
+      "premium": {
+        "reference": 90
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "macacao_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 60
+      },
+      "intermediate": {
+        "reference": 120
+      },
+      "premium": {
+        "reference": 180
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "parte_baixo_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 60
+      },
+      "premium": {
+        "reference": 100
+      },
+      "confidence": "medium_high",
+      "notes": []
+    },
+    "parte_cima_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 60
+      },
+      "premium": {
+        "reference": 100
+      },
+      "confidence": "medium_high",
+      "notes": []
+    },
+    "casaquinho_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 60
+      },
+      "intermediate": {
+        "reference": 120
+      },
+      "premium": {
+        "reference": 220
+      },
+      "confidence": "medium",
+      "notes": []
+    },
+    "meia_par": {
+      "unit": "par",
+      "economic": {
+        "reference": 10
+      },
+      "intermediate": {
+        "reference": 20
+      },
+      "premium": {
+        "reference": 35
+      },
+      "confidence": "medium",
+      "notes": []
+    },
+    "manta_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 60
+      },
+      "intermediate": {
+        "reference": 120
+      },
+      "premium": {
+        "reference": 200
+      },
+      "confidence": "medium",
+      "notes": []
+    },
+    "cueiro_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 25
+      },
+      "intermediate": {
+        "reference": 55
+      },
+      "premium": {
+        "reference": 180
+      },
+      "confidence": "medium",
+      "notes": [
+        "Premium pode representar swaddle estruturado; registrar variante do produto."
+      ]
+    },
+    "berco": {
+      "unit": "un",
+      "economic": {
+        "reference": 650
+      },
+      "intermediate": {
+        "reference": 1000
+      },
+      "premium": {
+        "reference": 1800
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "colchao_berco": {
+      "unit": "un",
+      "economic": {
+        "reference": 220
+      },
+      "intermediate": {
+        "reference": 400
+      },
+      "premium": {
+        "reference": 900
+      },
+      "confidence": "medium",
+      "notes": []
+    },
+    "comoda": {
+      "unit": "un",
+      "economic": {
+        "reference": 850
+      },
+      "intermediate": {
+        "reference": 1300
+      },
+      "premium": {
+        "reference": 3000
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "trocador_comoda": {
+      "unit": "un",
+      "economic": {
+        "reference": 120
+      },
+      "intermediate": {
+        "reference": 200
+      },
+      "premium": {
+        "reference": 600
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "lencol_berco_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 50
+      },
+      "premium": {
+        "reference": 80
+      },
+      "confidence": "medium",
+      "notes": []
+    },
+    "protetor_impermeavel_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 50
+      },
+      "intermediate": {
+        "reference": 90
+      },
+      "premium": {
+        "reference": 150
+      },
+      "confidence": "medium",
+      "notes": []
+    },
+    "poltrona_amamentacao": {
+      "unit": "un",
+      "economic": {
+        "reference": 900
+      },
+      "intermediate": {
+        "reference": 1300
+      },
+      "premium": {
+        "reference": 2300
+      },
+      "confidence": "medium",
+      "notes": []
+    },
+    "berco_portatil": {
+      "unit": "un",
+      "economic": {
+        "reference": 550
+      },
+      "intermediate": {
+        "reference": 1100
+      },
+      "premium": {
+        "reference": 2200
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "baba_eletronica": {
+      "unit": "un",
+      "economic": {
+        "reference": 300
+      },
+      "intermediate": {
+        "reference": 550
+      },
+      "premium": {
+        "reference": 850
+      },
+      "confidence": "medium_high",
+      "notes": []
+    },
+    "banheira": {
+      "unit": "un",
+      "economic": {
+        "reference": 300
+      },
+      "intermediate": {
+        "reference": 600
+      },
+      "premium": {
+        "reference": 1200
+      },
+      "confidence": "high",
+      "notes": [
+        "Referências calibradas usando banheira com suporte como âncora confortável."
+      ],
+      "budgetVariant": "com_suporte"
+    },
+    "toalha_capuz_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 35
+      },
+      "intermediate": {
+        "reference": 65
+      },
+      "premium": {
+        "reference": 120
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "termometro_banho": {
+      "unit": "un",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 30
+      },
+      "premium": {
+        "reference": 35
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "sabonete_gel": {
+      "unit": "frasco",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 30
+      },
+      "premium": {
+        "reference": 100
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "hidratante_infantil": {
+      "unit": "frasco",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 50
+      },
+      "premium": {
+        "reference": 110
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "creme_barreira": {
+      "unit": "tubo_pote",
+      "economic": {
+        "reference": 45
+      },
+      "intermediate": {
+        "reference": 65
+      },
+      "premium": {
+        "reference": 90
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "lencos_pacote": {
+      "unit": "pacote_aprox_48",
+      "economic": {
+        "reference": 13
+      },
+      "intermediate": {
+        "reference": 17
+      },
+      "premium": {
+        "reference": 22
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "termometro_corporal": {
+      "unit": "un",
+      "economic": {
+        "reference": 25
+      },
+      "intermediate": {
+        "reference": 40
+      },
+      "premium": {
+        "reference": 120
+      },
+      "confidence": "medium",
+      "notes": []
+    },
+    "aspirador_nasal_manual": {
+      "unit": "un",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 30
+      },
+      "premium": {
+        "reference": 40
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "babador_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 15
+      },
+      "intermediate": {
+        "reference": 40
+      },
+      "premium": {
+        "reference": 100
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "copo_infantil_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 50
+      },
+      "premium": {
+        "reference": 75
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "colher_infantil_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 30
+      },
+      "premium": {
+        "reference": 50
+      },
+      "confidence": "medium_high",
+      "notes": []
+    },
+    "prato_tigela_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 45
+      },
+      "premium": {
+        "reference": 80
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "cadeira_alimentacao": {
+      "unit": "un",
+      "economic": {
+        "reference": 300
+      },
+      "intermediate": {
+        "reference": 800
+      },
+      "premium": {
+        "reference": 1500
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "mamadeira_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 60
+      },
+      "premium": {
+        "reference": 100
+      },
+      "confidence": "medium_high",
+      "notes": []
+    },
+    "coletor_leite_silicone": {
+      "unit": "un",
+      "economic": {
+        "reference": 40
+      },
+      "intermediate": {
+        "reference": 75
+      },
+      "premium": {
+        "reference": 110
+      },
+      "confidence": "medium",
+      "notes": []
+    },
+    "carrinho": {
+      "unit": "un",
+      "economic": {
+        "reference": 700
+      },
+      "intermediate": {
+        "reference": 1500
+      },
+      "premium": {
+        "reference": 3000
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "bolsa_mochila_passeio": {
+      "unit": "un",
+      "economic": {
+        "reference": 150
+      },
+      "intermediate": {
+        "reference": 360
+      },
+      "premium": {
+        "reference": 550
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "trocador_portatil": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 50
+      },
+      "premium": {
+        "reference": 100
+      },
+      "confidence": "medium",
+      "notes": []
+    },
+    "sling_carregador": {
+      "unit": "un",
+      "economic": {
+        "reference": 150
+      },
+      "intermediate": {
+        "reference": 350
+      },
+      "premium": {
+        "reference": 700
+      },
+      "confidence": "high",
+      "notes": [
+        "Âncoras incluem Cosco/Safety 1st no econômico-intermediário e Maxi-Cosi/BabyBjörn no premium."
+      ]
+    },
+    "almofada_amamentacao": {
+      "unit": "un",
+      "economic": {
+        "reference": 90
+      },
+      "intermediate": {
+        "reference": 140
+      },
+      "premium": {
+        "reference": 300
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "sutia_amamentacao_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 35
+      },
+      "intermediate": {
+        "reference": 90
+      },
+      "premium": {
+        "reference": 250
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "absorvente_seios_pacote": {
+      "unit": "pacote",
+      "economic": {
+        "reference": 25
+      },
+      "intermediate": {
+        "reference": 36
+      },
+      "premium": {
+        "reference": 67
+      },
+      "confidence": "high",
+      "notes": []
+    },
+    "bebe_conforto": {
+      "unit": "un",
+      "confidence": "medium_high",
+      "variantPricing": {
+        "sem_isofix": {
+          "economic": {
+            "reference": 500
+          },
+          "intermediate": {
+            "reference": 700
+          },
+          "premium": {
+            "reference": 1500
+          },
+          "notes": [
+            "Faixa para soluções sem ISOFIX; produto/base veicular pode variar conforme modelo."
+          ]
+        },
+        "com_isofix": {
+          "economic": {
+            "reference": 900
+          },
+          "intermediate": {
+            "reference": 1100
+          },
+          "premium": {
+            "reference": 3400
+          },
+          "notes": [
+            "ISOFIX é característica do bebê conforto; não existe meta separada “base ISOFIX”."
+          ]
+        }
+      }
+    },
+    "fralda_descartavel_unit": {
+      "unit": "un",
+      "confidence": "medium",
+      "model": "by_diaper_size_and_tier",
+      "planningReferenceM": {
+        "economic": {
+          "reference": 1.05
+        },
+        "intermediate": {
+          "reference": 1.4
+        },
+        "premium": {
+          "reference": 1.85
+        }
+      },
+      "notes": [
+        "Referência M serve apenas ao protótipo do motor; produção deve manter preço por tamanho de fralda.",
+        "Tamanho de fralda não equivale automaticamente à grade RN/P/M/G/GG de roupas.",
+        "Referências por tamanho são para planejamento; aquisições reais substituem a estimativa."
+      ],
+      "sizePlanningReferences": {
+        "RN": {
+          "economic": {
+            "reference": 1.2
+          },
+          "intermediate": {
+            "reference": 1.6
+          },
+          "premium": {
+            "reference": 1.95
+          }
+        },
+        "P": {
+          "economic": {
+            "reference": 1.0
+          },
+          "intermediate": {
+            "reference": 1.3
+          },
+          "premium": {
+            "reference": 1.7
+          }
+        },
+        "M": {
+          "economic": {
+            "reference": 1.05
+          },
+          "intermediate": {
+            "reference": 1.4
+          },
+          "premium": {
+            "reference": 1.85
+          }
+        },
+        "G": {
+          "economic": {
+            "reference": 1.1
+          },
+          "intermediate": {
+            "reference": 1.5
+          },
+          "premium": {
+            "reference": 1.9
+          }
+        },
+        "XG": {
+          "economic": {
+            "reference": 1.2
+          },
+          "intermediate": {
+            "reference": 1.65
+          },
+          "premium": {
+            "reference": 2.1
+          }
+        },
+        "XXG": {
+          "economic": {
+            "reference": 1.3
+          },
+          "intermediate": {
+            "reference": 1.8
+          },
+          "premium": {
+            "reference": 2.3
+          }
+        }
+      }
+    },
+    "touca_frio_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 50
+      },
+      "premium": {
+        "reference": 80
+      },
+      "confidence": "medium_high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.carters.com.br/infantil/carters/bebe-menina/acessorios",
+        "https://www.alobebe.com.br/fofinho"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "chapeu_sol_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 70
+      },
+      "premium": {
+        "reference": 120
+      },
+      "confidence": "medium_high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.carters.com.br/infantil/bebes-menina/vestido",
+        "https://www.carters.com.br/infantil/bebes-menina/conjunto"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "luvas_par": {
+      "unit": "par",
+      "economic": {
+        "reference": 15
+      },
+      "intermediate": {
+        "reference": 30
+      },
+      "premium": {
+        "reference": 60
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/fofinho",
+        "https://www.tiptop.com.br/meninas/bebe-0-a-12-meses/saida-maternidade"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "sapatinho_macrio_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 70
+      },
+      "premium": {
+        "reference": 120
+      },
+      "confidence": "medium_high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/fofinho",
+        "https://www.tiptop.com.br/meninas/bebe-0-a-12-meses/saida-maternidade"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "vestido_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 60
+      },
+      "intermediate": {
+        "reference": 150
+      },
+      "premium": {
+        "reference": 230
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.carters.com.br/infantil/bebes-menina/vestido"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "saia_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 40
+      },
+      "intermediate": {
+        "reference": 90
+      },
+      "premium": {
+        "reference": 160
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.carters.com.br/infantil/bebes-menina/conjunto"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "laco_faixa_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 8
+      },
+      "intermediate": {
+        "reference": 20
+      },
+      "premium": {
+        "reference": 35
+      },
+      "confidence": "high",
+      "notes": [
+        "Preço unitário derivado de kits quando aplicável."
+      ],
+      "sourceUrls": [
+        "https://www.carters.com.br/infantil/carters/bebe-menina/acessorios"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "roupa_especial_passeio_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 70
+      },
+      "intermediate": {
+        "reference": 160
+      },
+      "premium": {
+        "reference": 230
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.carters.com.br/infantil/bebes-menina/conjunto"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "saida_maternidade_set": {
+      "unit": "conjunto",
+      "economic": {
+        "reference": 180
+      },
+      "intermediate": {
+        "reference": 280
+      },
+      "premium": {
+        "reference": 400
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.tiptop.com.br/meninas/bebe-0-a-12-meses/saida-maternidade",
+        "https://www.alobebe.com.br/fofinho"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "capa_trocador_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 25
+      },
+      "intermediate": {
+        "reference": 45
+      },
+      "premium": {
+        "reference": 80
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [
+        "https://lista.mercadolivre.com.br/capa-para-trocador-bebe"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "cesto_roupa_suja": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 70
+      },
+      "premium": {
+        "reference": 150
+      },
+      "confidence": "medium_high",
+      "notes": [],
+      "sourceUrls": [
+        "https://lista.mercadolivre.com.br/cesto-de-roupa-sujas-bebe"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "lixeira_fraldas": {
+      "unit": "un",
+      "economic": {
+        "reference": 50
+      },
+      "intermediate": {
+        "reference": 180
+      },
+      "premium": {
+        "reference": 350
+      },
+      "confidence": "medium_high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/lixeira-magica-anti-odor-para-fralda/p"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "moises": {
+      "unit": "un",
+      "economic": {
+        "reference": 500
+      },
+      "intermediate": {
+        "reference": 1900
+      },
+      "premium": {
+        "reference": 3500
+      },
+      "confidence": "medium_high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/quarto-e-enxoval/enxoval/moises"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "saco_dormir": {
+      "unit": "un",
+      "economic": {
+        "reference": 70
+      },
+      "intermediate": {
+        "reference": 150
+      },
+      "premium": {
+        "reference": 300
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/banho-e-higiene/acessorios-para-o-banho"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "luz_noturna": {
+      "unit": "un",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 50
+      },
+      "premium": {
+        "reference": 120
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://lista.mercadolivre.com.br/luz-noturna-quarto-de-bebe"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "cortina_blackout": {
+      "unit": "un",
+      "economic": {
+        "reference": 150
+      },
+      "intermediate": {
+        "reference": 250
+      },
+      "premium": {
+        "reference": 400
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.graodegente.com.br/categoria/cortina-quarto-de-bebe/"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "mosquiteiro_quarto": {
+      "unit": "un",
+      "economic": {
+        "reference": 70
+      },
+      "intermediate": {
+        "reference": 100
+      },
+      "premium": {
+        "reference": 150
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/mosquiteiro?map=ft"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "termometro_ambiente": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 70
+      },
+      "premium": {
+        "reference": 150
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "cabides_organizadores": {
+      "unit": "kit",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 50
+      },
+      "premium": {
+        "reference": 110
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://lista.mercadolivre.com.br/cabide-bebe"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "protetor_berco_acolchoado": {
+      "unit": "kit_ou_conjunto",
+      "economic": {
+        "reference": 120
+      },
+      "intermediate": {
+        "reference": 250
+      },
+      "premium": {
+        "reference": 450
+      },
+      "confidence": "medium",
+      "notes": [
+        "Preço apenas informativo; item conhecido pelo catálogo para NÃO ser recomendado no espaço de sono."
+      ],
+      "sourceUrls": [
+        "https://www.graodegente.com.br/produto/kit-berco-nuvem-de-algodao/"
+      ],
+      "budgetPolicy": "informational_only_excluded"
+    },
+    "ninho_redutor_sono": {
+      "unit": "un",
+      "economic": {
+        "reference": 100
+      },
+      "intermediate": {
+        "reference": 150
+      },
+      "premium": {
+        "reference": 300
+      },
+      "confidence": "medium_high",
+      "notes": [
+        "Preço apenas informativo; item NÃO recomendado como superfície de sono."
+      ],
+      "sourceUrls": [
+        "https://www.graodegente.com.br/produto/ninho-para-bebe-tranca-com-mosquiteiro-rosa-e-cinza-80cm/"
+      ],
+      "budgetPolicy": "informational_only_excluded"
+    },
+    "travesseiro_bebe": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 60
+      },
+      "premium": {
+        "reference": 120
+      },
+      "confidence": "medium",
+      "notes": [
+        "Preço apenas informativo; não entra no orçamento padrão de sono seguro."
+      ],
+      "sourceUrls": [
+        "https://www.graodegente.com.br/produto/kit-berco-nuvem-de-algodao/"
+      ],
+      "budgetPolicy": "informational_only_excluded"
+    },
+    "posicionador_sono": {
+      "unit": "un",
+      "economic": {
+        "reference": 50
+      },
+      "intermediate": {
+        "reference": 100
+      },
+      "premium": {
+        "reference": 180
+      },
+      "confidence": "low",
+      "notes": [
+        "Preço apenas informativo; não entra no orçamento padrão."
+      ],
+      "sourceUrls": [],
+      "budgetPolicy": "informational_only_excluded"
+    },
+    "edredom_solto_berco": {
+      "unit": "un",
+      "economic": {
+        "reference": 80
+      },
+      "intermediate": {
+        "reference": 150
+      },
+      "premium": {
+        "reference": 300
+      },
+      "confidence": "medium",
+      "notes": [
+        "Preço apenas informativo; não usar solto no berço durante o sono."
+      ],
+      "sourceUrls": [
+        "https://www.graodegente.com.br/produto/kit-berco-nuvem-de-algodao/"
+      ],
+      "budgetPolicy": "informational_only_excluded"
+    },
+    "suporte_banheira": {
+      "unit": "un",
+      "economic": {
+        "reference": 200
+      },
+      "intermediate": {
+        "reference": 300
+      },
+      "premium": {
+        "reference": 900
+      },
+      "confidence": "high",
+      "notes": [
+        "Se vier incluído com a banheira, não somar duas vezes."
+      ],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/banho-e-higiene/banheiras/banheira-com-suporte?initialMap=c%2Cc%2Cc&initialQuery=banho-e-higiene%2Fbanheiras%2Fbanheira-com-suporte&map=category-1%2Ccategory-2%2Ccategory-3"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "escova_pente_set": {
+      "unit": "kit",
+      "economic": {
+        "reference": 25
+      },
+      "intermediate": {
+        "reference": 50
+      },
+      "premium": {
+        "reference": 100
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/banho-e-higiene/acessorios-para-o-banho"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "kit_unha": {
+      "unit": "kit",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 50
+      },
+      "premium": {
+        "reference": 100
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/banho-e-higiene/acessorios-para-higiene/kit-higiene-e-cortador-de-unha"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "algodao_estoque_inicial": {
+      "unit": "estoque_inicial",
+      "economic": {
+        "reference": 10
+      },
+      "intermediate": {
+        "reference": 20
+      },
+      "premium": {
+        "reference": 35
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "necessaire_higiene": {
+      "unit": "un",
+      "economic": {
+        "reference": 40
+      },
+      "intermediate": {
+        "reference": 80
+      },
+      "premium": {
+        "reference": 150
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "talco": {
+      "unit": "frasco",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 30
+      },
+      "premium": {
+        "reference": 50
+      },
+      "confidence": "medium",
+      "notes": [
+        "Preço apenas informativo; item marcado do_not_recommend."
+      ],
+      "sourceUrls": [],
+      "budgetPolicy": "informational_only_excluded"
+    },
+    "fralda_pano_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 35
+      },
+      "intermediate": {
+        "reference": 50
+      },
+      "premium": {
+        "reference": 70
+      },
+      "confidence": "medium_high",
+      "notes": [
+        "Quantidade depende do modo de uso e rotina de lavagem."
+      ],
+      "sourceUrls": [
+        "https://produto.mercadolivre.com.br/MLB-4807355917-kit-4-fralda-ecologica-moderna-de-pano-boto-4-absorventes-_JM"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "fraldinha_boca_ombro_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 7
+      },
+      "intermediate": {
+        "reference": 18
+      },
+      "premium": {
+        "reference": 35
+      },
+      "confidence": "high",
+      "notes": [
+        "Preço unitário; muitos produtos são vendidos em kits."
+      ],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/quarto-e-enxoval/enxoval/fralda-de-boca"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "escova_mamadeira": {
+      "unit": "un",
+      "economic": {
+        "reference": 15
+      },
+      "intermediate": {
+        "reference": 30
+      },
+      "premium": {
+        "reference": 60
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/mamadeiras"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "escorredor_mamadeira": {
+      "unit": "un",
+      "economic": {
+        "reference": 45
+      },
+      "intermediate": {
+        "reference": 60
+      },
+      "premium": {
+        "reference": 90
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/mamadeiras/escorredor-para-mamadeira"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "esterilizador": {
+      "unit": "un",
+      "economic": {
+        "reference": 60
+      },
+      "intermediate": {
+        "reference": 250
+      },
+      "premium": {
+        "reference": 800
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/mamadeiras/aquecedor-e-esterilizador-para-mamadeira"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "aquecedor_mamadeira": {
+      "unit": "un",
+      "economic": {
+        "reference": 45
+      },
+      "intermediate": {
+        "reference": 150
+      },
+      "premium": {
+        "reference": 300
+      },
+      "confidence": "medium_high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/mamadeiras/aquecedor-e-esterilizador-para-mamadeira"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "dosador_leite_po": {
+      "unit": "un",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 35
+      },
+      "premium": {
+        "reference": 65
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/potes-para-comida/porta-leite-em-po"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "bolsa_termica_leite": {
+      "unit": "un",
+      "economic": {
+        "reference": 50
+      },
+      "intermediate": {
+        "reference": 100
+      },
+      "premium": {
+        "reference": 200
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "armazenamento_leite": {
+      "unit": "kit_ou_pacote",
+      "economic": {
+        "reference": 35
+      },
+      "intermediate": {
+        "reference": 50
+      },
+      "premium": {
+        "reference": 150
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/potes-para-comida/pote-para-leite-materno"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "copinho_oferta_leite": {
+      "unit": "kit_ou_un",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 40
+      },
+      "premium": {
+        "reference": 70
+      },
+      "confidence": "medium_high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/potes-para-comida/pote-para-leite-materno"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "colher_dosadora": {
+      "unit": "un",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 40
+      },
+      "premium": {
+        "reference": 60
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/colher-dosadora-em-silicone-com-ventosa-verde-248/p"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "avental_alimentacao": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 60
+      },
+      "premium": {
+        "reference": 100
+      },
+      "confidence": "medium_high",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "potes_porcoes_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 10
+      },
+      "intermediate": {
+        "reference": 20
+      },
+      "premium": {
+        "reference": 35
+      },
+      "confidence": "high",
+      "notes": [
+        "Quantidade do catálogo é em unidades; não multiplicar novamente por um preço de kit."
+      ],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/potes-para-comida"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "prato_ventosa": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 45
+      },
+      "premium": {
+        "reference": 90
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/pratos-e-talheres/pratos"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "jogo_americano": {
+      "unit": "un",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 40
+      },
+      "premium": {
+        "reference": 80
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "tapete_chao": {
+      "unit": "un",
+      "economic": {
+        "reference": 40
+      },
+      "intermediate": {
+        "reference": 80
+      },
+      "premium": {
+        "reference": 150
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "pote_termico": {
+      "unit": "un",
+      "economic": {
+        "reference": 70
+      },
+      "intermediate": {
+        "reference": 120
+      },
+      "premium": {
+        "reference": 200
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/potes-para-comida",
+        "https://www.alobebe.com.br/tiny-love"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "processador_bebe": {
+      "unit": "un",
+      "economic": {
+        "reference": 120
+      },
+      "intermediate": {
+        "reference": 250
+      },
+      "premium": {
+        "reference": 500
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "liquidificador_bebe": {
+      "unit": "un",
+      "economic": {
+        "reference": 120
+      },
+      "intermediate": {
+        "reference": 300
+      },
+      "premium": {
+        "reference": 600
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "gel_termico_reutilizavel": {
+      "unit": "un",
+      "economic": {
+        "reference": 10
+      },
+      "intermediate": {
+        "reference": 20
+      },
+      "premium": {
+        "reference": 40
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "saquinho_impermeavel": {
+      "unit": "un",
+      "economic": {
+        "reference": 20
+      },
+      "intermediate": {
+        "reference": 45
+      },
+      "premium": {
+        "reference": 90
+      },
+      "confidence": "medium_high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/quarto-e-enxoval/enxoval/saquinho-de-roupa-para-maternidade"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "capa_chuva_carrinho": {
+      "unit": "un",
+      "economic": {
+        "reference": 60
+      },
+      "intermediate": {
+        "reference": 85
+      },
+      "premium": {
+        "reference": 150
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/passeio/acessorios-para-carrinho-de-bebe/capa-de-chuva-para-carrinho"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "mosquiteiro_carrinho": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 80
+      },
+      "premium": {
+        "reference": 300
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/mosquiteiro-com-ziper-para-carrinho-safety-36/p",
+        "https://www.alobebe.com.br/mosquiteiro?map=ft"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "organizador_carrinho": {
+      "unit": "un",
+      "economic": {
+        "reference": 70
+      },
+      "intermediate": {
+        "reference": 100
+      },
+      "premium": {
+        "reference": 190
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://safety1st.com.br/products/bolsa-organizadora",
+        "https://www.alobebe.com.br/passeio/acessorios-para-carrinho-de-bebe"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "porta_copos_carrinho": {
+      "unit": "un",
+      "economic": {
+        "reference": 40
+      },
+      "intermediate": {
+        "reference": 60
+      },
+      "premium": {
+        "reference": 350
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/passeio/acessorios-para-carrinho-de-bebe/acessorios-para-carrinhos-de-bebe"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "calcinha_pos_parto_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 60
+      },
+      "premium": {
+        "reference": 140
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/amamentacao/lingerie-gestante-e-pos-parto",
+        "https://www.joge.com.br/maternidade"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "absorvente_pos_parto_pacote": {
+      "unit": "pacote",
+      "economic": {
+        "reference": 15
+      },
+      "intermediate": {
+        "reference": 25
+      },
+      "premium": {
+        "reference": 45
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "pijama_amamentacao_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 100
+      },
+      "intermediate": {
+        "reference": 250
+      },
+      "premium": {
+        "reference": 500
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.joge.com.br/maternidade"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "lanolina_mamilos": {
+      "unit": "tubo",
+      "economic": {
+        "reference": 25
+      },
+      "intermediate": {
+        "reference": 75
+      },
+      "premium": {
+        "reference": 120
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.buscape.com.br/busca/lanolina"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "cinta_pos_parto": {
+      "unit": "un",
+      "economic": {
+        "reference": 70
+      },
+      "intermediate": {
+        "reference": 150
+      },
+      "premium": {
+        "reference": 300
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/amamentacao/lingerie-gestante-e-pos-parto"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "roupa_amamentacao_unit": {
+      "unit": "un",
+      "economic": {
+        "reference": 40
+      },
+      "intermediate": {
+        "reference": 90
+      },
+      "premium": {
+        "reference": 150
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://lista.mercadolivre.com.br/blusa-amamentacao"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "chinelo_confortavel": {
+      "unit": "par",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 60
+      },
+      "premium": {
+        "reference": 180
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "roupao_mae": {
+      "unit": "un",
+      "economic": {
+        "reference": 80
+      },
+      "intermediate": {
+        "reference": 250
+      },
+      "premium": {
+        "reference": 550
+      },
+      "confidence": "medium_high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.joge.com.br/maternidade"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "necessaire_mae": {
+      "unit": "un",
+      "economic": {
+        "reference": 50
+      },
+      "intermediate": {
+        "reference": 100
+      },
+      "premium": {
+        "reference": 200
+      },
+      "confidence": "medium",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "intermediario_silicone": {
+      "unit": "par_ou_un",
+      "economic": {
+        "reference": 15
+      },
+      "intermediate": {
+        "reference": 30
+      },
+      "premium": {
+        "reference": 70
+      },
+      "confidence": "medium_high",
+      "notes": [],
+      "sourceUrls": [],
+      "budgetPolicy": "normal"
+    },
+    "conchas_seios": {
+      "unit": "par",
+      "economic": {
+        "reference": 30
+      },
+      "intermediate": {
+        "reference": 45
+      },
+      "premium": {
+        "reference": 60
+      },
+      "confidence": "high",
+      "notes": [],
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/amamentacao/concha-para-seios"
+      ],
+      "budgetPolicy": "normal"
+    },
+    "bomba_leite": {
+      "unit": "un",
+      "pricingModel": "variant_tiered",
+      "confidence": "high",
+      "variantPricing": {
+        "manual": {
+          "economic": {
+            "reference": 150
+          },
+          "intermediate": {
+            "reference": 200
+          },
+          "premium": {
+            "reference": 300
+          }
+        },
+        "eletrica_simples": {
+          "economic": {
+            "reference": 300
+          },
+          "intermediate": {
+            "reference": 600
+          },
+          "premium": {
+            "reference": 900
+          }
+        },
+        "eletrica_dupla_hands_free": {
+          "economic": {
+            "reference": 700
+          },
+          "intermediate": {
+            "reference": 1200
+          },
+          "premium": {
+            "reference": 1900
+          }
+        }
+      },
+      "sourceUrls": [
+        "https://www.alobebe.com.br/alimentacao/amamentacao/tira-leite"
+      ],
+      "notes": [
+        "Primeiro selecionar a variante funcional; depois aplicar a faixa de preço."
+      ]
+    },
+    "formula_infantil_actual_product": {
+      "unit": "lata_800g_ou_equivalente",
+      "pricingModel": "actual_product",
+      "confidence": "high",
+      "fallbackPlanningReferenceBRL": 90,
+      "observedExamplesBRL": [
+        67.99,
+        86.99,
+        139.99
+      ],
+      "sourceUrls": [
+        "https://www.drogasil.com.br/nestogeno-1-leite-infantil-po-800g.html",
+        "https://www.drogasil.com.br/aptamil-premium-1-leite-infantil-800g.html",
+        "https://www.drogasil.com.br/nan-supreme-1-leite-infantil-800g.html"
+      ],
+      "notes": [
+        "Não usar Econômico/Intermediário/Premium para fórmula. O valor de R$90 é apenas fallback de planejamento até o produto real ser selecionado; não é recomendação de produto."
+      ]
+    }
+  },
+  "marketReferences": [
+    {
+      "pricingKey": "banheira",
+      "tier": "intermediate",
+      "brand": "Safety 1st",
+      "product": "Banheira Smile com suporte",
+      "observedRegularPriceBRL": 599,
+      "observedPromoPriceBRL": 536.74,
+      "retailerOrSource": "Safety 1st / canal de promoções",
+      "referenceUrl": "https://safety1st.com.br/",
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Promoção pertence à mesma faixa intermediária."
+      ]
+    },
+    {
+      "pricingKey": "banheira",
+      "tier": "premium",
+      "brand": "Maxi-Cosi",
+      "product": "Banheira Indigo Plus com suporte",
+      "observedRegularPriceBRL": 1199,
+      "observedPromoPriceBRL": 1078.2,
+      "retailerOrSource": "referência de mercado",
+      "referenceUrl": "https://maxi-cosi.com.br/",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "cadeira_alimentacao",
+      "tier": "economic",
+      "brand": "Cosco",
+      "product": "Cadeira de refeição Cook",
+      "observedRegularPriceBRL": 299.9,
+      "retailerOrSource": "Cosco",
+      "referenceUrl": "https://coscokids.com.br/",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "cadeira_alimentacao",
+      "tier": "intermediate",
+      "brand": "Safety 1st",
+      "product": "Cadeira de refeição Feed",
+      "observedRegularPriceBRL": 799.9,
+      "observedPromoPriceBRL": 759.91,
+      "retailerOrSource": "Safety 1st",
+      "referenceUrl": "https://safety1st.com.br/collections/cadeiras",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "cadeira_alimentacao",
+      "tier": "premium",
+      "brand": "Maxi-Cosi",
+      "product": "Moa",
+      "observedRegularPriceBRL": 1499,
+      "observedPromoPriceBRL": 1349.1,
+      "retailerOrSource": "Maxi-Cosi / varejo",
+      "referenceUrl": "https://maxi-cosi.com.br/",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "carrinho",
+      "tier": "intermediate",
+      "brand": "Safety 1st",
+      "product": "Spark Plus",
+      "observedRegularPriceBRL": 1499,
+      "retailerOrSource": "Safety 1st",
+      "referenceUrl": "https://safety1st.com.br/",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "carrinho",
+      "tier": "premium",
+      "brand": "Maxi-Cosi",
+      "product": "Eva³",
+      "observedRegularPriceBRL": 2299,
+      "observedPromoPriceBRL": 2184.05,
+      "retailerOrSource": "Maxi-Cosi / varejo",
+      "referenceUrl": "https://maxi-cosi.com.br/collections/carrinho-de-bebe",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "bolsa_mochila_passeio",
+      "tier": "intermediate",
+      "brand": "Safety 1st",
+      "product": "Mochila Way",
+      "observedRegularPriceBRL": 359.9,
+      "observedPromoPriceBRL": 323.91,
+      "retailerOrSource": "Safety 1st",
+      "referenceUrl": "https://safety1st.com.br/products/mochila-way",
+      "observedAt": "2026-09-23",
+      "bundleFulfillment": [
+        "bolsa_mochila_passeio",
+        "trocador_portatil"
+      ]
+    },
+    {
+      "pricingKey": "sling_carregador",
+      "tier": "economic",
+      "brand": "Cosco",
+      "product": "Canguru Loop",
+      "observedRegularPriceBRL": 139.9,
+      "retailerOrSource": "Cosco",
+      "referenceUrl": "https://coscokids.com.br/products/canguru-loop",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "sling_carregador",
+      "tier": "premium",
+      "brand": "Maxi-Cosi",
+      "product": "Carregador / canguru Maxi-Cosi",
+      "observedRegularPriceBRL": 599,
+      "observedPromoPriceBRL": 569.05,
+      "retailerOrSource": "Mercado Livre - loja oficial Maxi-Cosi (evidência fornecida pelo usuário)",
+      "referenceUrl": null,
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Manter sem URL até registrar a página canônica exata."
+      ]
+    },
+    {
+      "pricingKey": "sling_carregador",
+      "tier": "premium",
+      "brand": "BabyBjörn",
+      "product": "Baby Carrier Free 3D Mesh",
+      "observedRegularPriceBRL": 1015.9,
+      "retailerOrSource": "Mercado Livre - Internacional (evidência fornecida pelo usuário)",
+      "referenceUrl": null,
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Exemplo de teto Premium; importação pode distorcer o preço."
+      ]
+    },
+    {
+      "pricingKey": "bebe_conforto",
+      "variant": "com_isofix",
+      "tier": "intermediate",
+      "brand": "Safety 1st",
+      "product": "4Safe com Base Isofix",
+      "observedRegularPriceBRL": 1098,
+      "observedPromoPriceBRL": 1043.1,
+      "retailerOrSource": "Safety 1st",
+      "referenceUrl": "https://safety1st.com.br/collections/bebe-conforto-primeira-viagem",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "bebe_conforto",
+      "variant": "com_isofix",
+      "tier": "premium",
+      "brand": "Maxi-Cosi",
+      "product": "Pebble / Pebble Pro² com FamilyFix 360 Pro²",
+      "observedRegularPriceBRL": 3419,
+      "retailerOrSource": "varejo",
+      "referenceUrl": null,
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Confirmar link canônico antes de exibir no app."
+      ]
+    },
+    {
+      "pricingKey": "bebe_conforto",
+      "variant": "sem_isofix",
+      "tier": "economic",
+      "brand": "Cosco",
+      "product": "Wizz com base veicular",
+      "observedRegularPriceBRL": 495,
+      "retailerOrSource": "varejo",
+      "referenceUrl": null,
+      "observedAt": "2026-09-23"
+    },
+    {
+      "catalogItemId": "vestido_estilo_menina",
+      "tier": null,
+      "brand": "Carter's",
+      "product": "Vestido bebê listrado com laço e lastex",
+      "observedRegularPriceBRL": 149.99,
+      "retailerOrSource": "Carter's Oficial",
+      "referenceUrl": "https://www.carters.com.br/infantil/bebes-menina/vestido",
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Referência de mercado coletada para futura calibração; ainda não define tier."
+      ]
+    },
+    {
+      "catalogItemId": "vestido_estilo_menina",
+      "tier": null,
+      "brand": "Carter's",
+      "product": "Vestido Carter's com calcinha bebê menina em algodão xadrez",
+      "observedRegularPriceBRL": 229.99,
+      "retailerOrSource": "Carter's Oficial",
+      "referenceUrl": "https://www.carters.com.br/produto/vestido-carter-s-com-calcinha-bebe-menina-em-algod-o-xadrez-natal-multicor-16553870_sku",
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Referência de mercado coletada para futura calibração; ainda não define tier."
+      ]
+    },
+    {
+      "catalogItemId": "laco_faixa_estilo_menina",
+      "tier": null,
+      "brand": "Laços e Babados",
+      "product": "Faixa de cabelo com laço",
+      "observedRegularPriceBRL": 12.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/roupas/acessorios/acessorios-para-cabelo",
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Referência de mercado coletada para futura calibração; ainda não define tier."
+      ]
+    },
+    {
+      "catalogItemId": "laco_faixa_estilo_menina",
+      "tier": null,
+      "brand": "Carter's",
+      "product": "Kit faixa de cabelo com laço 3 peças",
+      "observedRegularPriceBRL": 99.99,
+      "observedPromoPriceBRL": 69.99,
+      "retailerOrSource": "Carter's Oficial",
+      "referenceUrl": "https://www.carters.com.br/infantil/carters/bebe-menina/acessorios",
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Preço é do kit; referência coletada para futura calibração; ainda não define tier."
+      ]
+    },
+    {
+      "pricingKey": "vestido_unit",
+      "tier": "intermediate",
+      "brand": "Carter's",
+      "product": "Vestidos bebê",
+      "observedRegularPriceBRL": 149.99,
+      "retailerOrSource": "Carter's Oficial",
+      "referenceUrl": "https://www.carters.com.br/infantil/bebes-menina/vestido",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "laco_faixa_unit",
+      "tier": "premium",
+      "brand": "Carter's",
+      "product": "Kit faixa de cabelo com laço 3 peças",
+      "observedRegularPriceBRL": 99.99,
+      "observedPromoPriceBRL": 69.99,
+      "retailerOrSource": "Carter's Oficial",
+      "referenceUrl": "https://www.carters.com.br/infantil/carters/bebe-menina/acessorios",
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Preço do kit; pricingKey é unitário por acessório."
+      ]
+    },
+    {
+      "pricingKey": "saida_maternidade_set",
+      "tier": "intermediate",
+      "brand": "Tip Top",
+      "product": "Kit saída maternidade",
+      "observedRegularPriceBRL": 279.9,
+      "retailerOrSource": "Tip Top",
+      "referenceUrl": "https://www.tiptop.com.br/meninas/bebe-0-a-12-meses/saida-maternidade",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "cesto_roupa_suja",
+      "tier": "intermediate",
+      "brand": "Diversos",
+      "product": "Cesto roupa suja bebê",
+      "observedRegularPriceBRL": 66.66,
+      "retailerOrSource": "Mercado Livre",
+      "referenceUrl": "https://lista.mercadolivre.com.br/cesto-de-roupa-sujas-bebe",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "lixeira_fraldas",
+      "tier": "intermediate",
+      "brand": "Clingo",
+      "product": "Lixeira Mágica Anti Odor",
+      "observedRegularPriceBRL": 199.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/lixeira-magica-anti-odor-para-fralda/p",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "moises",
+      "tier": "intermediate",
+      "brand": "Maxi-Cosi",
+      "product": "Moisés Sense",
+      "observedRegularPriceBRL": 1899.0,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/quarto-e-enxoval/enxoval/moises",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "cortina_blackout",
+      "tier": "intermediate",
+      "brand": "Grão de Gente",
+      "product": "Cortina quarto bebê",
+      "observedRegularPriceBRL": 250.0,
+      "retailerOrSource": "Grão de Gente (faixa de categoria)",
+      "referenceUrl": "https://www.graodegente.com.br/categoria/cortina-quarto-de-bebe/",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "mosquiteiro_quarto",
+      "tier": "intermediate",
+      "brand": "Diversos",
+      "product": "Mosquiteiro para berço",
+      "observedRegularPriceBRL": 99.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/mosquiteiro?map=ft",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "suporte_banheira",
+      "tier": "economic",
+      "brand": "Burigotto",
+      "product": "Suporte para Banheira Mais",
+      "observedRegularPriceBRL": 274.9,
+      "observedPromoPriceBRL": 199.0,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/banho-e-higiene/banheiras/banheira-com-suporte?initialMap=c%2Cc%2Cc&initialQuery=banho-e-higiene%2Fbanheiras%2Fbanheira-com-suporte&map=category-1%2Ccategory-2%2Ccategory-3",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "kit_unha",
+      "tier": "intermediate",
+      "brand": "Diversos",
+      "product": "Kit cuidados bebê",
+      "observedRegularPriceBRL": 47.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/banho-e-higiene/acessorios-para-higiene/kit-higiene-e-cortador-de-unha",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "fralda_pano_unit",
+      "tier": "intermediate",
+      "brand": "Diversos",
+      "product": "Kit 4 fraldas ecológicas modernas + absorventes",
+      "observedRegularPriceBRL": 166.9,
+      "retailerOrSource": "Mercado Livre",
+      "referenceUrl": "https://produto.mercadolivre.com.br/MLB-4807355917-kit-4-fralda-ecologica-moderna-de-pano-boto-4-absorventes-_JM",
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Preço do kit; aproximadamente R$41,7 por fralda antes de considerar absorventes extras."
+      ]
+    },
+    {
+      "pricingKey": "fraldinha_boca_ombro_unit",
+      "tier": "intermediate",
+      "brand": "Diversos",
+      "product": "Kit fralda de boca 3 unidades",
+      "observedRegularPriceBRL": 50.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/quarto-e-enxoval/enxoval/fralda-de-boca",
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Preço do kit; referência unitária aproximada ~R$17."
+      ]
+    },
+    {
+      "pricingKey": "escorredor_mamadeira",
+      "tier": "intermediate",
+      "brand": "Kikka Boo",
+      "product": "Escorredor de mamadeiras",
+      "observedRegularPriceBRL": 69.9,
+      "observedPromoPriceBRL": 62.91,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/alimentacao/mamadeiras/escorredor-para-mamadeira",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "esterilizador",
+      "tier": "premium",
+      "brand": "Avent",
+      "product": "Esterilizador elétrico Advanced",
+      "observedRegularPriceBRL": 799.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/alimentacao/mamadeiras/aquecedor-e-esterilizador-para-mamadeira",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "dosador_leite_po",
+      "tier": "premium",
+      "brand": "Avent",
+      "product": "Pote dosador de leite em pó",
+      "observedRegularPriceBRL": 64.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/alimentacao/potes-para-comida/porta-leite-em-po",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "bomba_leite",
+      "variant": "manual",
+      "tier": "intermediate",
+      "brand": "MAM/Medela",
+      "product": "Bomba/extrator manual",
+      "observedRegularPriceBRL": 199.0,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/alimentacao/amamentacao/tira-leite",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "bomba_leite",
+      "variant": "eletrica_dupla_hands_free",
+      "tier": "premium",
+      "brand": "Medela",
+      "product": "Swing Maxi elétrica dupla",
+      "observedRegularPriceBRL": 1893.9,
+      "observedPromoPriceBRL": 1704.51,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/alimentacao/amamentacao/tira-leite",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "armazenamento_leite",
+      "tier": "premium",
+      "brand": "Avent",
+      "product": "Copos para armazenar leite",
+      "observedRegularPriceBRL": 149.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/alimentacao/potes-para-comida/pote-para-leite-materno",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "colher_dosadora",
+      "tier": "intermediate",
+      "brand": "Buba/Similar",
+      "product": "Colher dosadora em silicone",
+      "observedRegularPriceBRL": 41.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/colher-dosadora-em-silicone-com-ventosa-verde-248/p",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "prato_ventosa",
+      "tier": "premium",
+      "brand": "Tiny Love",
+      "product": "Prato com ventosa em silicone",
+      "observedRegularPriceBRL": 89.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/alimentacao/pratos-e-talheres/pratos",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "pote_termico",
+      "tier": "intermediate",
+      "brand": "Tiny Love/Twibex",
+      "product": "Pote térmico 300 ml",
+      "observedRegularPriceBRL": 119.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/alimentacao/potes-para-comida",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "capa_chuva_carrinho",
+      "tier": "intermediate",
+      "brand": "Love/Clingo",
+      "product": "Capa de chuva para carrinho",
+      "observedRegularPriceBRL": 84.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/passeio/acessorios-para-carrinho-de-bebe/capa-de-chuva-para-carrinho",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "mosquiteiro_carrinho",
+      "tier": "intermediate",
+      "brand": "Safety 1st",
+      "product": "Mosquiteiro com zíper para carrinho",
+      "observedRegularPriceBRL": 79.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/mosquiteiro-com-ziper-para-carrinho-safety-36/p",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "organizador_carrinho",
+      "tier": "intermediate",
+      "brand": "Safety 1st",
+      "product": "Bolsa organizadora",
+      "observedRegularPriceBRL": 99.0,
+      "retailerOrSource": "Safety 1st",
+      "referenceUrl": "https://safety1st.com.br/products/bolsa-organizadora",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "porta_copos_carrinho",
+      "tier": "intermediate",
+      "brand": "Maxi-Cosi",
+      "product": "Porta-copos com faixa ajustável",
+      "observedRegularPriceBRL": 59.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/passeio/acessorios-para-carrinho-de-bebe/acessorios-para-carrinhos-de-bebe",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "calcinha_pos_parto_unit",
+      "tier": "intermediate",
+      "brand": "Plié",
+      "product": "Calcinha gestante Maternity",
+      "observedRegularPriceBRL": 62.9,
+      "observedPromoPriceBRL": 42.61,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/alimentacao/amamentacao/lingerie-gestante-e-pos-parto",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "pijama_amamentacao_unit",
+      "tier": "premium",
+      "brand": "Jogê",
+      "product": "Pijama maternidade",
+      "observedRegularPriceBRL": 498.0,
+      "retailerOrSource": "Jogê",
+      "referenceUrl": "https://www.joge.com.br/maternidade",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "lanolina_mamilos",
+      "tier": "premium",
+      "brand": "Medela",
+      "product": "Purelan 37g",
+      "observedRegularPriceBRL": 109.0,
+      "retailerOrSource": "Buscapé/marketplace",
+      "referenceUrl": "https://www.buscape.com.br/busca/lanolina",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "cinta_pos_parto",
+      "tier": "intermediate",
+      "brand": "Plié",
+      "product": "Cinta Pós Parto Control",
+      "observedRegularPriceBRL": 152.9,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/alimentacao/amamentacao/lingerie-gestante-e-pos-parto",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "conchas_seios",
+      "tier": "intermediate",
+      "brand": "Diversos",
+      "product": "Conchas para seios 2 unidades",
+      "observedRegularPriceBRL": 45.0,
+      "retailerOrSource": "Alô Bebê",
+      "referenceUrl": "https://www.alobebe.com.br/alimentacao/amamentacao/concha-para-seios",
+      "observedAt": "2026-09-23"
+    },
+    {
+      "pricingKey": "formula_infantil_actual_product",
+      "tier": null,
+      "brand": "Nestlé",
+      "product": "Nestogeno 1 800g",
+      "observedRegularPriceBRL": 67.99,
+      "retailerOrSource": "Drogasil",
+      "referenceUrl": "https://www.drogasil.com.br/nestogeno-1-leite-infantil-po-800g.html",
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Exemplo de preço; não representa tier."
+      ]
+    },
+    {
+      "pricingKey": "formula_infantil_actual_product",
+      "tier": null,
+      "brand": "Danone",
+      "product": "Aptamil Premium 1 800g",
+      "observedRegularPriceBRL": 86.99,
+      "retailerOrSource": "Drogasil",
+      "referenceUrl": "https://www.drogasil.com.br/aptamil-premium-1-leite-infantil-800g.html",
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Exemplo de preço; não representa tier."
+      ]
+    },
+    {
+      "pricingKey": "formula_infantil_actual_product",
+      "tier": null,
+      "brand": "Nestlé",
+      "product": "NAN Supreme 1 800g",
+      "observedRegularPriceBRL": 139.99,
+      "retailerOrSource": "Drogasil",
+      "referenceUrl": "https://www.drogasil.com.br/nan-supreme-1-leite-infantil-800g.html",
+      "observedAt": "2026-09-23",
+      "notes": [
+        "Exemplo de preço; não representa tier."
+      ]
+    }
+  ],
+  "recurringCostModel": {
+    "diapers": {
+      "planningUsePerDay": [
+        {
+          "fromMonths": 0,
+          "toMonths": 1,
+          "unitsPerDay": 11
+        },
+        {
+          "fromMonths": 1,
+          "toMonths": 3,
+          "unitsPerDay": 8
+        },
+        {
+          "fromMonths": 3,
+          "toMonths": 12,
+          "unitsPerDay": 7
+        }
+      ],
+      "formula": "unitsPerDay * daysInMonth * pricePerUnitForActualDiaperSizeAndTier",
+      "notes": [
+        "Parâmetros de planejamento, não recomendação médica rígida.",
+        "Após nascimento, usar tamanho real de fralda informado/adquirido."
+      ]
+    },
+    "wipes": {
+      "mode": "estimate_only_if_family_marks_frequent_use",
+      "confidence": "low_initial"
+    },
+    "barrierCreamSoapMoisturizer": {
+      "mode": "initial_stock_then_learn_from_purchase_intervals",
+      "confidence": "low_initial"
+    },
+    "formulaMilk": {
+      "mode": "no_tier_classification",
+      "rule": "user_selects_actual_product_if_used; Cora learns cost and consumption from purchases",
+      "reason": "Formulações diferentes não devem ser tratadas como Econômico/Intermediário/Premium."
+    }
+  }
+}

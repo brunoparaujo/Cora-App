@@ -1,0 +1,67 @@
+{
+  "app": "Cora",
+  "version": "4.8D1",
+  "status": "implemented_validated_structurally",
+  "implementedAt": "2026-09-26",
+  "contractVersion": "4.8D1",
+  "schemaVersion": 1,
+  "currentCanonical": {
+    "catalog": {
+      "version": "4.8A",
+      "revision": "r3-c3.1-simplified-clothing",
+      "path": "V4.8C/FINAL/data/catalog-v4.8-r3-c3.1.json",
+      "sha256": "3c2b0784aae984bd74592bbabd415d70a6b859dea563807d829a1066d46bf6a5"
+    },
+    "pricing": {
+      "version": "4.8A3",
+      "revision": "r2-complete-catalog-pricing-audit",
+      "path": "V4.8C/FINAL/data/pricing-v4.8-r2.json",
+      "sha256": "bdfbf5882cec7e0baed250053fc7e71c4d0bcbd3df81c44d86c86246109a22fd"
+    },
+    "rules": {
+      "version": "4.8A",
+      "revision": "r2-complete-catalog-pricing-audit",
+      "path": "V4.8C/FINAL/data/rules-v4.8-r2.json",
+      "sha256": "f7c1d869138be4fe7675f56f1a479a13bb9b678a2bd97f24e3c4bfd8869693ec"
+    },
+    "onboardingCode": {
+      "version": "4.8B",
+      "path": "V4.8B/src/onboarding-v4.8b.js",
+      "sha256": "6052f55de4b75c15fcf044de2e397dc6e1b965deebbcc658bf097be5d4e6ab99"
+    },
+    "onboardingConfig": {
+      "version": "4.8B",
+      "path": "V4.8B/data/onboarding-v4.8b.config.json",
+      "sha256": "c5d55fed78dba09fdbee458138e29ff35a6d864cd82e1be6c83d5224adf010b6"
+    },
+    "climateBundle": {
+      "version": "4.8C",
+      "status": "frozen_validated",
+      "path": "Cora_V4.8C_Frozen.zip",
+      "sha256": "df3b74233a11ad59e223b93084ea6d0e891f1dd7d885b77649ed8382c72fd97b"
+    },
+    "climatePipeline": {
+      "version": "4.8C4",
+      "path": "V4.8C/FINAL/src/optional-climate-pipeline-v4.8c4.js",
+      "sha256": "15d61c8c844cc77d0ef88765bf02d1a30a46a99ee03caebb8372665e8135af5c"
+    },
+    "thermalEngine": {
+      "version": "4.8C4",
+      "path": "V4.8C/FINAL/src/thermal-engine-v4.8c4.js",
+      "sha256": "edcbd5b7436bcff040d5cb2a7cc8493927c5e8377e0dba179a13e1eda3d2b08b"
+    },
+    "clothingEngine": {
+      "version": "4.8C3.1.1",
+      "path": "V4.8C/FINAL/src/clothing-engine-v4.8c3.1.1.js",
+      "sha256": "b354b88976092b25345d9af34adcd7362aa318a4b5f67d37b162f3e0cc9fe4bf"
+    }
+  },
+  "compatibility": {
+    "bOriginalCatalogRevision": "r2-complete-catalog-pricing-audit",
+    "bOriginalCatalogSha256": "7a47ae1dc92a7edd552370e23f199aab35eef09e6bbe13da78f3c959215b4519",
+    "d1CatalogRevision": "r3-c3.1-simplified-clothing",
+    "reason": "V4.8C3.1 simplified only structural clothing variants (long macacão and casaquinho warmth); B onboarding/settings contract is unchanged.",
+    "pricingUnchangedFromB": true,
+    "rulesUnchangedFromB": true
+  }
+}

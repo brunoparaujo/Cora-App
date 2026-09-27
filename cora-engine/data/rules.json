@@ -1,0 +1,395 @@
+{
+  "metadata": {
+    "app": "Cora",
+    "version": "4.8A",
+    "status": "frozen_validated",
+    "frozenAt": "2026-09-23",
+    "scope": "Regras validadas em A1+A2+A3; V4.8C ainda definirá como clima real vira classe térmica.",
+    "revision": "r2-complete-catalog-pricing-audit",
+    "revisedAt": "2026-09-23"
+  },
+  "clothingEngine": {
+    "sizeOrder": [
+      "RN",
+      "P",
+      "M",
+      "G",
+      "GG"
+    ],
+    "rotationBase": {
+      "RN": 12,
+      "P": 12,
+      "M": 11,
+      "G": 10,
+      "GG": 10
+    },
+    "reserveProfiles": {
+      "compact": {
+        "label": "Enxuta",
+        "rotationDelta": -2
+      },
+      "standard": {
+        "label": "Padrão",
+        "rotationDelta": 0
+      },
+      "roomy": {
+        "label": "Com mais folga",
+        "rotationDelta": 2
+      }
+    },
+    "onePieceShare": {
+      "RN": 0.42,
+      "P": 0.42,
+      "M": 0.36,
+      "G": 0.3,
+      "GG": 0.3
+    },
+    "separateTopShareWithinModular": {
+      "RN": 0.0,
+      "P": 0.0,
+      "M": 0.15,
+      "G": 0.3,
+      "GG": 0.4
+    },
+    "thermalClasses": [
+      "very_hot",
+      "hot",
+      "mild",
+      "cold",
+      "very_cold"
+    ],
+    "bodySleeveShareLong": {
+      "very_hot": 0.15,
+      "hot": 0.3,
+      "mild": 0.5,
+      "cold": 0.75,
+      "very_cold": 0.9
+    },
+    "onePieceLongShare": {
+      "very_hot": 0.4,
+      "hot": 0.6,
+      "mild": 0.8,
+      "cold": 1.0,
+      "very_cold": 1.0
+    },
+    "lowerCoverageShareOfModularTops": {
+      "very_hot": 0.5,
+      "hot": 0.65,
+      "mild": 0.85,
+      "cold": 1.0,
+      "very_cold": 1.0
+    },
+    "shortShareForMPlus": {
+      "very_hot": 0.7,
+      "hot": 0.55,
+      "mild": 0.25,
+      "cold": 0.0,
+      "very_cold": 0.0
+    },
+    "ageLocks": {
+      "RN": {
+        "shorts": 0,
+        "separateTops": 0
+      },
+      "P": {
+        "maxShorts": 1,
+        "separateTops": 0
+      }
+    },
+    "outerLayerQuantity": {
+      "very_hot": 0,
+      "hot": 1,
+      "mild": 1,
+      "cold": 2,
+      "very_cold": 2
+    },
+    "sockPairs": {
+      "very_hot": 2,
+      "hot": 3,
+      "mild": 4,
+      "cold": 4,
+      "very_cold": 5
+    },
+    "airConditioningRule": {
+      "none": "no_change",
+      "sometimes": "explanation_only_or_small_adjustment",
+      "frequent": [
+        "prioritize_long_sleepwear",
+        "ensure_at_least_one_light_outer_layer_when_otherwise_zero",
+        "shift_one_short_body_to_long_only_if_long_options_are_insufficient"
+      ],
+      "never": "do_not_change_the_whole_thermal_class_only_because_of_AC"
+    },
+    "styleExtras": {
+      "field": "styleProfile",
+      "userFacingLabel": "Estilo do enxoval",
+      "options": {
+        "girl": {
+          "label": "Menina",
+          "defaultOptionalSuggestions": [
+            "vestido_estilo_menina",
+            "saia_estilo_menina",
+            "laco_faixa_estilo_menina"
+          ]
+        },
+        "boy": {
+          "label": "Menino",
+          "defaultOptionalSuggestions": []
+        },
+        "neutral": {
+          "label": "Neutro",
+          "defaultOptionalSuggestions": []
+        }
+      },
+      "functionalEngineAffected": false,
+      "countsTowardFunctionalRotation": false,
+      "suggestionQuantities": {
+        "vestido_estilo_menina": {
+          "RN": 0,
+          "P": 0,
+          "M": 1,
+          "G": 1,
+          "GG": 1
+        },
+        "saia_estilo_menina": {
+          "RN": 0,
+          "P": 0,
+          "M": 1,
+          "G": 1,
+          "GG": 1
+        },
+        "laco_faixa_estilo_menina": {
+          "total": 2,
+          "sizeIndependent": true
+        }
+      },
+      "budgetBehavior": "excluded_until_user_accepts_item",
+      "manualAdditionAllowedForAllProfiles": true,
+      "migrationDefaultForExistingProfiles": "neutral",
+      "notes": [
+        "Menina mostra as sugestões opcionais por padrão; não as torna obrigatórias.",
+        "Menino e Neutro não recebem essas sugestões automáticas.",
+        "Não existe pergunta separada “incluir vestidos e saias”."
+      ]
+    },
+    "roundingRules": [
+      "Preservar exatamente o total de cada família após redistribuição.",
+      "Quantidades nunca podem ser negativas.",
+      "Clima altera principalmente composição; perfil de reserva altera principalmente quantidade."
+    ]
+  },
+  "climateIntegration": {
+    "status": "input_contract_only",
+    "input": [
+      "DPP_or_birthDate",
+      "location",
+      "airConditioning"
+    ],
+    "outputRequiredFromV4_8C": [
+      "thermalClassByAgePeriod",
+      "monthlyClimatologySummary",
+      "RN_P_M_G_GG_calendar_mapping"
+    ],
+    "note": "Limiares de temperatura/climatologia não foram congelados em A; serão definidos e validados em V4.8C."
+  },
+  "conditionalRules": {
+    "feedingMode": {
+      "default": "undecided",
+      "options": [
+        "undecided",
+        "direct_breastfeeding",
+        "expressed_milk",
+        "mixed",
+        "formula"
+      ],
+      "doNotAskAsMandatoryAtProfileCreation": true
+    },
+    "car": {
+      "usesCar": "optional_profile_input",
+      "carHasIsofix": [
+        "yes",
+        "no",
+        "unknown"
+      ],
+      "babyComfortDisplayVariants": [
+        "sem_isofix",
+        "com_isofix"
+      ],
+      "notes": [
+        "Não existe meta separada base ISOFIX."
+      ]
+    },
+    "laundryReserve": {
+      "default": "standard",
+      "userFacingLabel": "Quantidade de reserva",
+      "options": [
+        "compact",
+        "standard",
+        "roomy"
+      ],
+      "doNotAskExactLaundryFrequency": true
+    },
+    "styleProfile": {
+      "requiredForNewProfile": true,
+      "options": [
+        "girl",
+        "boy",
+        "neutral"
+      ],
+      "migrationDefaultForExistingProfiles": "neutral",
+      "affectsFunctionalNeeds": false
+    },
+    "diaperingMode": {
+      "default": "disposable",
+      "options": [
+        "disposable",
+        "cloth",
+        "hybrid"
+      ],
+      "notes": [
+        "Fralda de pano é alternativa/uso híbrido; não soma automaticamente uma meta completa de descartáveis + pano."
+      ]
+    },
+    "formula": {
+      "activeWhen": [
+        "feedingMode_formula",
+        "feedingMode_mixed"
+      ],
+      "pricing": "actual_product_not_tiered"
+    }
+  },
+  "fulfillment": {
+    "rules": [
+      {
+        "type": "bundle",
+        "productType": "travel_system",
+        "maySatisfy": [
+          "carrinho",
+          "bebe_conforto"
+        ]
+      },
+      {
+        "type": "bundle",
+        "productType": "bolsa_mochila_com_trocador",
+        "maySatisfy": [
+          "bolsa_mochila_passeio",
+          "trocador_portatil"
+        ]
+      },
+      {
+        "type": "bundle",
+        "productType": "banheira_com_suporte",
+        "maySatisfy": [
+          "banheira",
+          "suporte_banheira"
+        ]
+      },
+      {
+        "type": "bundle",
+        "productType": "kit_bolsa_termica_com_gel",
+        "maySatisfy": [
+          "bolsa_termica_leite",
+          "gel_termico_reutilizavel"
+        ]
+      }
+    ],
+    "prohibitions": [
+      {
+        "productType": "sling_carregador",
+        "mustNotSatisfy": [
+          "carrinho"
+        ]
+      }
+    ],
+    "overTargetPurchases": "allowed_but_progress_capped"
+  },
+  "purchaseTimingEngine": {
+    "principle": "recommendedPurchaseDate = expectedUseStartDate - purchaseLeadDays",
+    "anchorBeforeBirth": "DPP",
+    "anchorAfterBirth": "actualBirthDate_if_available",
+    "uiViews": [
+      "Comprar agora",
+      "Próxima fase",
+      "Planejado para depois",
+      "Linha do tempo 0–12 meses"
+    ],
+    "examples": {
+      "berco": {
+        "leadDays": 60
+      },
+      "carrinho": {
+        "leadDays": 45
+      },
+      "futureClothing": {
+        "leadDays": 45
+      },
+      "cadeira_alimentacao": {
+        "leadDays": 30
+      }
+    },
+    "immutability": [
+      "Compras já realizadas nunca são alteradas por recálculo.",
+      "Plano gerado é snapshot; mudanças futuras de catálogo/regra não alteram silenciosamente o plano da família."
+    ]
+  },
+  "budgetEngine": {
+    "defaultTier": "intermediate",
+    "showThreeTotalsBeforeChoice": true,
+    "userSelectsMainTier": true,
+    "perItemTierOverride": true,
+    "cardShows": "reference_price_for_selected_tier",
+    "marketExamples": "shown_in_item_details_as_evidence_not_as_live_marketplace",
+    "promoRule": "promo_is_attached_to_specific_product_and_tier",
+    "acquisitionOptions": [
+      "use_market_reference_as_starting_data",
+      "add_own_product"
+    ],
+    "historicalPurchasesImmutable": true,
+    "separateFinancialBlocks": [
+      "enxoval_initial_and_planned",
+      "initial_stock_of_consumables",
+      "estimated_recurring_monthly_cost"
+    ],
+    "optionalStyleItems": {
+      "includedBeforeAcceptance": false,
+      "afterAcceptance": "becomes_normal_planned_item_with_purchase_timing_and_financial_tracking",
+      "referencePricing": "must_be_calibrated_before_showing_a_planned_reference_price"
+    }
+  },
+  "checklists": {
+    "hospitalBag": {
+      "type": "usage_checklist",
+      "doesNotCreateDuplicatePurchaseGoals": true
+    },
+    "outingBag": {
+      "type": "usage_checklist",
+      "doesNotCreateDuplicatePurchaseGoals": true,
+      "baseItems": [
+        "fraldas",
+        "lencos_ou_algodao",
+        "creme_barreira",
+        "trocador_portatil",
+        "uma_troca_de_roupa",
+        "um_ou_dois_panos",
+        "saquinho_para_roupa_suja",
+        "alimentacao_se_necessario",
+        "manta_conforme_clima"
+      ]
+    }
+  },
+  "safetyPolicies": {
+    "sleep": [
+      "Manter objetos macios e roupa de cama solta fora do espaço de sono.",
+      "Manta pode existir no enxoval para colo/passeio, mas não como item solto no berço durante o sono."
+    ],
+    "catalogKnownButNotAutoRecommended": [
+      "protetor_berco_acolchoado",
+      "ninho_redutor_sono",
+      "travesseiro_bebe",
+      "posicionador_sono",
+      "edredom_solto_berco",
+      "talco"
+    ],
+    "pacifier": "removed_from_catalog"
+  }
+}

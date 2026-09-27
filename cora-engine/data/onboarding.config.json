@@ -1,0 +1,141 @@
+{
+  "metadata": {
+    "app": "Cora",
+    "version": "4.8B",
+    "status": "frozen_validated",
+    "frozenAt": "2026-09-24",
+    "schemaVersion": 1
+  },
+  "firebasePaths": {
+    "child": "families/{familyId}/children/{childId}",
+    "userContext": "users/{uid}",
+    "familyMembership": "families/{familyId}/members/{uid}"
+  },
+  "enums": {
+    "lifeStage": [
+      "expecting",
+      "born"
+    ],
+    "styleProfile": [
+      "girl",
+      "boy",
+      "neutral"
+    ],
+    "airConditioning": [
+      "none",
+      "sometimes",
+      "frequent"
+    ],
+    "hasIsofix": [
+      "yes",
+      "no",
+      "unknown"
+    ],
+    "clothingReserve": [
+      "compact",
+      "standard",
+      "roomy"
+    ],
+    "diaperingMode": [
+      "disposable",
+      "cloth",
+      "hybrid"
+    ],
+    "feedingMode": [
+      "undecided",
+      "direct_breastfeeding",
+      "expressed_milk",
+      "mixed",
+      "formula"
+    ],
+    "budgetTier": [
+      "unselected",
+      "economic",
+      "intermediate",
+      "premium"
+    ],
+    "onboardingStatus": [
+      "not_started",
+      "in_progress",
+      "complete"
+    ],
+    "onboardingStep": [
+      "baby",
+      "climate",
+      "routine",
+      "result",
+      "done"
+    ]
+  },
+  "defaults": {
+    "clothingReserve": "standard",
+    "diaperingMode": "disposable",
+    "feedingMode": "undecided",
+    "budgetTier": "unselected",
+    "countryCode": "BR"
+  },
+  "uiMapping": {
+    "airConditioning": {
+      "none": "Não usamos / raramente",
+      "sometimes": "Às vezes",
+      "frequent": "Frequentemente"
+    },
+    "styleProfile": {
+      "girl": "Menina",
+      "boy": "Menino",
+      "neutral": "Neutro"
+    },
+    "clothingReserve": {
+      "compact": "Enxuta",
+      "standard": "Padrão",
+      "roomy": "Mais folga"
+    },
+    "diaperingMode": {
+      "disposable": "Descartável",
+      "cloth": "Pano / ecológica",
+      "hybrid": "Uso misto"
+    }
+  },
+  "onboarding": {
+    "steps": [
+      "baby",
+      "climate",
+      "routine",
+      "result"
+    ],
+    "completeOnlyAfterBudgetTierSelection": true,
+    "hideMainNavigationDuringInputSteps": true,
+    "feedingModeAskedDuringOnboarding": false,
+    "advancedPreferences": {
+      "diaperingMode": "collapsible_optional_section"
+    }
+  },
+  "profileRules": {
+    "expecting": {
+      "required": [
+        "dueDate"
+      ],
+      "forbiddenRequired": [
+        "birthDate"
+      ]
+    },
+    "born": {
+      "required": [
+        "birthDate"
+      ],
+      "optionalHistorical": [
+        "dueDate"
+      ]
+    },
+    "referenceDate": "birthDate when lifeStage=born; otherwise dueDate",
+    "pastDueDate": "warning_and_confirmation_not_blocking",
+    "futureBirthDate": "blocking_error",
+    "carFalse": "store only usesCar=false; remove hasIsofix",
+    "carTrue": "hasIsofix required",
+    "over12Months": "profile_valid_but_do_not_start_new_0_12_plan"
+  },
+  "testDataPolicy": {
+    "migrationRequired": false,
+    "mayRewriteCurrentTestChildren": true
+  }
+}
