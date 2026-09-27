@@ -12,11 +12,12 @@
       "Chupeta removida do Catálogo Mestre.",
       "Não existe campo de sexo para gerar o enxoval funcional.",
       "GG é convenção do Cora para 9–12 meses; marcas podem usar E, 12M ou outras nomenclaturas.",
-      "C3.1 simplifica variantes térmicas de macacão e casaquinho: espessura/tecido vira característica da aquisição, não meta do planejamento."
+      "C3.1 simplifica variantes térmicas de macacão e casaquinho: espessura/tecido vira característica da aquisição, não meta do planejamento.",
+      "F2 revisada: planned, suggested e deferred permanecem visíveis na projeção operacional; suggested/deferred não contam em meta/progresso enquanto não promovidos."
     ],
-    "revision": "r4-f2-catalog-audit",
+    "revision": "r5-f2-disposition-visibility",
     "revisedAt": "2026-09-27",
-    "parentRevision": "r3-c3.1-simplified-clothing-variants"
+    "parentRevision": "r4-f2-catalog-audit"
   },
   "categories": [
     {
@@ -333,19 +334,20 @@
       "purchaseLeadDays": 30,
       "climateSensitivity": "high",
       "usagePolicy": "normal",
-      "conditions": [
-        "passeios_externos"
-      ],
+      "conditions": [],
       "variants": [],
       "tags": [],
-      "notes": [],
+      "notes": [
+        "Sugestão útil para passeios ao ar livre; não exige pergunta adicional no onboarding.",
+        "Enquanto não for incluído pela família, permanece fora da meta/progresso planejado."
+      ],
       "pricingKey": "chapeu_sol_unit",
       "recurringCost": false,
       "marketplaceSearchTerms": [
         "chapéu bebê proteção solar"
       ],
       "generatedByRules": false,
-      "budgetEligibility": "included_if_in_generated_plan"
+      "budgetEligibility": "after_acceptance"
     },
     {
       "id": "luvas",
@@ -817,19 +819,20 @@
       "purchaseLeadDays": 30,
       "climateSensitivity": "none",
       "usagePolicy": "normal",
-      "conditions": [
-        "somente_se_modelo_usar_capa"
-      ],
+      "conditions": [],
       "variants": [],
       "tags": [],
-      "notes": [],
+      "notes": [
+        "Sugestão: útil apenas se o modelo de trocador escolhido usar capa.",
+        "Não exige pergunta adicional no onboarding."
+      ],
       "pricingKey": "capa_trocador_unit",
       "recurringCost": false,
       "marketplaceSearchTerms": [
         "capa trocador bebê"
       ],
       "generatedByRules": false,
-      "budgetEligibility": "included_if_in_generated_plan"
+      "budgetEligibility": "after_acceptance"
     },
     {
       "id": "cesto_roupa_suja",
@@ -1208,12 +1211,13 @@
       "purchaseLeadDays": null,
       "climateSensitivity": "none",
       "usagePolicy": "normal",
-      "conditions": [
-        "mais_util_com_AC_aquecimento_ou_extremos_termicos"
-      ],
+      "conditions": [],
       "variants": [],
       "tags": [],
-      "notes": [],
+      "notes": [
+        "Sugestão opcional; pode ser mais útil com climatização ou extremos térmicos.",
+        "Não exige pergunta adicional no onboarding."
+      ],
       "pricingKey": "termometro_ambiente",
       "recurringCost": false,
       "marketplaceSearchTerms": [
@@ -3350,13 +3354,12 @@
       "purchaseLeadDays": null,
       "climateSensitivity": "none",
       "usagePolicy": "normal",
-      "conditions": [
-        "banheira_sem_suporte_ou_suporte_desejado_separadamente"
-      ],
+      "conditions": [],
       "variants": [],
       "tags": [],
       "notes": [
-        "Se a banheira adquirida já incluir suporte, esta meta é satisfeita pelo bundle e não deve gerar custo adicional."
+        "Sugestão opcional: considerar se a banheira não tiver suporte integrado ou se a família preferir suporte separado.",
+        "Não exige pergunta adicional no onboarding."
       ],
       "pricingKey": "suporte_banheira",
       "recurringCost": false,

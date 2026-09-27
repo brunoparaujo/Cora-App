@@ -506,7 +506,8 @@
     // O estoque é derivado exclusivamente das aquisições.
     const PLAN_ITEM_FIELDS = Object.freeze([
       'source', 'sourcePlanId', 'priority', 'goalType', 'planningSnapshot',
-      'recommendationSnapshot', 'retainedPurchaseHistory', 'quantityUnit'
+      'recommendationSnapshot', 'retainedPurchaseHistory', 'quantityUnit',
+      'planDisposition', 'planReason', 'conditionState', 'countsTowardPlan'
     ]);
 
     function itemPriority(item) {
@@ -527,6 +528,77 @@
       const priority = itemPriority(item);
       const color = priority === 'essential' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600';
       return `<span class="text-[9px] ${color} font-bold px-1.5 py-0.5 rounded-md">${labels[priority]}</span>`;
+    }
+
+    function itemPlanDisposition(item) {
+      return ['planned','suggested','deferred','inactive','excluded','rejected'].includes(item?.planDisposition)
+        ? item.planDisposition
+        : (item?.source === 'v4.8-generated' ? 'planned' : 'manual');
+    }
+
+    function itemDispositionBadge(item) {
+      const disposition = itemPlanDisposition(item);
+      if (disposition === 'suggested') {
+        return '<span class="text-[9px] bg-sky-100 text-sky-700 font-bold px-1.5 py-0.5 rounded-md">Sugestão</span>';
+      }
+      if (disposition === 'deferred') {
+        return '<span class="text-[9px] bg-violet-100 text-violet-700 font-bold px-1.5 py-0.5 rounded-md">A definir</span>';
+      }
+      if (item.retainedPurchaseHistory && ['inactive','excluded','rejected'].includes(disposition)) {
+        return '<span class="text-[9px] bg-gray-100 text-gray-500 font-bold px-1.5 py-0.5 rounded-md">Histórico preservado</span>';
+      }
+      return '';
+    }
+
+    function recommendationTargetText(item) {
+      const target = item?.recommendationSnapshot || {};
+      if (target.kind === 'by_size') {
+        const parts = STANDARD_SIZE_KEYS
+          .map(size => [size, Number(target.sizes?.[size]?.total || 0)])
+          .filter(([,qty]) => qty > 0)
+          .map(([size,qty]) => `${size} ${qty}`);
+        return parts.length ? `Referência sugerida: ${parts.join(' • ')}` : '';
+      }
+      if (target.kind === 'single') {
+        const qty = Number(target.quantity || 0);
+        return qty > 0 ? `Referência sugerida: ${qty} ${itemUnitLabel(item, qty)}` : '';
+      }
+      if (target.kind === 'recurring') {
+        const qty = Number(target.initialStockQuantity || 0);
+        return qty > 0 ? `Estoque inicial sugerido: ${qty} ${itemUnitLabel(item, qty)}` : 'Consumo recorrente a definir';
+      }
+      if (target.kind === 'by_phase') {
+        const qty = (target.phases || []).reduce((sum, phase) => sum + Number(phase.quantity ?? phase.total ?? 0), 0);
+        return qty > 0 ? `Referência sugerida: ${qty} ${itemUnitLabel(item, qty)}` : '';
+      }
+      if (target.kind === 'deferred' && Number(target.defaultQuantity || 0) > 0) {
+        const qty = Number(target.defaultQuantity);
+        return `Referência quando aplicável: ${qty} ${itemUnitLabel(item, qty)}`;
+      }
+      return '';
+    }
+
+    function renderNonPlannedRecommendation(item) {
+      const disposition = itemPlanDisposition(item);
+      const acquisitions = getAcquisitions(item);
+      const targetText = recommendationTargetText(item);
+      const isSuggested = disposition === 'suggested';
+      const title = isSuggested ? 'Sugestão do Cora' : 'Conforme sua rotina';
+      const detail = isSuggested
+        ? 'Visível para você considerar. Ainda não conta na meta, no progresso nem no orçamento planejado.'
+        : 'Ainda não há informação suficiente para definir uma meta. O item continua visível e não conta no progresso nem no orçamento.';
+      return `
+        <div class="border ${isSuggested ? 'border-sky-100 bg-sky-50/40' : 'border-violet-100 bg-violet-50/40'} rounded-xl p-3 space-y-2">
+          <div>
+            <span class="block text-[10px] font-bold ${isSuggested ? 'text-sky-700' : 'text-violet-700'} uppercase tracking-wide">${title}</span>
+            <p class="text-[10px] text-gray-600 mt-1">${detail}</p>
+            ${targetText ? `<p class="text-[10px] font-semibold text-gray-700 mt-1">${escapeHtml(targetText)}</p>` : ''}
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[10px] text-gray-500">${acquisitions.length ? `${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição registrada' : 'aquisições registradas'}` : 'Nenhuma aquisição registrada'}</span>
+            <button onclick="openAcquisitionModalForItem('${item.id}')" class="shrink-0 h-8 px-3 rounded-lg bg-emerald-600 text-white text-[10px] font-bold active:scale-95 transition">Registrar aquisição</button>
+          </div>
+        </div>`;
     }
 
     function normalizeItem(item) {
@@ -2648,6 +2720,7 @@
                 <div class="flex flex-wrap items-center gap-1.5">
                   <h3 class="font-bold text-gray-900 text-sm">${escapeHtml(item.name)}</h3>
                   ${itemPriorityBadge(item)}
+                  ${itemDispositionBadge(item)}
                   ${isComplete ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded-md">✅ OK</span>' : ''}
                 </div>
                 ${acquisitions.length ? `<p class="text-[10px] text-gray-500 mt-1">${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição' : 'aquisições'} • ${escapeHtml(brandSummary)}</p>` : '<p class="text-[10px] text-gray-400 mt-1">Nenhuma aquisição registrada</p>'}
@@ -2658,14 +2731,16 @@
             </div>
 
             <div class="pt-1">
-              ${isUniqueSizeItem(item) ? renderUniqueQuantity(item) : `
-                <div class="flex items-center justify-between gap-2 mb-1.5">
-                  <span class="text-[10px] font-semibold text-gray-500">Quantidade por tamanho</span>
-                  <span class="text-[10px] font-bold text-gray-600">Adquirido: ${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))}</span>
-                </div>
-                <div class="grid grid-cols-5 gap-1.5">
-                  ${getDisplaySizes(item).map(size => renderSizeCell(item, size)).join('')}
-                </div>`}
+              ${['suggested','deferred'].includes(itemPlanDisposition(item))
+                ? renderNonPlannedRecommendation(item)
+                : (isUniqueSizeItem(item) ? renderUniqueQuantity(item) : `
+                  <div class="flex items-center justify-between gap-2 mb-1.5">
+                    <span class="text-[10px] font-semibold text-gray-500">Quantidade por tamanho</span>
+                    <span class="text-[10px] font-bold text-gray-600">Adquirido: ${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))}</span>
+                  </div>
+                  <div class="grid grid-cols-5 gap-1.5">
+                    ${getDisplaySizes(item).map(size => renderSizeCell(item, size)).join('')}
+                  </div>`)}
             </div>
 
             <button onclick="openAcquisitionHistory('${item.id}')" class="w-full pt-2.5 pb-2.5 px-3 rounded-xl border border-emerald-100 bg-emerald-50/40 hover:bg-emerald-50 transition text-left flex items-center justify-between gap-3" aria-label="Ver aquisições do item">
@@ -2990,7 +3065,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
       container.innerHTML = items.length ? items.map(item => `
         <button onclick="openAcquisitionModalForItem('${item.id}')" class="w-full p-3 rounded-xl border border-gray-100 hover:bg-emerald-50 text-left flex items-center justify-between gap-3">
-          <span class="min-w-0"><strong class="block text-xs text-gray-900 truncate">${escapeHtml(item.name)}</strong><span class="block text-[10px] text-gray-500">Possui ${getOwnedTotal(item)} • Meta ${getTargetTotal(item)}</span></span>
+          <span class="min-w-0"><strong class="block text-xs text-gray-900 truncate">${escapeHtml(item.name)}</strong><span class="block text-[10px] text-gray-500">${['suggested','deferred'].includes(itemPlanDisposition(item)) ? (itemPlanDisposition(item) === 'suggested' ? 'Sugestão • fora da meta atual' : 'Conforme sua rotina • meta a definir') : `Possui ${getOwnedTotal(item)} • Meta ${getTargetTotal(item)}`}</span></span>
           <i data-lucide="chevron-right" class="w-4 h-4 text-gray-400 shrink-0"></i>
         </button>`).join('') : '<p class="text-xs text-gray-400 text-center py-6">Nenhum item encontrado.</p>';
       lucide.createIcons();

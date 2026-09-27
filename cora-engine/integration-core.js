@@ -7,6 +7,7 @@
   const PLAN_SIZES=["RN","P","M","G","GG"];
   const CATEGORY_MAP={vestuario:"vestuario",quarto:"quarto",banho_higiene:"higiene",alimentacao:"alimentacao",passeio:"passeio",mamae:"mamae"};
   const VARIANT_LABELS={manga_curta:"manga curta",manga_longa:"manga longa",macaquinho_curto:"macaquinho curto",macacao_longo:"macacão longo",calca_culote:"calça/culote",short:"short",camiseta:"camiseta",blusa_manga_longa:"blusa manga longa"};
+  const VISIBLE_DISPOSITIONS=new Set(["planned","suggested","deferred"]);
   function clone(v){return v==null?v:JSON.parse(JSON.stringify(v));}
   function isNum(v){return v!==null&&v!==undefined&&v!==""&&Number.isFinite(Number(v));}
   function todayIso(){return new Date().toISOString().slice(0,10);}
@@ -26,6 +27,7 @@
     else out.U.target=Math.max(0,totalTarget(target));
     return out;
   }
+  function zeroOperationalSizes(){return Object.fromEntries(SIZE_KEYS.map(k=>[k,{target:0}]));}
   function sizeModeForTarget(target){return target?.kind==="by_size"?"multi":"unique";}
   function variantText(target){
     if(target?.kind!=="by_size")return "";
@@ -38,8 +40,9 @@
     }
     return rows.join(" | ");
   }
-  function planItemToOperational(planItem,financeItem,planId,existing=null,now=Date.now()){
+  function planItemToOperational(planItem,financeItem,planId,existing=null,now=Date.now(),dispositionOverride=null){
     const target=planItem.target||{};
+    const disposition=dispositionOverride||planItem.inclusionSnapshot?.disposition||"planned";
     const acquisitions=clone(existing?.acquisitions||{});
     const vtext=variantText(target);
     const notes=[...(planItem.planningSnapshot?.notes||[])];
@@ -49,6 +52,7 @@
     const carSeat = planItem.itemId === "bebe_conforto";
     const selectedVariant = target.variant?.selectedVariant || financeItem?.pricing?.variant;
     const name = carSeat ? (selectedVariant === "com_isofix" ? "Bebê conforto com ISOFIX" : "Bebê conforto") : (planItem.identitySnapshot?.name||planItem.itemId);
+    const countsTowardPlan=disposition==="planned";
     return {
       id:planItem.itemId,
       name,
@@ -57,7 +61,7 @@
       notes:notes.join("\n"),
       sizeMode:sizeModeForTarget(target),
       unitEstimate,
-      sizes:operationalSizes(target),
+      sizes:countsTowardPlan?operationalSizes(target):zeroOperationalSizes(),
       acquisitions,
       revision:Math.max(0,Number(existing?.revision)||0)+1,
       createdAt:Number(existing?.createdAt)||now,
@@ -68,18 +72,88 @@
       goalType:planItem.identitySnapshot?.goalType||null,
       quantityUnit:planItem.identitySnapshot?.quantityUnit||"un",
       planningSnapshot:clone(planItem.planningSnapshot||{}),
-      recommendationSnapshot:clone(target)
+      recommendationSnapshot:clone(target),
+      planDisposition:disposition,
+      planReason:planItem.inclusionSnapshot?.reason||null,
+      countsTowardPlan
+    };
+  }
+  function catalogItemToDeferredOperational(item,evaluation,planId,existing=null,now=Date.now()){
+    const acquisitions=clone(existing?.acquisitions||{});
+    const quantity=isNum(item?.defaultQuantity)&&Number(item.defaultQuantity)>0?Number(item.defaultQuantity):null;
+    return {
+      id:item.id,
+      name:item.name||item.id,
+      category:categoryToLegacy(item.category),
+      essential:item.priority==="essential",
+      notes:(item.notes||[]).join("\n"),
+      sizeMode:"unique",
+      unitEstimate:null,
+      sizes:zeroOperationalSizes(),
+      acquisitions,
+      revision:Math.max(0,Number(existing?.revision)||0)+1,
+      createdAt:Number(existing?.createdAt)||now,
+      updatedAt:now,
+      source:"v4.8-generated",
+      sourcePlanId:planId,
+      priority:item.priority||"conditional",
+      goalType:item.goalType||null,
+      quantityUnit:item.quantityUnit||"un",
+      planningSnapshot:{
+        itemType:item.itemType||null,
+        useFromAgeMonths:item.useFromAgeMonths??null,
+        useUntilAgeMonths:item.useUntilAgeMonths??null,
+        purchaseTiming:item.purchaseTiming||null,
+        purchaseLeadDays:item.purchaseLeadDays??null,
+        climateSensitivity:item.climateSensitivity||null,
+        recurringCost:Boolean(item.recurringCost),
+        budgetEligibility:item.budgetEligibility||null,
+        usagePolicy:item.usagePolicy||null,
+        conditions:clone(item.conditions||[]),
+        variantOptions:clone(item.variants||[]),
+        notes:clone(item.notes||[])
+      },
+      recommendationSnapshot:{kind:"deferred",defaultQuantity:quantity,requiresUserInput:true},
+      planDisposition:"deferred",
+      planReason:evaluation?.reason||"condition_unresolved",
+      conditionState:evaluation?.conditionState||"unresolved",
+      countsTowardPlan:false
     };
   }
   function hasAcquisitions(item){return item?.acquisitions&&Object.keys(item.acquisitions).length>0;}
-  function zeroTargets(item){const x=clone(item);x.sizes=x.sizes||{};for(const k of SIZE_KEYS)x.sizes[k]={target:0};return x;}
-  function buildOperationalItems(plan,currentItems={},now=Date.now()){
-    const out={}; const planned=plan?.generatedSnapshot?.items||{}; const finance=plan?.financeSnapshot?.initialLayette?.items||{};
-    for(const [id,p] of Object.entries(planned)) out[id]=planItemToOperational(p,finance[id],plan.planId,currentItems?.[id]||null,now);
+  function zeroTargets(item){const x=clone(item);x.sizes=x.sizes||{};for(const k of SIZE_KEYS)x.sizes[k]={target:0};x.countsTowardPlan=false;return x;}
+  function buildOperationalItems(plan,currentItems={},now=Date.now(),context={}){
+    const out={};
+    const planned=plan?.generatedSnapshot?.items||{};
+    const suggestions=plan?.generatedSnapshot?.suggestions||{};
+    const finance=plan?.financeSnapshot?.initialLayette?.items||{};
+    const evaluation=context?.evaluation||{};
+    const catalogItems=context?.catalog?.items||[];
+    const catalogById=Object.fromEntries(catalogItems.map(x=>[x.id,x]));
+
+    for(const [id,p] of Object.entries(planned)) out[id]=planItemToOperational(p,finance[id],plan.planId,currentItems?.[id]||null,now,"planned");
+    for(const [id,p] of Object.entries(suggestions)) out[id]=planItemToOperational(p,null,plan.planId,currentItems?.[id]||null,now,"suggested");
+
+    for(const [id,e] of Object.entries(evaluation)){
+      if(e?.disposition!=="deferred"||out[id])continue;
+      const item=catalogById[id];
+      if(item)out[id]=catalogItemToDeferredOperational(item,e,plan.planId,currentItems?.[id]||null,now);
+    }
+
     for(const [id,item] of Object.entries(currentItems||{})){
       if(out[id])continue;
       if(item?.source==="v4.8-generated"){
-        if(hasAcquisitions(item)){const kept=zeroTargets(item);kept.retainedPurchaseHistory=true;kept.updatedAt=now;kept.revision=Math.max(0,Number(kept.revision)||0)+1;out[id]=kept;}
+        const nextDisposition=evaluation?.[id]?.disposition||null;
+        if(hasAcquisitions(item)){
+          const kept=zeroTargets(item);
+          kept.retainedPurchaseHistory=true;
+          kept.updatedAt=now;
+          kept.revision=Math.max(0,Number(kept.revision)||0)+1;
+          kept.sourcePlanId=plan?.planId||kept.sourcePlanId||null;
+          if(nextDisposition)kept.planDisposition=nextDisposition;
+          kept.planReason=evaluation?.[id]?.reason||kept.planReason||"retained_purchase_history";
+          out[id]=kept;
+        }
       }else out[id]=clone(item); // manual/legacy items are never silently deleted by a replan
     }
     return out;
@@ -119,5 +193,5 @@
     const periods=plan?.climateSnapshot?.thermalProfile?.agePeriods||{};const labels={RN:"RN",P:"P",M:"M",G:"G",GG:"GG"};
     return PLAN_SIZES.map(s=>{const p=periods[s];return {size:s,label:labels[s],from:p?.from||null,toExclusive:p?.toExclusive||null,meanTempC:isNum(p?.weightedMeanTempC)?Number(p.weightedMeanTempC):null,thermalClass:p?.dominantThermalClass||null,mixed:Boolean(p?.mixedSeason)};});
   }
-  return {SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,clone,isNum,todayIso,categoryToLegacy,totalTarget,operationalSizes,sizeModeForTarget,variantText,planItemToOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
+  return {SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,clone,isNum,todayIso,categoryToLegacy,totalTarget,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,planItemToOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
 });
