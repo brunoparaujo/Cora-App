@@ -53,7 +53,7 @@
       id:planItem.itemId,
       name,
       category:categoryToLegacy(planItem.identitySnapshot?.category),
-      essential:carSeat||planItem.identitySnapshot?.priority==="essential",
+      essential:planItem.identitySnapshot?.priority==="essential",
       notes:notes.join("\n"),
       sizeMode:sizeModeForTarget(target),
       unitEstimate,
@@ -64,8 +64,9 @@
       updatedAt:now,
       source:"v4.8-generated",
       sourcePlanId:planId,
-      priority:carSeat?"essential":(planItem.identitySnapshot?.priority||null),
+      priority:planItem.identitySnapshot?.priority||null,
       goalType:planItem.identitySnapshot?.goalType||null,
+      quantityUnit:planItem.identitySnapshot?.quantityUnit||"un",
       planningSnapshot:clone(planItem.planningSnapshot||{}),
       recommendationSnapshot:clone(target)
     };

@@ -7,10 +7,10 @@
   "schemaVersion": 1,
   "currentCanonical": {
     "catalog": {
-      "version": "4.8A",
-      "revision": "r3-c3.1-simplified-clothing",
-      "path": "V4.8C/FINAL/data/catalog-v4.8-r3-c3.1.json",
-      "sha256": "3c2b0784aae984bd74592bbabd415d70a6b859dea563807d829a1066d46bf6a5"
+      "version": "4.8F2",
+      "revision": "r4-f2-catalog-audit",
+      "path": "cora-engine/data/catalog.json",
+      "sha256": "6bb0ba8b15256863357015e2c10f072cbc595df41a87d372e3066bc4bd41afe3"
     },
     "pricing": {
       "version": "4.8A3",
@@ -19,10 +19,10 @@
       "sha256": "bdfbf5882cec7e0baed250053fc7e71c4d0bcbd3df81c44d86c86246109a22fd"
     },
     "rules": {
-      "version": "4.8A",
-      "revision": "r2-complete-catalog-pricing-audit",
-      "path": "V4.8C/FINAL/data/rules-v4.8-r2.json",
-      "sha256": "f7c1d869138be4fe7675f56f1a479a13bb9b678a2bd97f24e3c4bfd8869693ec"
+      "version": "4.8F2",
+      "revision": "r3-f2-catalog-consistency",
+      "path": "cora-engine/data/rules.json",
+      "sha256": "9ae9461dca13e2e1dcd72b2d490c039f1a8ed636a9f07e9b1076fe9a084b1dcb"
     },
     "onboardingCode": {
       "version": "4.8B",
@@ -60,8 +60,9 @@
     "bOriginalCatalogRevision": "r2-complete-catalog-pricing-audit",
     "bOriginalCatalogSha256": "7a47ae1dc92a7edd552370e23f199aab35eef09e6bbe13da78f3c959215b4519",
     "d1CatalogRevision": "r3-c3.1-simplified-clothing",
-    "reason": "V4.8C3.1 simplified only structural clothing variants (long macacão and casaquinho warmth); B onboarding/settings contract is unchanged.",
+    "reason": "F2 revisa política de inclusão, prioridades e unidades; motores térmicos e perguntas B preservados.",
     "pricingUnchangedFromB": true,
-    "rulesUnchangedFromB": true
+    "rulesUnchangedFromB": false,
+    "f2CatalogRevision": "r4-f2-catalog-audit"
   }
 }

@@ -1,9 +1,9 @@
 {
   "metadata": {
     "app": "Cora",
-    "version": "4.8A",
+    "version": "4.8F2",
     "section": "A1+A2+A3",
-    "status": "revised_validated",
+    "status": "implemented_pending_user_validation",
     "frozenAt": "2026-09-23",
     "locale": "pt-BR",
     "planningHorizonMonths": 12,
@@ -14,9 +14,9 @@
       "GG é convenção do Cora para 9–12 meses; marcas podem usar E, 12M ou outras nomenclaturas.",
       "C3.1 simplifica variantes térmicas de macacão e casaquinho: espessura/tecido vira característica da aquisição, não meta do planejamento."
     ],
-    "revision": "r3-c3.1-simplified-clothing-variants",
-    "revisedAt": "2026-09-25",
-    "parentRevision": "r2-complete-catalog-pricing-audit"
+    "revision": "r4-f2-catalog-audit",
+    "revisedAt": "2026-09-27",
+    "parentRevision": "r3-c3.1-simplified-clothing-variants"
   },
   "categories": [
     {
@@ -357,7 +357,7 @@
       "itemType": "rotation",
       "defaultQuantity": 0,
       "comfortableQuantity": null,
-      "quantityUnit": "un",
+      "quantityUnit": "par",
       "useFromAgeMonths": 0,
       "useUntilAgeMonths": 3,
       "purchaseTiming": "when_needed",
@@ -388,7 +388,7 @@
       "itemType": "durable",
       "defaultQuantity": 0,
       "comfortableQuantity": null,
-      "quantityUnit": "un",
+      "quantityUnit": "par",
       "useFromAgeMonths": 0,
       "useUntilAgeMonths": 12,
       "purchaseTiming": "when_needed",
@@ -611,7 +611,7 @@
       "variants": [],
       "tags": [],
       "notes": [
-        "Escolha cultural/estética; não entra no essencial funcional."
+        "Roupa especial opcional para a saída da maternidade. As roupas do enxoval também podem cumprir essa função."
       ],
       "pricingKey": "saida_maternidade_set",
       "recurringCost": false,
@@ -619,7 +619,7 @@
         "saída maternidade bebê"
       ],
       "generatedByRules": false,
-      "budgetEligibility": "included_if_in_generated_plan"
+      "budgetEligibility": "after_acceptance"
     },
     {
       "id": "berco",
@@ -2118,7 +2118,7 @@
       "name": "Coletor de leite de silicone",
       "category": "alimentacao",
       "subcategory": "Leite e amamentação",
-      "priority": "recommended",
+      "priority": "optional",
       "goalType": "complement",
       "itemType": "durable",
       "defaultQuantity": 1,
@@ -2133,14 +2133,16 @@
       "conditions": [],
       "variants": [],
       "tags": [],
-      "notes": [],
+      "notes": [
+        "Opcional: escolha conforme sua rotina, sem necessidade de compra antecipada."
+      ],
       "pricingKey": "coletor_leite_silicone",
       "recurringCost": false,
       "marketplaceSearchTerms": [
         "coletor leite silicone"
       ],
       "generatedByRules": false,
-      "budgetEligibility": "included_if_in_generated_plan"
+      "budgetEligibility": "after_acceptance"
     },
     {
       "id": "bomba_leite",
@@ -2627,7 +2629,7 @@
       "name": "Bebê conforto",
       "category": "passeio",
       "subcategory": "Para o carro",
-      "priority": "conditional",
+      "priority": "essential",
       "goalType": "complement",
       "itemType": "durable",
       "defaultQuantity": 1,
@@ -2648,8 +2650,7 @@
       ],
       "tags": [],
       "notes": [
-        "ISOFIX é característica do bebê conforto, não item separado.",
-        "Na interface: apenas com ISOFIX ou sem ISOFIX."
+        "Essencial quando a família usa carro. A variante com ISOFIX tem referência de preço própria."
       ],
       "pricingKey": "bebe_conforto",
       "recurringCost": false,
@@ -2684,7 +2685,7 @@
       ],
       "tags": [],
       "notes": [
-        "Não perguntar preferência no onboarding; escolha ocorre na compra."
+        "Escolha bolsa ou mochila conforme sua preferência; ambas atendem à mesma necessidade."
       ],
       "pricingKey": "bolsa_mochila_passeio",
       "recurringCost": false,
@@ -2716,7 +2717,7 @@
       "variants": [],
       "tags": [],
       "notes": [
-        "Pode vir incluído na bolsa/mochila e ser satisfeito por bundle."
+        "Pode já vir incluído na bolsa ou mochila de passeio."
       ],
       "pricingKey": "trocador_portatil",
       "recurringCost": false,
@@ -2781,8 +2782,7 @@
       ],
       "tags": [],
       "notes": [
-        "Não usar “mochila” sozinho na interface para não confundir com mochila de passeio.",
-        "Não substitui a meta do carrinho."
+        "É uma opção complementar de transporte; não substitui a meta do carrinho."
       ],
       "pricingKey": "sling_carregador",
       "recurringCost": false,
@@ -3204,7 +3204,7 @@
       "itemType": "durable",
       "defaultQuantity": 1,
       "comfortableQuantity": null,
-      "quantityUnit": "un",
+      "quantityUnit": "par",
       "useFromAgeMonths": null,
       "useUntilAgeMonths": null,
       "purchaseTiming": "now",
@@ -3320,18 +3320,18 @@
       "purchaseTiming": "when_needed",
       "purchaseLeadDays": null,
       "climateSensitivity": "none",
-      "usagePolicy": "conditional",
+      "usagePolicy": "do_not_recommend",
       "conditions": [],
       "variants": [],
       "tags": [],
       "notes": [
-        "Não entra na compra automática."
+        "Não sugerir como compra preventiva. Para desconfortos na amamentação, procure orientação individualizada."
       ],
       "pricingKey": "conchas_seios",
       "recurringCost": false,
       "marketplaceSearchTerms": [],
       "generatedByRules": false,
-      "budgetEligibility": "when_condition_active"
+      "budgetEligibility": "excluded"
     },
     {
       "id": "suporte_banheira",

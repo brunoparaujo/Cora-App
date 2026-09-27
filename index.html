@@ -45,7 +45,7 @@
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G', 'GG'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', GG: 'GG', U: 'Único' };
     const SCHEMA_VERSION = 17; // V4.8E1: perfil + plano V4.8 + tamanho GG
-    const APP_MODEL = 'v4.8-f1-integrated';
+    const APP_MODEL = 'v4.8-f2-integrated';
     const PENDING_INVITE_STORAGE_KEY = 'cora_pending_invite_v451';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
     // V4.5.1 mantém autenticação separada da autorização e fecha o modelo em uma família por conta.
@@ -506,8 +506,28 @@
     // O estoque é derivado exclusivamente das aquisições.
     const PLAN_ITEM_FIELDS = Object.freeze([
       'source', 'sourcePlanId', 'priority', 'goalType', 'planningSnapshot',
-      'recommendationSnapshot', 'retainedPurchaseHistory'
+      'recommendationSnapshot', 'retainedPurchaseHistory', 'quantityUnit'
     ]);
+
+    function itemPriority(item) {
+      return ['essential','recommended','optional','conditional'].includes(item.priority)
+        ? item.priority : (item.essential ? 'essential' : 'recommended');
+    }
+
+    function itemUnitLabel(item, quantity = 2) {
+      const labels = {un:['unidade','unidades'],par:['par','pares'],pacote:['pacote','pacotes'],
+        estoque_inicial:['conjunto inicial','conjuntos iniciais'],lata_ou_embalagem:['embalagem','embalagens']};
+      const unit = item.quantityUnit || (item.source === 'v4.8-generated' ? 'un' : 'peca');
+      const pair = labels[unit] || ['peça','peças'];
+      return pair[Number(quantity) === 1 ? 0 : 1];
+    }
+
+    function itemPriorityBadge(item) {
+      const labels = {essential:'Essencial',recommended:'Vale a pena ter',optional:'Opcional',conditional:'Conforme sua rotina'};
+      const priority = itemPriority(item);
+      const color = priority === 'essential' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600';
+      return `<span class="text-[9px] ${color} font-bold px-1.5 py-0.5 rounded-md">${labels[priority]}</span>`;
+    }
 
     function normalizeItem(item) {
       const normalized = {
@@ -559,6 +579,8 @@
       PLAN_ITEM_FIELDS.forEach(key => {
         if (item[key] !== undefined && item[key] !== null) normalized[key] = cloneData(item[key]);
       });
+      normalized.priority = itemPriority(normalized);
+      normalized.essential = normalized.priority === 'essential';
       // Nenhum campo financeiro/estoque legado é persistido na V4.
       return normalized;
     }
@@ -1180,6 +1202,8 @@
         name: normalized.name,
         category: normalized.category,
         essential: normalized.essential,
+        priority: normalized.priority,
+        quantityUnit: normalized.quantityUnit || null,
         notes: normalized.notes,
         sizeMode: normalized.sizeMode,
         unitEstimate: normalized.unitEstimate,
@@ -1206,7 +1230,7 @@
     function itemDraftEquivalent(a, b) {
       const left = normalizeItem(a);
       const right = normalizeItem(b);
-      const fields = ['name', 'category', 'essential', 'notes', 'sizeMode', 'unitEstimate'];
+      const fields = ['name', 'category', 'essential', 'priority', 'notes', 'sizeMode', 'unitEstimate'];
       if (fields.some(field => !sameValue(left[field], right[field]))) return false;
       return SIZE_KEYS.every(size =>
         Number(left.sizes?.[size]?.target || 0) === Number(right.sizes?.[size]?.target || 0)
@@ -1227,7 +1251,7 @@
       const fields = [
         ['name', 'nome'],
         ['category', 'categoria'],
-        ['essential', 'importância'],
+        ['priority', 'importância'],
         ['notes', 'observações'],
         ['sizeMode', 'modo de tamanho'],
         ['unitEstimate', 'valor estimado']
@@ -1260,6 +1284,7 @@
 
       // Aquisições vêm sempre do estado mais recente do servidor. Editar um item
       // nunca carrega de volta uma cópia antiga das aquisições.
+      latest.essential = latest.priority === 'essential';
       latest.acquisitions = normalizeItem(latestRaw).acquisitions;
       return { item: latest, conflicts, changed };
     }
@@ -2532,7 +2557,7 @@
       const percent = totalTarget > 0 ? Math.round((completedForProgress / totalTarget) * 100) : 0;
       document.getElementById('progressPercentText').innerText = `${percent}%`;
       document.getElementById('progressBar').style.width = `${percent}%`;
-      document.getElementById('progressItemsCount').innerText = `${totalCurrent} de ${totalTarget} peças`;
+      document.getElementById('progressItemsCount').innerText = `${totalCurrent} de ${totalTarget} no enxoval`;
       document.getElementById('financeTotalSpent').innerText = `Gasto: ${money(totalSpent)}`;
 
       const categories = ['vestuario', 'quarto', 'higiene', 'alimentacao', 'passeio', 'mamae'];
@@ -2557,7 +2582,7 @@
           const color = donut.dataset.color || '#ef476f';
           const pale = rgba(color, 0.16);
           donut.style.background = `conic-gradient(${color} 0 ${progress}%, ${pale} ${progress}% 100%)`;
-          donut.setAttribute('aria-label', tar > 0 ? `${cur} de ${tar} peças` : 'Sem meta definida');
+          donut.setAttribute('aria-label', tar > 0 ? `${cur} de ${tar} no enxoval` : 'Sem meta definida');
         }
       });
     }
@@ -2622,7 +2647,7 @@
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-1.5">
                   <h3 class="font-bold text-gray-900 text-sm">${escapeHtml(item.name)}</h3>
-                  ${item.essential ? '<span class="text-[9px] bg-amber-100 text-amber-700 font-bold px-1.5 py-0.5 rounded-md">Essencial</span>' : ''}
+                  ${itemPriorityBadge(item)}
                   ${isComplete ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded-md">✅ OK</span>' : ''}
                 </div>
                 ${acquisitions.length ? `<p class="text-[10px] text-gray-500 mt-1">${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição' : 'aquisições'} • ${escapeHtml(brandSummary)}</p>` : '<p class="text-[10px] text-gray-400 mt-1">Nenhuma aquisição registrada</p>'}
@@ -2636,7 +2661,7 @@
               ${isUniqueSizeItem(item) ? renderUniqueQuantity(item) : `
                 <div class="flex items-center justify-between gap-2 mb-1.5">
                   <span class="text-[10px] font-semibold text-gray-500">Quantidade por tamanho</span>
-                  <span class="text-[10px] font-bold text-gray-600">${getOwnedTotal(item)} ${getOwnedTotal(item) === 1 ? 'peça' : 'peças'} adquiridas</span>
+                  <span class="text-[10px] font-bold text-gray-600">Adquirido: ${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))}</span>
                 </div>
                 <div class="grid grid-cols-5 gap-1.5">
                   ${getDisplaySizes(item).map(size => renderSizeCell(item, size)).join('')}
@@ -2664,7 +2689,7 @@
       const current = getOwnedForSize(item, 'U');
       const target = Number(item.sizes?.U?.target) || 0;
       const isOk = target > 0 && current >= target;
-      const quantityText = target > 0 ? `${current}/${target} peças` : `${current} ${current === 1 ? 'peça' : 'peças'}`;
+      const quantityText = target > 0 ? `${current}/${target} ${itemUnitLabel(item, target)}` : `${current} ${itemUnitLabel(item, current)}`;
       return `
         <div class="border ${isOk ? 'border-emerald-300 bg-emerald-50/50' : 'border-rose-100 bg-rose-50/30'} rounded-xl p-3">
           <div class="flex items-end justify-between gap-3">
@@ -2887,7 +2912,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const statusClass = plannedTotal <= 0 ? 'text-gray-500' : remaining >= 0 ? 'text-emerald-700' : 'text-rose-700';
 
       document.getElementById('resumoGastoReal').innerText = money(spent);
-      document.getElementById('resumoPecasCompradas').innerText = `${purchasedPieces} ${purchasedPieces === 1 ? 'peça paga' : 'peças pagas'}`;
+      document.getElementById('resumoPecasCompradas').innerText = `${purchasedPieces} ${purchasedPieces === 1 ? 'unidade de compra paga' : 'unidades de compra pagas'}`;
       document.getElementById('resumoQtdAquisicoes').innerText = `${acquisitionCount} ${acquisitionCount === 1 ? 'aquisição' : 'aquisições'}`;
       document.getElementById('resumoOrcamentoTotal').innerText = plannedTotal > 0 ? `de ${money(plannedTotal)} planejados` : 'sem orçamento definido';
       document.getElementById('resumoOrcamentoDetalhe').innerText = `${estimatedItemCount} ${estimatedItemCount === 1 ? 'item com estimativa' : 'itens com estimativa'}`;
@@ -2979,6 +3004,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       appState.editingAcquisitionBase = null;
       document.getElementById('acquisitionForm').reset();
       document.getElementById('acquisitionItemId').value = item.id;
+      document.getElementById('acquisitionQuantityLabel').textContent = `Quantidade (${itemUnitLabel(item)})`;
+      document.getElementById('acquisitionUnitPriceLabel').textContent = `Preço por ${itemUnitLabel(item, 1)} (R$)`;
       document.getElementById('acquisitionId').value = '';
       document.getElementById('deleteAcquisitionSection').classList.add('hidden');
       document.getElementById('acquisitionItemName').innerText = item.name;
@@ -3019,7 +3046,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       if (!item) return;
       appState.activeHistoryItemId = itemId;
       document.getElementById('historyItemName').innerText = item.name;
-      document.getElementById('historySummary').innerText = `${getOwnedTotal(item)} peças • ${getAcquisitions(item).length} aquisições • ${money(getPurchaseTotal(item))} pagos`;
+      document.getElementById('historySummary').innerText = `${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))} • ${getAcquisitions(item).length} aquisições • ${money(getPurchaseTotal(item))} pagos`;
       renderAcquisitionHistory(item);
       document.getElementById('modalAcquisitionHistory').classList.remove('hidden');
       lucide.createIcons();
@@ -3073,6 +3100,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       appState.editingAcquisitionBase = cloneData(normalizeAcquisition(acq, acquisitionId));
       closeModal('modalAcquisitionHistory');
       document.getElementById('acquisitionItemId').value = item.id;
+      document.getElementById('acquisitionQuantityLabel').textContent = `Quantidade (${itemUnitLabel(item)})`;
+      document.getElementById('acquisitionUnitPriceLabel').textContent = `Preço por ${itemUnitLabel(item, 1)} (R$)`;
       document.getElementById('acquisitionId').value = acquisitionId;
       document.getElementById('deleteAcquisitionSection').classList.remove('hidden');
       document.getElementById('acquisitionItemName').innerText = item.name;
@@ -3139,7 +3168,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const item = appState.items.find(i => i.id === itemId);
       const acq = item?.acquisitions?.[acquisitionId];
       if (!item || !acq) return;
-      if (!confirm(`Excluir esta aquisição de ${acq.quantity} peça(s)?`)) return;
+      if (!confirm(`Excluir esta aquisição de ${acq.quantity} ${itemUnitLabel(item, acq.quantity)}?`)) return;
       try {
         await runWriteOnce(
           `delete-acquisition:${itemId}:${acquisitionId}`,
@@ -3165,7 +3194,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const expected = appState.editingAcquisitionBase || (acq ? cloneData(acq) : null);
       if (!expected) return;
 
-      if (!confirm(`Excluir esta aquisição de ${expected.quantity} peça(s)?`)) return;
+      if (!confirm(`Excluir esta aquisição (quantidade: ${expected.quantity})?`)) return;
 
       try {
         await runWriteOnce(
@@ -3197,7 +3226,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       document.getElementById('itemId').value = item.id;
       document.getElementById('itemName').value = item.name;
       document.getElementById('itemCategory').value = item.category;
-      document.getElementById('itemEssential').value = item.essential.toString();
+      document.getElementById('itemEssential').value = itemPriority(item);
       document.getElementById('itemNotes').value = item.notes || '';
       document.getElementById('itemUnitEstimate').value = item.unitEstimate === null || item.unitEstimate === undefined ? '' : Number(item.unitEstimate).toFixed(2);
       document.getElementById('itemSizeMode').value = isUniqueSizeItem(item) ? 'unique' : 'multi';
@@ -3225,7 +3254,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         id,
         name: document.getElementById('itemName').value.trim(),
         category: document.getElementById('itemCategory').value,
-        essential: document.getElementById('itemEssential').value === 'true',
+        essential: document.getElementById('itemEssential').value === 'essential',
+        priority: document.getElementById('itemEssential').value,
         notes: document.getElementById('itemNotes').value.trim(),
         unitEstimate: document.getElementById('itemUnitEstimate').value.trim() === '' ? null : Math.max(0, Number(document.getElementById('itemUnitEstimate').value.replace(',', '.')) || 0),
         sizeMode: document.getElementById('itemSizeMode').value === 'unique' ? 'unique' : 'multi',
@@ -4523,8 +4553,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           <div>
             <label class="block text-xs font-semibold text-gray-700 mb-1">Importância</label>
             <select id="itemEssential" class="w-full text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
-              <option value="true">⭐ Essencial</option>
-              <option value="false">Opcional / Desejável</option>
+              <option value="essential">Essencial</option>
+              <option value="recommended">Vale a pena ter</option>
+              <option value="optional">Opcional</option>
+              <option value="conditional">Conforme sua rotina</option>
             </select>
           </div>
         </div>
@@ -4643,7 +4675,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
             </select>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-gray-700 mb-1">Quantidade</label>
+            <label id="acquisitionQuantityLabel" class="block text-xs font-semibold text-gray-700 mb-1">Quantidade</label>
             <input type="number" id="acquisitionQuantity" min="1" step="1" value="1" required class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
           </div>
         </div>
@@ -4654,7 +4686,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         </div>
 
         <div id="acquisitionPriceBox">
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Preço unitário (R$)</label>
+          <label id="acquisitionUnitPriceLabel" class="block text-xs font-semibold text-gray-700 mb-1">Preço unitário (R$)</label>
           <input type="number" id="acquisitionUnitPrice" min="0" step="0.01" placeholder="0,00" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
           <p id="acquisitionTotalPreview" class="text-[10px] text-gray-500 mt-1">Total desta aquisição: R$ 0,00</p>
         </div>
