@@ -45,7 +45,7 @@
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G', 'GG'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', GG: 'GG', U: 'Único' };
     const SCHEMA_VERSION = 17; // V4.8E1: perfil + plano V4.8 + tamanho GG
-    const APP_MODEL = 'v4.8-f2-integrated';
+    const APP_MODEL = 'v4.8-f3-integrated';
     const PENDING_INVITE_STORAGE_KEY = 'cora_pending_invite_v451';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
     // V4.5.1 mantém autenticação separada da autorização e fecha o modelo em uma família por conta.
@@ -425,6 +425,7 @@
       return {
         id: acq.id || idFallback,
         size: SIZE_KEYS.includes(acq.size) ? acq.size : 'U',
+        variant: typeof acq.variant === 'string' && acq.variant.trim() ? acq.variant.trim() : null,
         quantity: Math.max(1, Number(acq.quantity) || 1),
         unitPrice: acq.type === 'gift' ? 0 : Math.max(0, Number(acq.unitPrice) || 0),
         type: acq.type === 'gift' ? 'gift' : 'purchase',
@@ -688,6 +689,62 @@
       return STANDARD_SIZE_KEYS;
     }
 
+    function variantCore() {
+      return globalThis.CoraV48IntegrationCore || null;
+    }
+
+    function variantLabel(key) {
+      const core = variantCore();
+      if (core?.variantLabel) return core.variantLabel(key);
+      const labels = {
+        manga_curta: 'manga curta',
+        manga_longa: 'manga longa',
+        macaquinho_curto: 'macaquinho curto',
+        macacao_longo: 'macacão longo',
+        calca_culote: 'calça / culote',
+        short: 'short'
+      };
+      return labels[key] || String(key || '').replaceAll('_', ' ');
+    }
+
+    function itemVariantKeys(item) {
+      const target = item?.recommendationSnapshot;
+      const core = variantCore();
+      if (core?.variantTargetKeys) return core.variantTargetKeys(target);
+      if (target?.kind !== 'by_size') return [];
+      const keys = [];
+      STANDARD_SIZE_KEYS.forEach(size => {
+        Object.keys(target.sizes?.[size]?.variants || {}).forEach(key => { if (!keys.includes(key)) keys.push(key); });
+      });
+      return keys;
+    }
+
+    function itemUsesOperationalVariants(item) {
+      return itemPlanDisposition(item) === 'planned' && itemVariantKeys(item).length > 0;
+    }
+
+    function getVariantProgress(item, size) {
+      const core = variantCore();
+      if (core?.variantProgress) return core.variantProgress(item?.recommendationSnapshot, item?.acquisitions || {}, size);
+      const keys = itemVariantKeys(item);
+      const targets = Object.fromEntries(keys.map(key => [key, Math.max(0, Number(item?.recommendationSnapshot?.sizes?.[size]?.variants?.[key] || 0))]));
+      const ownedByVariant = Object.fromEntries(keys.map(key => [key, 0]));
+      let actual = 0, unclassified = 0;
+      getAcquisitions(item).filter(acq => acq.size === size).forEach(acq => {
+        const qty = Math.max(0, Number(acq.quantity) || 0); actual += qty;
+        if (acq.variant && Object.prototype.hasOwnProperty.call(ownedByVariant, acq.variant)) ownedByVariant[acq.variant] += qty;
+        else unclassified += qty;
+      });
+      const targetTotal = keys.reduce((sum,key) => sum + targets[key], 0);
+      const credited = keys.reduce((sum,key) => sum + Math.min(ownedByVariant[key], targets[key]), 0);
+      return {size,targets,ownedByVariant,targetTotal,credited,actual,unclassified};
+    }
+
+    function getProgressOwnedForSize(item, size) {
+      if (!itemUsesOperationalVariants(item)) return getOwnedForSize(item, size);
+      return getVariantProgress(item, size).credited;
+    }
+
     function setSizeMode(mode, silent = false) {
       const select = document.getElementById('itemSizeMode');
       if (!select) return;
@@ -731,9 +788,46 @@
       select.value = sizes.includes(presetSize) ? presetSize : sizes[0];
     }
 
+    function syncAcquisitionVariantOptions(item, presetVariant = '') {
+      const wrap = document.getElementById('acquisitionVariantWrap');
+      const select = document.getElementById('acquisitionVariant');
+      if (!wrap || !select) return;
+      const keys = itemVariantKeys(item);
+      if (!keys.length) {
+        wrap.classList.add('hidden');
+        select.disabled = true;
+        select.required = false;
+        select.innerHTML = '<option value="">Sem variação</option>';
+        return;
+      }
+      const size = document.getElementById('acquisitionSize')?.value || STANDARD_SIZE_KEYS[0];
+      const progress = getVariantProgress(item, size);
+      wrap.classList.remove('hidden');
+      select.disabled = false;
+      select.required = true;
+      const placeholder = presetVariant ? '' : '<option value="" disabled selected>Escolha a variação</option>';
+      select.innerHTML = placeholder + keys.map(key => {
+        const target = Number(progress.targets?.[key] || 0);
+        return `<option value="${escapeHtml(key)}">${escapeHtml(variantLabel(key))} · meta ${target}</option>`;
+      }).join('');
+      if (presetVariant && keys.includes(presetVariant)) select.value = presetVariant;
+      else if (presetVariant && !keys.includes(presetVariant)) {
+        select.insertAdjacentHTML('afterbegin', `<option value="${escapeHtml(presetVariant)}">${escapeHtml(variantLabel(presetVariant))} · registro anterior</option>`);
+        select.value = presetVariant;
+      }
+    }
+
+    function syncAcquisitionVariantOptionsFromModal() {
+      const itemId = document.getElementById('acquisitionItemId')?.value;
+      const item = appState.items.find(i => i.id === itemId);
+      if (!item) return;
+      const current = document.getElementById('acquisitionVariant')?.value || '';
+      syncAcquisitionVariantOptions(item, current);
+    }
+
     function getProgressCurrentForItem(item) {
       return SIZE_KEYS.reduce((sum, size) => {
-        const current = getOwnedForSize(item, size);
+        const current = getProgressOwnedForSize(item, size);
         const target = Number(item.sizes?.[size]?.target) || 0;
         return sum + Math.min(current, target);
       }, 0);
@@ -1291,6 +1385,7 @@
       return {
         id: normalized.id,
         size: normalized.size,
+        variant: normalized.variant || null,
         quantity: normalized.quantity,
         unitPrice: normalized.unitPrice,
         type: normalized.type,
@@ -1370,6 +1465,7 @@
       const fields = [
         ['type', 'tipo'],
         ['size', 'tamanho'],
+        ['variant', 'variação'],
         ['quantity', 'quantidade'],
         ['unitPrice', 'preço'],
         ['brand', 'marca/modelo'],
@@ -2617,9 +2713,10 @@
 
       appState.items.forEach(item => {
         SIZE_KEYS.forEach(size => {
-          const current = getOwnedForSize(item, size);
+          const actual = getOwnedForSize(item, size);
+          const current = getProgressOwnedForSize(item, size);
           const target = Number(item.sizes?.[size]?.target) || 0;
-          totalCurrent += current;
+          totalCurrent += actual;
           totalTarget += target;
           completedForProgress += Math.min(current, target);
         });
@@ -2629,7 +2726,7 @@
       const percent = totalTarget > 0 ? Math.round((completedForProgress / totalTarget) * 100) : 0;
       document.getElementById('progressPercentText').innerText = `${percent}%`;
       document.getElementById('progressBar').style.width = `${percent}%`;
-      document.getElementById('progressItemsCount').innerText = `${totalCurrent} de ${totalTarget} no enxoval`;
+      document.getElementById('progressItemsCount').innerText = `${completedForProgress} de ${totalTarget} no enxoval`;
       document.getElementById('financeTotalSpent').innerText = `Gasto: ${money(totalSpent)}`;
 
       const categories = ['vestuario', 'quarto', 'higiene', 'alimentacao', 'passeio', 'mamae'];
@@ -2638,7 +2735,7 @@
         let cur = 0, tar = 0;
         catItems.forEach(item => {
           SIZE_KEYS.forEach(size => {
-            const owned = getOwnedForSize(item, size);
+            const owned = getProgressOwnedForSize(item, size);
             const target = Number(item.sizes?.[size]?.target) || 0;
             // O badge da categoria representa progresso: excedentes não aumentam o numerador.
             cur += Math.min(owned, target);
@@ -2669,14 +2766,14 @@
       if (statusFilter === 'faltam') {
         return SIZE_KEYS.some(size => {
           const target = Number(item.sizes?.[size]?.target) || 0;
-          return target > 0 && getOwnedForSize(item, size) < target;
+          return target > 0 && getProgressOwnedForSize(item, size) < target;
         });
       }
       if (statusFilter === 'completos') {
         if (!hasTargets) return false;
         return SIZE_KEYS.every(size => {
           const target = Number(item.sizes?.[size]?.target) || 0;
-          return target === 0 || getOwnedForSize(item, size) >= target;
+          return target === 0 || getProgressOwnedForSize(item, size) >= target;
         });
       }
       return true;
@@ -2733,14 +2830,16 @@
             <div class="pt-1">
               ${['suggested','deferred'].includes(itemPlanDisposition(item))
                 ? renderNonPlannedRecommendation(item)
-                : (isUniqueSizeItem(item) ? renderUniqueQuantity(item) : `
-                  <div class="flex items-center justify-between gap-2 mb-1.5">
-                    <span class="text-[10px] font-semibold text-gray-500">Quantidade por tamanho</span>
-                    <span class="text-[10px] font-bold text-gray-600">Adquirido: ${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))}</span>
-                  </div>
-                  <div class="grid grid-cols-5 gap-1.5">
-                    ${getDisplaySizes(item).map(size => renderSizeCell(item, size)).join('')}
-                  </div>`)}
+                : (itemUsesOperationalVariants(item)
+                  ? renderVariantMatrix(item)
+                  : (isUniqueSizeItem(item) ? renderUniqueQuantity(item) : `
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                      <span class="text-[10px] font-semibold text-gray-500">Quantidade por tamanho</span>
+                      <span class="text-[10px] font-bold text-gray-600">Adquirido: ${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))}</span>
+                    </div>
+                    <div class="grid grid-cols-5 gap-1.5">
+                      ${getDisplaySizes(item).map(size => renderSizeCell(item, size)).join('')}
+                    </div>`))}
             </div>
 
             <button onclick="openAcquisitionHistory('${item.id}')" class="w-full pt-2.5 pb-2.5 px-3 rounded-xl border border-emerald-100 bg-emerald-50/40 hover:bg-emerald-50 transition text-left flex items-center justify-between gap-3" aria-label="Ver aquisições do item">
@@ -2758,6 +2857,46 @@
           </div>`;
       }).join('');
       lucide.createIcons();
+    }
+
+    function renderVariantMatrix(item) {
+      const keys = itemVariantKeys(item);
+      const rows = STANDARD_SIZE_KEYS.map(size => {
+        const progress = getVariantProgress(item, size);
+        if (progress.targetTotal <= 0 && progress.actual <= 0) return '';
+        const cells = keys.map(key => {
+          const target = Number(progress.targets?.[key] || 0);
+          const owned = Number(progress.ownedByVariant?.[key] || 0);
+          const ok = target > 0 && owned >= target;
+          const extra = target === 0 && owned > 0;
+          const cls = ok ? 'border-emerald-200 bg-emerald-50/60 text-emerald-700' : extra ? 'border-sky-200 bg-sky-50/60 text-sky-700' : target > 0 ? 'border-rose-100 bg-rose-50/40 text-rose-700' : 'border-gray-100 bg-gray-50 text-gray-400';
+          return `<div class="border ${cls} rounded-lg p-2">
+            <div class="flex items-center justify-between gap-1">
+              <div class="min-w-0">
+                <span class="block text-[9px] font-bold leading-tight truncate">${escapeHtml(variantLabel(key))}</span>
+                <span class="block text-[11px] font-black mt-0.5">${owned}/${target}</span>
+              </div>
+              <button onclick="openAcquisitionModalForItem('${item.id}', '${size}', '${key}')" class="shrink-0 w-7 h-7 rounded-md bg-emerald-600 text-white text-xs font-bold active:scale-95" aria-label="Adicionar ${escapeHtml(variantLabel(key))} ${size}">+</button>
+            </div>
+          </div>`;
+        }).join('');
+        const legacy = progress.unclassified > 0 ? `<p class="text-[9px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 mt-1.5">${progress.unclassified} ${progress.unclassified === 1 ? 'aquisição sem variação' : 'aquisições sem variação'} preservada(s). Edite o histórico para classificar; enquanto isso, não completa uma meta de variação.</p>` : '';
+        return `<div class="border border-gray-100 rounded-xl p-2.5 bg-white">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[10px] font-black text-gray-700">${SIZE_LABELS[size]}</span>
+            <span class="text-[10px] font-bold text-gray-500">Progresso ${progress.credited}/${progress.targetTotal}</span>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5">${cells}</div>
+          ${legacy}
+        </div>`;
+      }).join('');
+      return `<div class="space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[10px] font-semibold text-gray-500">Metas por variação e tamanho</span>
+          <span class="text-[10px] font-bold text-gray-600">Adquirido: ${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))}</span>
+        </div>
+        ${rows}
+      </div>`;
     }
 
     function renderUniqueQuantity(item) {
@@ -3071,7 +3210,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       lucide.createIcons();
     }
 
-    function openAcquisitionModalForItem(itemId, presetSize = '') {
+    function openAcquisitionModalForItem(itemId, presetSize = '', presetVariant = '') {
       const item = appState.items.find(i => i.id === itemId);
       if (!item) return;
       closeModal('modalChooseAcquisition');
@@ -3086,6 +3225,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       document.getElementById('acquisitionItemName').innerText = item.name;
       document.getElementById('acquisitionType').value = 'purchase';
       syncAcquisitionSizeOptions(item, presetSize);
+      syncAcquisitionVariantOptions(item, presetVariant);
       document.getElementById('acquisitionQuantity').value = 1;
       document.getElementById('acquisitionUnitPrice').value = '';
       document.getElementById('acquisitionBrand').value = '';
@@ -3142,7 +3282,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           <div class="p-3 rounded-xl border border-gray-100 bg-gray-50">
             <div class="flex justify-between items-start gap-2">
               <div>
-                <span class="text-xs font-bold text-gray-800">${acq.quantity}× ${SIZE_LABELS[acq.size]}</span>
+                <span class="text-xs font-bold text-gray-800">${acq.quantity}× ${SIZE_LABELS[acq.size]}${acq.variant ? ` • ${escapeHtml(variantLabel(acq.variant))}` : ''}</span>
+                ${itemUsesOperationalVariants(item) && !acq.variant ? '<span class="block text-[9px] font-semibold text-amber-700 mt-0.5">Variação não informada — edite para classificar</span>' : ''}
                 <span class="block text-[10px] text-gray-500 mt-0.5">${acq.type === 'gift' ? '🎁 Presente / Doação' : `🛒 Compra • ${money(acq.unitPrice)} / un.`}</span>
                 ${acq.brand ? `<span class="block text-[10px] text-gray-500">${escapeHtml(acq.brand)}</span>` : ''}
               </div>
@@ -3182,6 +3323,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       document.getElementById('acquisitionItemName').innerText = item.name;
       document.getElementById('acquisitionType').value = acq.type;
       syncAcquisitionSizeOptions(item, acq.size);
+      syncAcquisitionVariantOptions(item, acq.variant || '');
       document.getElementById('acquisitionQuantity').value = acq.quantity;
       document.getElementById('acquisitionBrand').value = acq.brand || '';
       document.getElementById('acquisitionUnitPrice').value = acq.unitPrice || 0;
@@ -3210,10 +3352,16 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const type = document.getElementById('acquisitionType').value === 'gift' ? 'gift' : 'purchase';
       const quantity = Math.max(1, parseInt(document.getElementById('acquisitionQuantity').value, 10) || 1);
       const unitPrice = type === 'gift' ? 0 : Math.max(0, parseFloat(document.getElementById('acquisitionUnitPrice').value) || 0);
+      const variant = itemVariantKeys(item).length ? (document.getElementById('acquisitionVariant').value || '') : '';
+      if (itemVariantKeys(item).length && !variant) {
+        alert('Escolha a variação desta peça antes de salvar.');
+        return;
+      }
       const acquisition = normalizeAcquisition({
         id,
         type,
         size: document.getElementById('acquisitionSize').value,
+        variant,
         quantity,
         unitPrice,
         brand: document.getElementById('acquisitionBrand').value.trim(),
@@ -4742,7 +4890,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         <div class="grid grid-cols-2 gap-2">
           <div>
             <label class="block text-xs font-semibold text-gray-700 mb-1">Tamanho</label>
-            <select id="acquisitionSize" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+            <select id="acquisitionSize" onchange="syncAcquisitionVariantOptionsFromModal()" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
               <option value="RN">RN</option>
               <option value="P">P</option>
               <option value="M">M</option>
@@ -4753,6 +4901,14 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
             <label id="acquisitionQuantityLabel" class="block text-xs font-semibold text-gray-700 mb-1">Quantidade</label>
             <input type="number" id="acquisitionQuantity" min="1" step="1" value="1" required class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
           </div>
+        </div>
+
+        <div id="acquisitionVariantWrap" class="hidden">
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Variação da peça</label>
+          <select id="acquisitionVariant" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+            <option value="">Sem variação</option>
+          </select>
+          <p class="text-[10px] text-gray-500 mt-1">A variação é usada para acompanhar a meta correta de cada tamanho.</p>
         </div>
 
         <div>

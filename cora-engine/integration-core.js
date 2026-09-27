@@ -6,7 +6,8 @@
   const SIZE_KEYS=["RN","P","M","G","GG","U"];
   const PLAN_SIZES=["RN","P","M","G","GG"];
   const CATEGORY_MAP={vestuario:"vestuario",quarto:"quarto",banho_higiene:"higiene",alimentacao:"alimentacao",passeio:"passeio",mamae:"mamae"};
-  const VARIANT_LABELS={manga_curta:"manga curta",manga_longa:"manga longa",macaquinho_curto:"macaquinho curto",macacao_longo:"macacão longo",calca_culote:"calça/culote",short:"short",camiseta:"camiseta",blusa_manga_longa:"blusa manga longa"};
+  const VERSION="4.8F3";
+  const VARIANT_LABELS={manga_curta:"manga curta",manga_longa:"manga longa",macaquinho_curto:"macaquinho curto",macacao_longo:"macacão longo",calca_culote:"calça / culote",short:"short"};
   const VISIBLE_DISPOSITIONS=new Set(["planned","suggested","deferred"]);
   function clone(v){return v==null?v:JSON.parse(JSON.stringify(v));}
   function isNum(v){return v!==null&&v!==undefined&&v!==""&&Number.isFinite(Number(v));}
@@ -39,6 +40,40 @@
       rows.push(`${s}: ${vars.map(([k,n])=>`${VARIANT_LABELS[k]||k} ${n}`).join(" • ")}`);
     }
     return rows.join(" | ");
+  }
+  function variantLabel(key){return VARIANT_LABELS[key]||String(key||"").replaceAll("_"," ");}
+  function variantTargetKeys(target){
+    if(target?.kind!=="by_size")return [];
+    const keys=[];
+    for(const size of PLAN_SIZES){
+      for(const key of Object.keys(target.sizes?.[size]?.variants||{})) if(!keys.includes(key)) keys.push(key);
+    }
+    return keys;
+  }
+  function hasVariantTargets(target){return variantTargetKeys(target).length>0;}
+  function variantTargetsForSize(target,size){
+    const out={};
+    if(target?.kind!=="by_size"||!PLAN_SIZES.includes(size))return out;
+    for(const key of variantTargetKeys(target)) out[key]=Math.max(0,Number(target.sizes?.[size]?.variants?.[key]||0));
+    return out;
+  }
+  function variantProgress(target,acquisitions,size){
+    const targets=variantTargetsForSize(target,size);
+    const keys=Object.keys(targets);
+    const ownedByVariant=Object.fromEntries(keys.map(k=>[k,0]));
+    let actual=0,unclassified=0;
+    for(const acq of Object.values(acquisitions||{})){
+      if(acq?.size!==size)continue;
+      const qty=Math.max(0,Number(acq.quantity)||0);
+      actual+=qty;
+      if(acq.variant&&Object.prototype.hasOwnProperty.call(ownedByVariant,acq.variant)) ownedByVariant[acq.variant]+=qty;
+      else unclassified+=qty;
+    }
+    const credited=keys.reduce((sum,key)=>sum+Math.min(ownedByVariant[key],targets[key]),0);
+    const targetTotal=keys.reduce((sum,key)=>sum+targets[key],0);
+    const missingByVariant=Object.fromEntries(keys.map(k=>[k,Math.max(0,targets[k]-ownedByVariant[k])]));
+    const extraByVariant=Object.fromEntries(keys.map(k=>[k,Math.max(0,ownedByVariant[k]-targets[k])]));
+    return {size,targets,ownedByVariant,missingByVariant,extraByVariant,targetTotal,credited,actual,unclassified};
   }
   function planItemToOperational(planItem,financeItem,planId,existing=null,now=Date.now(),dispositionOverride=null){
     const target=planItem.target||{};
@@ -193,5 +228,5 @@
     const periods=plan?.climateSnapshot?.thermalProfile?.agePeriods||{};const labels={RN:"RN",P:"P",M:"M",G:"G",GG:"GG"};
     return PLAN_SIZES.map(s=>{const p=periods[s];return {size:s,label:labels[s],from:p?.from||null,toExclusive:p?.toExclusive||null,meanTempC:isNum(p?.weightedMeanTempC)?Number(p.weightedMeanTempC):null,thermalClass:p?.dominantThermalClass||null,mixed:Boolean(p?.mixedSeason)};});
   }
-  return {SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,clone,isNum,todayIso,categoryToLegacy,totalTarget,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,planItemToOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
+  return {VERSION,SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,clone,isNum,todayIso,categoryToLegacy,totalTarget,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
 });
