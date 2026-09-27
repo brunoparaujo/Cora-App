@@ -45,7 +45,7 @@
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G', 'GG'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', GG: 'GG', U: 'Único' };
     const SCHEMA_VERSION = 17; // V4.8E1: perfil + plano V4.8 + tamanho GG
-    const APP_MODEL = 'v4.8-e1-integrated';
+    const APP_MODEL = 'v4.8-f1-integrated';
     const PENDING_INVITE_STORAGE_KEY = 'cora_pending_invite_v451';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
     // V4.5.1 mantém autenticação separada da autorização e fecha o modelo em uma família por conta.
@@ -504,6 +504,11 @@
 
     // V4.0 — Normaliza o item para o contrato canônico do banco.
     // O estoque é derivado exclusivamente das aquisições.
+    const PLAN_ITEM_FIELDS = Object.freeze([
+      'source', 'sourcePlanId', 'priority', 'goalType', 'planningSnapshot',
+      'recommendationSnapshot', 'retainedPurchaseHistory'
+    ]);
+
     function normalizeItem(item) {
       const normalized = {
         id: item.id,
@@ -550,6 +555,10 @@
         normalized.acquisitions = legacyToAcquisitions(item).acquisitions;
       }
 
+      // F1: preserve the planning contract through every item/acquisition write.
+      PLAN_ITEM_FIELDS.forEach(key => {
+        if (item[key] !== undefined && item[key] !== null) normalized[key] = cloneData(item[key]);
+      });
       // Nenhum campo financeiro/estoque legado é persistido na V4.
       return normalized;
     }
@@ -1014,7 +1023,7 @@
     function validateCanonicalItem(item) {
       const allowedItemKeys = [
         'id', 'name', 'category', 'essential', 'notes', 'sizeMode', 'unitEstimate',
-        'sizes', 'acquisitions', 'revision', 'createdAt', 'updatedAt'
+        'sizes', 'acquisitions', 'revision', 'createdAt', 'updatedAt', ...PLAN_ITEM_FIELDS
       ];
       const itemKeysOk = Object.keys(item || {}).every(key => allowedItemKeys.includes(key));
       const sizesOk = Object.keys(item?.sizes || {}).every(size =>
@@ -3411,7 +3420,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
     // V4.6 — BACKUP / EXPORT
     const CORA_BACKUP_FORMAT = 'cora-family-backup';
-    const CORA_BACKUP_VERSION = 1;
+    const CORA_BACKUP_VERSION = 2; // F1: complete planning state; reads v1 too.
 
     function backupLastExportKey(user = appState.user) {
       return user?.uid ? `cora:lastBackup:${user.uid}` : 'cora:lastBackup';
@@ -3503,10 +3512,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       return typeof value === 'string' && value.length > 0 && !/[.#$\[\]\/]/.test(value);
     }
 
-    function validateBackupProfile(profileId, data) {
+    function validateBackupProfile(profileId, data, familyId = activeFamilyId()) {
       if (!validFirebasePathKey(profileId)) throw new Error(`ID de perfil inválido no backup: ${profileId}`);
       if (!data || typeof data !== 'object') throw new Error(`Perfil ${profileId} inválido.`);
-      const babyName = String(data.profile?.babyName || '').trim();
+      const babyName = String(data.profile?.babyName || data.profile?.name || '').trim();
       if (!babyName || babyName.length > 60) throw new Error(`Nome inválido no perfil ${profileId}.`);
       const items = data.enxoval?.items || {};
       if (typeof items !== 'object' || Array.isArray(items)) throw new Error(`Enxoval inválido no perfil ${babyName}.`);
@@ -3522,9 +3531,27 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           throw new Error(`Checklist inválido no backup do perfil ${babyName}.`);
         }
       }
+      const enxoval = cloneData(data.enxoval || {});
+      enxoval.items = cloneData(items);
+      const plans = enxoval.plans || {};
+      if (!plans || typeof plans !== 'object' || Array.isArray(plans)) throw new Error('Histórico de planos inválido.');
+      for (const [planId, plan] of Object.entries(plans)) {
+        if (!validFirebasePathKey(planId) || !plan || plan.planId !== planId ||
+            plan.schemaVersion !== 1 || plan.contractVersion !== '4.8D1' || plan.status !== 'ready' ||
+            plan.metadata?.childId !== profileId || plan.metadata?.familyId !== familyId ||
+            !plan.generatedSnapshot || !plan.financeSnapshot || !plan.timelineSnapshot) {
+          throw new Error(`Plano inválido no backup de ${babyName}: ${planId}`);
+        }
+      }
+      if (enxoval.currentPlanId != null && !Object.prototype.hasOwnProperty.call(plans, enxoval.currentPlanId)) {
+        throw new Error(`O planejamento ativo de ${babyName} não existe no backup.`);
+      }
+      if (enxoval.onboarding?.status === 'complete' && (!enxoval.currentPlanId || !enxoval.settings)) {
+        throw new Error(`Planejamento incompleto no backup de ${babyName}.`);
+      }
       return {
         profile: { ...cloneData(data.profile), babyName },
-        enxoval: { items: cloneData(items) },
+        enxoval,
         maternity: cloneData(maternity),
         meta: {
           ...(data.meta && typeof data.meta === 'object' ? cloneData(data.meta) : {}),
@@ -3539,7 +3566,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       try { parsed = JSON.parse(text); }
       catch { throw new Error('O arquivo não contém um JSON válido.'); }
       if (parsed?.format !== CORA_BACKUP_FORMAT) throw new Error('Este arquivo não é um backup do Cora.');
-      if (Number(parsed?.backupVersion) !== CORA_BACKUP_VERSION) throw new Error('Versão de backup não suportada por esta versão do Cora.');
+      if (![1, CORA_BACKUP_VERSION].includes(Number(parsed?.backupVersion))) throw new Error('Versão de backup não suportada por esta versão do Cora.');
+      if (parsed?.family?.id && parsed.family.id !== activeFamilyId()) {
+        throw new Error('Este backup pertence a outra família. Abra a família de origem para restaurá-lo.');
+      }
       const profiles = parsed?.family?.profiles;
       if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles) || !Object.keys(profiles).length) {
         throw new Error('O backup não contém perfis válidos.');

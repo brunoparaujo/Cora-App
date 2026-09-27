@@ -46,11 +46,14 @@
     if(vtext)notes.unshift(`Distribuição recomendada — ${vtext}`);
     let unitEstimate=null;
     if(isNum(financeItem?.pricing?.unitReferenceBRL))unitEstimate=Number(financeItem.pricing.unitReferenceBRL);
+    const carSeat = planItem.itemId === "bebe_conforto";
+    const selectedVariant = target.variant?.selectedVariant || financeItem?.pricing?.variant;
+    const name = carSeat ? (selectedVariant === "com_isofix" ? "Bebê conforto com ISOFIX" : "Bebê conforto") : (planItem.identitySnapshot?.name||planItem.itemId);
     return {
       id:planItem.itemId,
-      name:planItem.identitySnapshot?.name||planItem.itemId,
+      name,
       category:categoryToLegacy(planItem.identitySnapshot?.category),
-      essential:planItem.identitySnapshot?.priority==="essential",
+      essential:carSeat||planItem.identitySnapshot?.priority==="essential",
       notes:notes.join("\n"),
       sizeMode:sizeModeForTarget(target),
       unitEstimate,
@@ -61,7 +64,7 @@
       updatedAt:now,
       source:"v4.8-generated",
       sourcePlanId:planId,
-      priority:planItem.identitySnapshot?.priority||null,
+      priority:carSeat?"essential":(planItem.identitySnapshot?.priority||null),
       goalType:planItem.identitySnapshot?.goalType||null,
       planningSnapshot:clone(planItem.planningSnapshot||{}),
       recommendationSnapshot:clone(target)
