@@ -6,9 +6,15 @@
   const SIZE_KEYS=["RN","P","M","G","GG","U"];
   const PLAN_SIZES=["RN","P","M","G","GG"];
   const CATEGORY_MAP={vestuario:"vestuario",quarto:"quarto",banho_higiene:"higiene",alimentacao:"alimentacao",passeio:"passeio",mamae:"mamae"};
-  const VERSION="4.8F3";
+  const VERSION="4.8F3.1";
   const VARIANT_LABELS={manga_curta:"manga curta",manga_longa:"manga longa",macaquinho_curto:"macaquinho curto",macacao_longo:"macacão longo",calca_culote:"calça / culote",short:"short"};
   const VISIBLE_DISPOSITIONS=new Set(["planned","suggested","deferred"]);
+  const OPERATIONAL_VARIANT_NAMES={
+    body:{manga_curta:"Body manga curta",manga_longa:"Body manga longa"},
+    peca_inteira:{macaquinho_curto:"Macaquinho curto",macacao_longo:"Macacão longo"},
+    parte_baixo:{calca_culote:"Calça / culote",short:"Short"},
+    parte_cima_separada:{manga_curta:"Camiseta / blusa manga curta",manga_longa:"Camiseta / blusa manga longa"}
+  };
   function clone(v){return v==null?v:JSON.parse(JSON.stringify(v));}
   function isNum(v){return v!==null&&v!==undefined&&v!==""&&Number.isFinite(Number(v));}
   function todayIso(){return new Date().toISOString().slice(0,10);}
@@ -42,6 +48,35 @@
     return rows.join(" | ");
   }
   function variantLabel(key){return VARIANT_LABELS[key]||String(key||"").replaceAll("_"," ");}
+  function operationalVariantId(itemId,key){return `${itemId}__${key}`;}
+  function operationalVariantName(itemId,parentName,key){return OPERATIONAL_VARIANT_NAMES[itemId]?.[key]||`${parentName} ${variantLabel(key)}`;}
+  function variantOnlyTarget(target,key){
+    if(target?.kind!=="by_size")return clone(target);
+    const out=clone(target);
+    out.sizes={};
+    for(const size of PLAN_SIZES){
+      const src=clone(target.sizes?.[size]||{});
+      src.total=Math.max(0,Number(target.sizes?.[size]?.variants?.[key]||0));
+      src.variants={};
+      out.sizes[size]=src;
+    }
+    out.operationalVariantKey=key;
+    return out;
+  }
+  function mergeAcquisitions(...sources){
+    const out={};
+    for(const src of sources) for(const [id,acq] of Object.entries(src||{})) out[id]=clone(acq);
+    return out;
+  }
+  function splitParentAcquisitions(existingParent,variantKeys){
+    const byVariant=Object.fromEntries((variantKeys||[]).map(k=>[k,{}]));
+    const unclassified={};
+    for(const [id,acq] of Object.entries(existingParent?.acquisitions||{})){
+      if(acq?.variant&&Object.prototype.hasOwnProperty.call(byVariant,acq.variant)) byVariant[acq.variant][id]=clone(acq);
+      else unclassified[id]=clone(acq);
+    }
+    return {byVariant,unclassified};
+  }
   function variantTargetKeys(target){
     if(target?.kind!=="by_size")return [];
     const keys=[];
@@ -113,6 +148,40 @@
       countsTowardPlan
     };
   }
+  function planVariantToOperational(planItem,financeItem,planId,variantKey,existingChild=null,migratedAcquisitions={},now=Date.now()){
+    const parentId=planItem.itemId;
+    const parentName=planItem.identitySnapshot?.name||parentId;
+    const childId=operationalVariantId(parentId,variantKey);
+    const childName=operationalVariantName(parentId,parentName,variantKey);
+    const childPlanItem=clone(planItem);
+    childPlanItem.itemId=childId;
+    childPlanItem.identitySnapshot={...(clone(planItem.identitySnapshot)||{}),name:childName};
+    childPlanItem.target=variantOnlyTarget(planItem.target,variantKey);
+    const out=planItemToOperational(childPlanItem,financeItem,planId,existingChild,now,"planned");
+    out.acquisitions=mergeAcquisitions(migratedAcquisitions,existingChild?.acquisitions||{});
+    out.operationalVariantKey=variantKey;
+    out.sourceFamilyId=parentId;
+    out.sourceFamilyName=parentName;
+    out.recommendationSnapshot=clone(childPlanItem.target);
+    return out;
+  }
+  function legacyUnclassifiedOperational(planItem,financeItem,planId,acquisitions,existingParent=null,now=Date.now()){
+    const parentId=planItem.itemId;
+    const parentName=planItem.identitySnapshot?.name||parentId;
+    const out=planItemToOperational(planItem,financeItem,planId,existingParent,now,"inactive");
+    out.name=`${parentName} — variação não informada`;
+    out.sizes=zeroOperationalSizes();
+    out.acquisitions=clone(acquisitions||{});
+    out.countsTowardPlan=false;
+    out.retainedPurchaseHistory=true;
+    out.legacyUnclassifiedVariant=true;
+    out.sourceFamilyId=parentId;
+    out.sourceFamilyName=parentName;
+    out.recommendationSnapshot={kind:"legacy_unclassified",sourceFamilyId:parentId};
+    out.planReason="legacy_acquisition_without_variant";
+    return out;
+  }
+
   function catalogItemToDeferredOperational(item,evaluation,planId,existing=null,now=Date.now()){
     const acquisitions=clone(existing?.acquisitions||{});
     const quantity=isNum(item?.defaultQuantity)&&Number(item.defaultQuantity)>0?Number(item.defaultQuantity):null;
@@ -165,8 +234,27 @@
     const evaluation=context?.evaluation||{};
     const catalogItems=context?.catalog?.items||[];
     const catalogById=Object.fromEntries(catalogItems.map(x=>[x.id,x]));
+    const consumedCurrentIds=new Set();
 
-    for(const [id,p] of Object.entries(planned)) out[id]=planItemToOperational(p,finance[id],plan.planId,currentItems?.[id]||null,now,"planned");
+    for(const [id,p] of Object.entries(planned)){
+      const keys=variantTargetKeys(p?.target);
+      if(keys.length){
+        const parentExisting=currentItems?.[id]||null;
+        const partition=splitParentAcquisitions(parentExisting,keys);
+        consumedCurrentIds.add(id);
+        for(const key of keys){
+          const childId=operationalVariantId(id,key);
+          out[childId]=planVariantToOperational(
+            p,finance[id],plan.planId,key,currentItems?.[childId]||null,partition.byVariant[key]||{},now
+          );
+        }
+        if(Object.keys(partition.unclassified).length){
+          out[id]=legacyUnclassifiedOperational(p,finance[id],plan.planId,partition.unclassified,parentExisting,now);
+        }
+      }else{
+        out[id]=planItemToOperational(p,finance[id],plan.planId,currentItems?.[id]||null,now,"planned");
+      }
+    }
     for(const [id,p] of Object.entries(suggestions)) out[id]=planItemToOperational(p,null,plan.planId,currentItems?.[id]||null,now,"suggested");
 
     for(const [id,e] of Object.entries(evaluation)){
@@ -176,9 +264,10 @@
     }
 
     for(const [id,item] of Object.entries(currentItems||{})){
-      if(out[id])continue;
+      if(out[id]||consumedCurrentIds.has(id))continue;
       if(item?.source==="v4.8-generated"){
-        const nextDisposition=evaluation?.[id]?.disposition||null;
+        const baseId=item?.sourceFamilyId||id;
+        const nextDisposition=evaluation?.[baseId]?.disposition||evaluation?.[id]?.disposition||null;
         if(hasAcquisitions(item)){
           const kept=zeroTargets(item);
           kept.retainedPurchaseHistory=true;
@@ -186,7 +275,7 @@
           kept.revision=Math.max(0,Number(kept.revision)||0)+1;
           kept.sourcePlanId=plan?.planId||kept.sourcePlanId||null;
           if(nextDisposition)kept.planDisposition=nextDisposition;
-          kept.planReason=evaluation?.[id]?.reason||kept.planReason||"retained_purchase_history";
+          kept.planReason=evaluation?.[baseId]?.reason||evaluation?.[id]?.reason||kept.planReason||"retained_purchase_history";
           out[id]=kept;
         }
       }else out[id]=clone(item); // manual/legacy items are never silently deleted by a replan
@@ -228,5 +317,5 @@
     const periods=plan?.climateSnapshot?.thermalProfile?.agePeriods||{};const labels={RN:"RN",P:"P",M:"M",G:"G",GG:"GG"};
     return PLAN_SIZES.map(s=>{const p=periods[s];return {size:s,label:labels[s],from:p?.from||null,toExclusive:p?.toExclusive||null,meanTempC:isNum(p?.weightedMeanTempC)?Number(p.weightedMeanTempC):null,thermalClass:p?.dominantThermalClass||null,mixed:Boolean(p?.mixedSeason)};});
   }
-  return {VERSION,SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,clone,isNum,todayIso,categoryToLegacy,totalTarget,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
+  return {VERSION,SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,OPERATIONAL_VARIANT_NAMES,clone,isNum,todayIso,categoryToLegacy,totalTarget,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,operationalVariantId,operationalVariantName,variantOnlyTarget,mergeAcquisitions,splitParentAcquisitions,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,planVariantToOperational,legacyUnclassifiedOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
 });

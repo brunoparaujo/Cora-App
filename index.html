@@ -45,7 +45,7 @@
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G', 'GG'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', GG: 'GG', U: 'Único' };
     const SCHEMA_VERSION = 17; // V4.8E1: perfil + plano V4.8 + tamanho GG
-    const APP_MODEL = 'v4.8-f3-integrated';
+    const APP_MODEL = 'v4.8-f3-separated-items';
     const PENDING_INVITE_STORAGE_KEY = 'cora_pending_invite_v451';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
     // V4.5.1 mantém autenticação separada da autorização e fecha o modelo em uma família por conta.
@@ -508,7 +508,8 @@
     const PLAN_ITEM_FIELDS = Object.freeze([
       'source', 'sourcePlanId', 'priority', 'goalType', 'planningSnapshot',
       'recommendationSnapshot', 'retainedPurchaseHistory', 'quantityUnit',
-      'planDisposition', 'planReason', 'conditionState', 'countsTowardPlan'
+      'planDisposition', 'planReason', 'conditionState', 'countsTowardPlan',
+      'operationalVariantKey', 'sourceFamilyId', 'sourceFamilyName', 'legacyUnclassifiedVariant'
     ]);
 
     function itemPriority(item) {
@@ -720,7 +721,7 @@
     }
 
     function itemUsesOperationalVariants(item) {
-      return itemPlanDisposition(item) === 'planned' && itemVariantKeys(item).length > 0;
+      return !item?.operationalVariantKey && itemPlanDisposition(item) === 'planned' && itemVariantKeys(item).length > 0;
     }
 
     function getVariantProgress(item, size) {
@@ -792,6 +793,15 @@
       const wrap = document.getElementById('acquisitionVariantWrap');
       const select = document.getElementById('acquisitionVariant');
       if (!wrap || !select) return;
+      if (item?.operationalVariantKey) {
+        const key = item.operationalVariantKey;
+        wrap.classList.add('hidden');
+        select.disabled = true;
+        select.required = false;
+        select.innerHTML = `<option value="${escapeHtml(key)}">${escapeHtml(variantLabel(key))}</option>`;
+        select.value = key;
+        return;
+      }
       const keys = itemVariantKeys(item);
       if (!keys.length) {
         wrap.classList.add('hidden');
@@ -2822,24 +2832,26 @@
                 </div>
                 ${acquisitions.length ? `<p class="text-[10px] text-gray-500 mt-1">${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição' : 'aquisições'} • ${escapeHtml(brandSummary)}</p>` : '<p class="text-[10px] text-gray-400 mt-1">Nenhuma aquisição registrada</p>'}
               </div>
-              <button onclick="editItem('${item.id}')" class="p-2 text-gray-400 hover:text-rose-600 transition rounded-lg hover:bg-rose-50" aria-label="Editar item">
+              ${item.legacyUnclassifiedVariant ? '' : `<button onclick="editItem('${item.id}')" class="p-2 text-gray-400 hover:text-rose-600 transition rounded-lg hover:bg-rose-50" aria-label="Editar item">
                 <i data-lucide="edit-3" class="w-4 h-4"></i>
-              </button>
+              </button>`}
             </div>
 
             <div class="pt-1">
-              ${['suggested','deferred'].includes(itemPlanDisposition(item))
-                ? renderNonPlannedRecommendation(item)
-                : (itemUsesOperationalVariants(item)
-                  ? renderVariantMatrix(item)
-                  : (isUniqueSizeItem(item) ? renderUniqueQuantity(item) : `
-                    <div class="flex items-center justify-between gap-2 mb-1.5">
-                      <span class="text-[10px] font-semibold text-gray-500">Quantidade por tamanho</span>
-                      <span class="text-[10px] font-bold text-gray-600">Adquirido: ${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))}</span>
-                    </div>
-                    <div class="grid grid-cols-5 gap-1.5">
-                      ${getDisplaySizes(item).map(size => renderSizeCell(item, size)).join('')}
-                    </div>`))}
+              ${item.legacyUnclassifiedVariant
+                ? renderLegacyUnclassifiedVariant(item)
+                : (['suggested','deferred'].includes(itemPlanDisposition(item))
+                  ? renderNonPlannedRecommendation(item)
+                  : (itemUsesOperationalVariants(item)
+                    ? renderVariantMatrix(item)
+                    : (isUniqueSizeItem(item) ? renderUniqueQuantity(item) : `
+                      <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <span class="text-[10px] font-semibold text-gray-500">Quantidade por tamanho</span>
+                        <span class="text-[10px] font-bold text-gray-600">Adquirido: ${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))}</span>
+                      </div>
+                      <div class="grid grid-cols-5 gap-1.5">
+                        ${getDisplaySizes(item).map(size => renderSizeCell(item, size)).join('')}
+                      </div>`)))}
             </div>
 
             <button onclick="openAcquisitionHistory('${item.id}')" class="w-full pt-2.5 pb-2.5 px-3 rounded-xl border border-emerald-100 bg-emerald-50/40 hover:bg-emerald-50 transition text-left flex items-center justify-between gap-3" aria-label="Ver aquisições do item">
@@ -2857,6 +2869,16 @@
           </div>`;
       }).join('');
       lucide.createIcons();
+    }
+
+    function renderLegacyUnclassifiedVariant(item) {
+      const acquisitions = getAcquisitions(item);
+      return `
+        <div class="border border-amber-100 bg-amber-50/50 rounded-xl p-3">
+          <span class="block text-[10px] font-bold text-amber-700 uppercase tracking-wide">Histórico anterior à separação</span>
+          <p class="text-[10px] text-gray-600 mt-1">Esta aquisição foi registrada antes de o Cora separar manga/modelo em itens próprios. O gasto e o histórico foram preservados, mas ela não completa uma meta específica.</p>
+          <p class="text-[10px] font-semibold text-gray-700 mt-1">${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição preservada' : 'aquisições preservadas'}.</p>
+        </div>`;
     }
 
     function renderVariantMatrix(item) {
@@ -3199,6 +3221,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const container = document.getElementById('acquisitionItemChoices');
       const term = (document.getElementById('acquisitionItemSearch').value || '').toLowerCase().trim();
       const items = appState.items
+        .filter(item => !item.legacyUnclassifiedVariant)
         .filter(item => !term || item.name.toLowerCase().includes(term) || getSearchableBrands(item).includes(term))
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
@@ -3213,6 +3236,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     function openAcquisitionModalForItem(itemId, presetSize = '', presetVariant = '') {
       const item = appState.items.find(i => i.id === itemId);
       if (!item) return;
+      if (item.legacyUnclassifiedVariant) {
+        alert('Este card existe apenas para preservar uma aquisição antiga sem variação. Para novas compras, use o item separado correspondente.');
+        return;
+      }
       closeModal('modalChooseAcquisition');
       closeModal('modalAction');
       appState.editingAcquisitionBase = null;
@@ -3282,8 +3309,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           <div class="p-3 rounded-xl border border-gray-100 bg-gray-50">
             <div class="flex justify-between items-start gap-2">
               <div>
-                <span class="text-xs font-bold text-gray-800">${acq.quantity}× ${SIZE_LABELS[acq.size]}${acq.variant ? ` • ${escapeHtml(variantLabel(acq.variant))}` : ''}</span>
-                ${itemUsesOperationalVariants(item) && !acq.variant ? '<span class="block text-[9px] font-semibold text-amber-700 mt-0.5">Variação não informada — edite para classificar</span>' : ''}
+                <span class="text-xs font-bold text-gray-800">${acq.quantity}× ${SIZE_LABELS[acq.size]}${acq.variant && !item?.operationalVariantKey ? ` • ${escapeHtml(variantLabel(acq.variant))}` : ''}</span>
+                ${item.legacyUnclassifiedVariant ? '<span class="block text-[9px] font-semibold text-amber-700 mt-0.5">Aquisição anterior preservada sem classificação de manga/modelo.</span>' : ''}
                 <span class="block text-[10px] text-gray-500 mt-0.5">${acq.type === 'gift' ? '🎁 Presente / Doação' : `🛒 Compra • ${money(acq.unitPrice)} / un.`}</span>
                 ${acq.brand ? `<span class="block text-[10px] text-gray-500">${escapeHtml(acq.brand)}</span>` : ''}
               </div>
@@ -3352,8 +3379,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const type = document.getElementById('acquisitionType').value === 'gift' ? 'gift' : 'purchase';
       const quantity = Math.max(1, parseInt(document.getElementById('acquisitionQuantity').value, 10) || 1);
       const unitPrice = type === 'gift' ? 0 : Math.max(0, parseFloat(document.getElementById('acquisitionUnitPrice').value) || 0);
-      const variant = itemVariantKeys(item).length ? (document.getElementById('acquisitionVariant').value || '') : '';
-      if (itemVariantKeys(item).length && !variant) {
+      const variant = item?.operationalVariantKey || (itemVariantKeys(item).length ? (document.getElementById('acquisitionVariant').value || '') : '');
+      if (!item?.operationalVariantKey && itemVariantKeys(item).length && !variant) {
         alert('Escolha a variação desta peça antes de salvar.');
         return;
       }
