@@ -41,11 +41,11 @@
     auth.languageCode = 'pt-BR';
 
     // V3.4 — Visualização de quantidade: itens com tamanho usam quebra por tamanho; itens tamanho único usam quantidade.
-    const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'U'];
-    const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G'];
-    const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', U: 'Único' };
-    const SCHEMA_VERSION = 16; // V4.7 mantém o schema de dados; adiciona instalação PWA no cliente
-    const APP_MODEL = 'v4.7-pwa';
+    const SIZE_KEYS = ['RN', 'P', 'M', 'G', 'GG', 'U'];
+    const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G', 'GG'];
+    const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', GG: 'GG', U: 'Único' };
+    const SCHEMA_VERSION = 17; // V4.8E1: perfil + plano V4.8 + tamanho GG
+    const APP_MODEL = 'v4.8-e1-integrated';
     const PENDING_INVITE_STORAGE_KEY = 'cora_pending_invite_v451';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
     // V4.5.1 mantém autenticação separada da autorização e fecha o modelo em uma família por conta.
@@ -352,6 +352,9 @@
       familyChildren: {},
       familyInvites: {},
       childName: null,
+      childData: null,
+      currentPlanId: null,
+      currentPlan: null,
       lastInvite: null
     };
 
@@ -614,7 +617,7 @@
         uWrap.classList.toggle('col-span-4', unique);
       }
       const hint = document.getElementById('sizeModeHint');
-      if (hint) hint.innerText = unique ? 'Este item usa somente o tamanho Único.' : 'Use RN, P, M e G. Para itens sem tamanho, escolha Único.';
+      if (hint) hint.innerText = unique ? 'Este item usa somente o tamanho Único.' : 'Use RN, P, M, G e GG. Para itens sem tamanho, escolha Único.';
     }
 
     function syncAcquisitionSizeOptions(item, presetSize = '') {
@@ -682,9 +685,8 @@
     }
 
     function canonicalChildProfile(name = 'Cora') {
-      return {
-        babyName: String(name || 'Bebê').trim() || 'Bebê'
-      };
+      const clean = String(name || 'Bebê').trim() || 'Bebê';
+      return { babyName: clean, name: clean };
     }
 
     function canonicalFamilyMeta(displayName = 'Família Cora', ownerUid = null, defaultChildId = PRIMARY_CHILD_ID) {
@@ -1508,6 +1510,7 @@
       appState.familyInvites = {};
       appState.items = [];
       appState.maternidade = [];
+      appState.childData = null; appState.currentPlanId = null; appState.currentPlan = null;
       showAccessGate(user, `${message} Esta conta pode aceitar outro convite ou criar uma nova família.`);
       prefillInviteFromUrl();
     }
@@ -1525,24 +1528,20 @@
           return;
         }
         const data = snapshot.val() || {};
+        appState.childData = data;
+        appState.currentPlanId = data.enxoval?.currentPlanId || null;
+        appState.currentPlan = appState.currentPlanId ? (data.enxoval?.plans?.[appState.currentPlanId] || null) : null;
         appState.items = Object.values(data.enxoval?.items || {}).map(normalizeItem);
         appState.maternidade = Object.entries(data.maternity || {}).map(([id, item]) => normalizeMaternityItem(item, id));
-        const babyName = data.profile?.babyName || 'Bebê';
+        const babyName = data.profile?.babyName || data.profile?.name || 'Bebê';
         appState.childName = babyName;
         refreshChildSelectors();
-        const isOriginalCoraProfile = appState.familyId === PRIMARY_FAMILY_ID && appState.childId === PRIMARY_CHILD_ID;
         const headerContext = document.getElementById('headerContext');
-        if (headerContext) {
-          headerContext.textContent = isOriginalCoraProfile
-            ? `Cora • DPP: 21/Fev • Niterói, RJ`
-            : `Perfil: ${babyName}`;
-        }
-        const coraSeasonWidget = document.getElementById('coraSeasonWidget');
-        if (coraSeasonWidget) coraSeasonWidget.classList.toggle('hidden', !isOriginalCoraProfile);
-        const tips = isOriginalCoraProfile ? CATEGORY_TIPS : GENERIC_CATEGORY_TIPS;
+        if (headerContext) headerContext.textContent = `Perfil: ${babyName}`;
         const tip = document.getElementById('categoryTipText');
-        if (tip) tip.textContent = tips[appState.activeCategory] || 'Organize as compras de forma inteligente.';
+        if (tip) tip.textContent = GENERIC_CATEGORY_TIPS[appState.activeCategory] || 'Organize as compras de forma inteligente.';
         renderAll();
+        if (globalThis.CoraV48Integration?.onChildSnapshot) globalThis.CoraV48Integration.onChildSnapshot(data);
       }, error => {
         console.error('Erro de sincronização:', error);
         if (error?.code === 'PERMISSION_DENIED' || error?.code === 'permission_denied') {
@@ -2349,6 +2348,7 @@
       appState.lastInvite = null;
       appState.items = [];
       appState.maternidade = [];
+      appState.childData = null; appState.currentPlanId = null; appState.currentPlan = null;
       pendingEmailSignupName = '';
       hideAccessGate();
       showAuthGate();
@@ -2461,6 +2461,7 @@
       registerCoraServiceWorker();
       updatePwaInstallUI();
       initAuth();
+      if (globalThis.CoraV48Integration?.init) globalThis.CoraV48Integration.init();
     };
 
     function renderAll() {
@@ -2628,7 +2629,7 @@
                   <span class="text-[10px] font-semibold text-gray-500">Quantidade por tamanho</span>
                   <span class="text-[10px] font-bold text-gray-600">${getOwnedTotal(item)} ${getOwnedTotal(item) === 1 ? 'peça' : 'peças'} adquiridas</span>
                 </div>
-                <div class="grid grid-cols-4 gap-1.5">
+                <div class="grid grid-cols-5 gap-1.5">
                   ${getDisplaySizes(item).map(size => renderSizeCell(item, size)).join('')}
                 </div>`}
             </div>
@@ -4287,34 +4288,9 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         <div id="progressBar" class="bg-rose-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
       </div>
 
-      <!-- WIDGET CLIMA & DP -->
+      <!-- WIDGET CLIMA V4.8 -->
       <div id="coraSeasonWidget" class="bg-white/80 rounded-xl p-3 border border-rose-100 text-xs">
-        <div class="flex items-center justify-between text-gray-600 mb-2 font-medium">
-          <span class="flex items-center gap-1"><i data-lucide="sun-medium" class="w-3.5 h-3.5 text-amber-500"></i> Estações do Crescimento (RJ):</span>
-          <span id="seasonTip" class="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full font-semibold">Análise Ativa</span>
-        </div>
-        <div class="grid grid-cols-4 gap-1 text-center font-medium">
-          <div class="p-1.5 rounded-lg bg-orange-50 border border-orange-100">
-            <span class="block text-[10px] text-gray-500 font-bold">RN (Fev)</span>
-            <span class="block text-xs font-bold text-orange-600">☀️ 28°C</span>
-            <span class="text-[9px] text-gray-400">Verão / Ar</span>
-          </div>
-          <div class="p-1.5 rounded-lg bg-amber-50 border border-amber-100">
-            <span class="block text-[10px] text-gray-500 font-bold">P (Mar-Mai)</span>
-            <span class="block text-xs font-bold text-amber-600">⛅ 25°C</span>
-            <span class="text-[9px] text-gray-400">Transição</span>
-          </div>
-          <div class="p-1.5 rounded-lg bg-blue-50 border border-blue-100">
-            <span class="block text-[10px] text-gray-500 font-bold">M (Mai-Ago)</span>
-            <span class="block text-xs font-bold text-blue-600">🌤️ 21°C</span>
-            <span class="text-[9px] text-gray-400">Inverno RJ</span>
-          </div>
-          <div class="p-1.5 rounded-lg bg-green-50 border border-green-100">
-            <span class="block text-[10px] text-gray-500 font-bold">G (Ago-Nov)</span>
-            <span class="block text-xs font-bold text-green-600">☀️ 26°C</span>
-            <span class="text-[9px] text-gray-400">Primavera</span>
-          </div>
-        </div>
+        <div class="text-gray-500 text-center py-2">O planejamento V4.8 aparecerá aqui após o onboarding.</div>
       </div>
     </div>
 
@@ -4531,8 +4507,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
               <option value="unique">Tamanho único</option>
             </select>
           </div>
-          <p id="sizeModeHint" class="text-[10px] text-gray-500">Use RN, P, M e G. Para itens sem tamanho, escolha Único.</p>
-          <div class="grid grid-cols-4 gap-1.5 text-center text-xs">
+          <p id="sizeModeHint" class="text-[10px] text-gray-500">Use RN, P, M, G e GG. Para itens sem tamanho, escolha Único.</p>
+          <div class="grid grid-cols-3 gap-1.5 text-center text-xs">
             <div id="sizeWrap_RN">
               <span class="block text-[10px] text-gray-500 font-bold">RN</span>
               <input type="number" id="target_RN" min="0" placeholder="Meta" class="w-full text-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
@@ -4552,6 +4528,11 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
               <span class="block text-[10px] text-gray-500 font-bold">G</span>
               <input type="number" id="target_G" min="0" placeholder="Meta" class="w-full text-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
               <span id="owned_G" class="block text-[9px] text-gray-400 mt-1">Possui 0</span>
+            </div>
+            <div id="sizeWrap_GG">
+              <span class="block text-[10px] text-gray-500 font-bold">GG</span>
+              <input type="number" id="target_GG" min="0" placeholder="Meta" class="w-full text-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
+              <span id="owned_GG" class="block text-[9px] text-gray-400 mt-1">Possui 0</span>
             </div>
             <div id="sizeWrap_U">
               <span class="block text-[10px] text-gray-500 font-bold">Único</span>
@@ -4740,7 +4721,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       <div class="border-t border-gray-100 pt-4 space-y-2">
         <div>
           <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Aplicativo</p>
-          <p class="text-[10px] text-gray-500 mt-1">Instale o Cora na tela inicial para abrir em modo de aplicativo. O funcionamento offline completo será implementado na próxima etapa.</p>
+          <p class="text-[10px] text-gray-500 mt-1">Instale o Cora na tela inicial para abrir em modo de aplicativo. O funcionamento offline completo permanece planejado para a V5.2.</p>
         </div>
         <button type="button" id="settingsInstallAppButton" onclick="installCoraApp()" class="hidden w-full py-3 text-xs font-bold text-violet-700 bg-violet-50 border border-violet-100 rounded-xl flex items-center justify-center gap-2 disabled:pointer-events-none">
           <i data-lucide="download" class="w-4 h-4"></i> Instalar Cora neste dispositivo
@@ -4972,6 +4953,11 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       </div>
     </div>
   </div>
+
+  <!-- V4.8E1 — integração dos motores congelados -->
+  <script src="/v48/engine-browser.js"></script>
+  <script src="/v48/integration-core-v4.8e1.js"></script>
+  <script src="/v48/integration-ui-v4.8e1.js"></script>
 
 </body>
 </html>
