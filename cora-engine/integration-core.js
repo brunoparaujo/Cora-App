@@ -6,14 +6,14 @@
   const SIZE_KEYS=["RN","P","M","G","GG","U"];
   const PLAN_SIZES=["RN","P","M","G","GG"];
   const CATEGORY_MAP={vestuario:"vestuario",quarto:"quarto",banho_higiene:"higiene",alimentacao:"alimentacao",passeio:"passeio",mamae:"mamae"};
-  const VERSION="4.8F3.1";
+  const VERSION="4.8F4.1";
   const VARIANT_LABELS={manga_curta:"manga curta",manga_longa:"manga longa",macaquinho_curto:"macaquinho curto",macacao_longo:"macacão longo",calca_culote:"calça / culote",short:"short"};
   const VISIBLE_DISPOSITIONS=new Set(["planned","suggested","deferred"]);
   const OPERATIONAL_VARIANT_NAMES={
     body:{manga_curta:"Body manga curta",manga_longa:"Body manga longa"},
     peca_inteira:{macaquinho_curto:"Macaquinho curto",macacao_longo:"Macacão longo"},
     parte_baixo:{calca_culote:"Calça / culote",short:"Short"},
-    parte_cima_separada:{manga_curta:"Camiseta / blusa manga curta",manga_longa:"Camiseta / blusa manga longa"}
+    parte_cima_separada:{manga_curta:"Camiseta manga curta",manga_longa:"Camiseta manga longa"}
   };
   function clone(v){return v==null?v:JSON.parse(JSON.stringify(v));}
   function isNum(v){return v!==null&&v!==undefined&&v!==""&&Number.isFinite(Number(v));}
@@ -26,6 +26,26 @@
     if(target.kind==="by_size")return PLAN_SIZES.reduce((s,k)=>s+Number(target.sizes?.[k]?.total||0),0);
     if(target.kind==="by_phase")return (target.phases||[]).reduce((s,p)=>s+Number(p.quantity??p.total??0),0);
     return 0;
+  }
+  function pricingEntry(pricing,pricingKey){
+    return pricingKey ? (pricing?.priceReferences?.[pricingKey]||null) : null;
+  }
+  function resolveReferenceUnitPrice(planItem,pricing,budgetTier){
+    const key=planItem?.identitySnapshot?.pricingKey||null;
+    const entry=pricingEntry(pricing,key);
+    if(!entry)return {pricingKey:key,unitReferenceBRL:null,status:"unresolved",reason:"pricing_key_not_found"};
+    const tier=["economic","intermediate","premium"].includes(budgetTier)?budgetTier:(pricing?.metadata?.defaultTier||"intermediate");
+    const selectedVariant=planItem?.target?.variant?.selectedVariant||entry.budgetVariant||null;
+    if(selectedVariant && entry.variantPricing?.[selectedVariant]?.[tier]){
+      const row=entry.variantPricing[selectedVariant][tier];
+      return {pricingKey:key,unitReferenceBRL:isNum(row?.reference)?Number(row.reference):null,status:isNum(row?.reference)?"resolved":"unresolved",tier,variant:selectedVariant,confidence:entry.confidence||null};
+    }
+    const row=entry?.[tier];
+    return {pricingKey:key,unitReferenceBRL:isNum(row?.reference)?Number(row.reference):null,status:isNum(row?.reference)?"resolved":"unresolved",tier,variant:selectedVariant,confidence:entry.confidence||null};
+  }
+  function financeReferenceForPlanItem(planItem,pricing,budgetTier){
+    const r=resolveReferenceUnitPrice(planItem,pricing,budgetTier);
+    return {pricing:r};
   }
   function operationalSizes(target){
     const out=Object.fromEntries(SIZE_KEYS.map(k=>[k,{target:0}]));
@@ -141,6 +161,8 @@
       priority:planItem.identitySnapshot?.priority||null,
       goalType:planItem.identitySnapshot?.goalType||null,
       quantityUnit:planItem.identitySnapshot?.quantityUnit||"un",
+      pricingKey:planItem.identitySnapshot?.pricingKey||null,
+      referenceTier:financeItem?.pricing?.tier||null,
       planningSnapshot:clone(planItem.planningSnapshot||{}),
       recommendationSnapshot:clone(target),
       planDisposition:disposition,
@@ -192,7 +214,7 @@
       essential:item.priority==="essential",
       notes:(item.notes||[]).join("\n"),
       sizeMode:"unique",
-      unitEstimate:null,
+      unitEstimate:isNum(evaluation?.unitReferenceBRL)?Number(evaluation.unitReferenceBRL):null,
       sizes:zeroOperationalSizes(),
       acquisitions,
       revision:Math.max(0,Number(existing?.revision)||0)+1,
@@ -203,6 +225,8 @@
       priority:item.priority||"conditional",
       goalType:item.goalType||null,
       quantityUnit:item.quantityUnit||"un",
+      pricingKey:item.pricingKey||null,
+      referenceTier:evaluation?.referenceTier||null,
       planningSnapshot:{
         itemType:item.itemType||null,
         useFromAgeMonths:item.useFromAgeMonths??null,
@@ -232,6 +256,9 @@
     const suggestions=plan?.generatedSnapshot?.suggestions||{};
     const finance=plan?.financeSnapshot?.initialLayette?.items||{};
     const evaluation=context?.evaluation||{};
+    const pricing=context?.pricing||null;
+    const budgetTier=context?.budgetTier||plan?.financeSnapshot?.budgetTier||plan?.inputSnapshot?.settings?.budgetTier||pricing?.metadata?.defaultTier||"intermediate";
+    const itemTierOverrides=context?.itemTierOverrides||plan?.financeSnapshot?.assumptionsSnapshot?.itemTierOverrides||{};
     const catalogItems=context?.catalog?.items||[];
     const catalogById=Object.fromEntries(catalogItems.map(x=>[x.id,x]));
     const consumedCurrentIds=new Set();
@@ -255,12 +282,21 @@
         out[id]=planItemToOperational(p,finance[id],plan.planId,currentItems?.[id]||null,now,"planned");
       }
     }
-    for(const [id,p] of Object.entries(suggestions)) out[id]=planItemToOperational(p,null,plan.planId,currentItems?.[id]||null,now,"suggested");
+    for(const [id,p] of Object.entries(suggestions)){
+      const effectiveTier=itemTierOverrides[id]||budgetTier;
+      const refFinance=financeReferenceForPlanItem(p,pricing,effectiveTier);
+      out[id]=planItemToOperational(p,refFinance,plan.planId,currentItems?.[id]||null,now,"suggested");
+    }
 
     for(const [id,e] of Object.entries(evaluation)){
       if(e?.disposition!=="deferred"||out[id])continue;
       const item=catalogById[id];
-      if(item)out[id]=catalogItemToDeferredOperational(item,e,plan.planId,currentItems?.[id]||null,now);
+      if(item){
+        const pseudoPlanItem={identitySnapshot:{pricingKey:item.pricingKey},target:{}};
+        const effectiveTier=itemTierOverrides[id]||budgetTier;
+        const ref=resolveReferenceUnitPrice(pseudoPlanItem,pricing,effectiveTier);
+        out[id]=catalogItemToDeferredOperational(item,{...e,unitReferenceBRL:ref.unitReferenceBRL,referenceTier:ref.tier||effectiveTier},plan.planId,currentItems?.[id]||null,now);
+      }
     }
 
     for(const [id,item] of Object.entries(currentItems||{})){
@@ -317,5 +353,5 @@
     const periods=plan?.climateSnapshot?.thermalProfile?.agePeriods||{};const labels={RN:"RN",P:"P",M:"M",G:"G",GG:"GG"};
     return PLAN_SIZES.map(s=>{const p=periods[s];return {size:s,label:labels[s],from:p?.from||null,toExclusive:p?.toExclusive||null,meanTempC:isNum(p?.weightedMeanTempC)?Number(p.weightedMeanTempC):null,thermalClass:p?.dominantThermalClass||null,mixed:Boolean(p?.mixedSeason)};});
   }
-  return {VERSION,SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,OPERATIONAL_VARIANT_NAMES,clone,isNum,todayIso,categoryToLegacy,totalTarget,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,operationalVariantId,operationalVariantName,variantOnlyTarget,mergeAcquisitions,splitParentAcquisitions,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,planVariantToOperational,legacyUnclassifiedOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
+  return {VERSION,SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,OPERATIONAL_VARIANT_NAMES,clone,isNum,todayIso,categoryToLegacy,totalTarget,pricingEntry,resolveReferenceUnitPrice,financeReferenceForPlanItem,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,operationalVariantId,operationalVariantName,variantOnlyTarget,mergeAcquisitions,splitParentAcquisitions,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,planVariantToOperational,legacyUnclassifiedOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
 });

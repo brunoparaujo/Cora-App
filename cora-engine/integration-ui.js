@@ -12,12 +12,40 @@
   function ensureUi(){
     if(document.getElementById("modalV48Planning"))return;
     document.body.insertAdjacentHTML("beforeend",`<div id="modalV48Planning" class="fixed inset-0 bg-black/55 backdrop-blur-sm z-[80] hidden flex items-end sm:items-center justify-center p-0 sm:p-4"><div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[94vh] overflow-y-auto shadow-2xl"><div class="sticky top-0 bg-white z-10 px-5 pt-5 pb-3 border-b border-gray-100"><div class="flex items-start justify-between gap-3"><div><p class="text-[10px] uppercase tracking-wider text-rose-500 font-bold">Planejamento V4.8</p><h3 class="font-bold text-gray-900 text-lg">Enxoval do primeiro ano</h3><p id="v48WizardProgress" class="text-[10px] text-gray-400 mt-1"></p></div><button type="button" onclick="CoraV48Integration.closeWizard()" class="p-2 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button></div></div><div id="v48WizardBody" class="p-5"></div></div></div>`);
+    if(!document.getElementById("modalV48HiddenSuggestions"))document.body.insertAdjacentHTML("beforeend",`<div id="modalV48HiddenSuggestions" class="fixed inset-0 bg-black/55 backdrop-blur-sm z-[85] hidden flex items-end sm:items-center justify-center p-0 sm:p-4"><div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[80vh] overflow-y-auto shadow-2xl"><div class="sticky top-0 bg-white z-10 px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between gap-3"><div><p class="text-[10px] uppercase tracking-wider text-sky-600 font-bold">Sugestões</p><h3 class="font-bold text-gray-900 text-lg">Sugestões ocultadas</h3><p class="text-[10px] text-gray-500 mt-1">Você pode restaurar uma sugestão sem alterar aquisições existentes.</p></div><button type="button" onclick="CoraV48Integration.closeHiddenSuggestions()" class="p-2 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button></div><div id="v48HiddenSuggestionsBody" class="p-5 space-y-2"></div></div></div>`);
     const appBlock=document.getElementById("settingsInstallAppButton")?.closest("div.border-t");
-    if(appBlock&&!document.getElementById("settingsPlanningArea"))appBlock.insertAdjacentHTML("beforebegin",`<div id="settingsPlanningArea" class="border-t border-gray-100 pt-4 space-y-2"><div><p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Planejamento do enxoval</p><p id="settingsPlanningStatus" class="text-[10px] text-gray-500 mt-1">Carregando...</p></div><button type="button" onclick="closeModal('modalSettings'); CoraV48Integration.openWizard(true);" class="w-full py-3 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-100 rounded-xl flex items-center justify-center gap-2"><i data-lucide="sparkles" class="w-4 h-4"></i> Revisar planejamento</button></div>`);
+    if(appBlock&&!document.getElementById("settingsPlanningArea"))appBlock.insertAdjacentHTML("beforebegin",`<div id="settingsPlanningArea" class="border-t border-gray-100 pt-4 space-y-2"><div><p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Planejamento do enxoval</p><p id="settingsPlanningStatus" class="text-[10px] text-gray-500 mt-1">Carregando...</p></div><button type="button" onclick="closeModal('modalSettings'); CoraV48Integration.openWizard(true);" class="w-full py-3 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-100 rounded-xl flex items-center justify-center gap-2"><i data-lucide="sparkles" class="w-4 h-4"></i> Revisar planejamento</button><button id="settingsReviewHiddenSuggestions" type="button" onclick="CoraV48Integration.openHiddenSuggestions()" class="w-full py-2.5 text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-100 rounded-xl flex items-center justify-center gap-2"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Revisar sugestões ocultadas</button></div>`);
     lucide.createIcons();
   }
   function rawForWizard(){return S.rawChild||{};}
   function newDraft(){S.draft=Core.childFromFirebase(rawForWizard(),E.B.createChildDraft,Date.now());}
+  function currentDecisionSnapshot(){
+    return S.currentPlan?.decisionSnapshot||{acceptedOptionalItemIds:[],rejectedOptionalItemIds:[]};
+  }
+  function collectOptionalDecisions(){
+    const snap=currentDecisionSnapshot();
+    return {
+      acceptedOptionalItemIds:[...(snap.acceptedOptionalItemIds||[])],
+      rejectedOptionalItemIds:[...(snap.rejectedOptionalItemIds||[])]
+    };
+  }
+  function currentFinanceOptions(){
+    const a=S.currentPlan?.financeSnapshot?.assumptionsSnapshot||{};
+    return {
+      itemTierOverrides:Core.clone(a.itemTierOverrides||{}),
+      variantOverrides:Core.clone(a.variantOverrides||{}),
+      actualUnitPriceByItem:Core.clone(a.actualUnitPriceByItem||{}),
+      diaperSizeByAgeMonth:Core.clone(a.diaperSizeByAgeMonth||{}),
+      hybridDisposableRatio:a.hybridDisposableRatio===undefined?null:a.hybridDisposableRatio
+    };
+  }
+  function climateResultFromCurrentPlan(){
+    const c=S.currentPlan?.climateSnapshot;
+    if(c?.applied&&c?.thermalProfile){
+      return {status:"climate_personalized",thermalProfile:Core.clone(c.thermalProfile),cacheHit:true,climateRecord:{cacheKey:c.cacheKey||null}};
+    }
+    return {status:c?.status||"climate_component_unavailable"};
+  }
   function openWizard(force=false){ensureUi();newDraft();S.step=1;S.climateResult=null;S.previews={};S.previewEvaluations={};S.selectedTier=null;document.getElementById("modalV48Planning").classList.remove("hidden");renderStep();}
   function closeWizard(){document.getElementById("modalV48Planning")?.classList.add("hidden");}
   function progress(){return ["Sobre o bebê","Clima","Rotina","Resultado"][S.step-1]||"";}
@@ -42,16 +70,76 @@
   }catch(e){S.busy=false;showError(e);renderStep();}}
   function backStep(){if(S.step>1){S.step--;renderStep();}}
   async function resolveClimate(){const familyId=activeFamilyId();const loc=S.draft.enxoval.settings.climateLocation;const cacheGet=async key=>(await db.ref(`families/${familyId}/climateCache/${key}`).once("value")).val();const cacheSet=async(key,val)=>db.ref(`families/${familyId}/climateCache/${key}`).set(val);return E.ClimatePipeline.buildPlanWithOptionalClimate({child:S.draft,climateLocation:loc,climatePersonalizationEnabled:true,climateProvider:E.Climate,thermalEngine:E.Thermal,clothingEngine:E.Clothing,providerOptions:{cacheGet,cacheSet}});}
-  async function generateTier(tier){const complete=E.B.selectBudgetTier(S.draft,tier,Date.now());const eligibility=E.B.validateChild(complete,{todayIso:Core.todayIso()});const parent=S.currentPlan;const next=Core.nextComponents(E.D1,complete,{},true,S.climateResult);const reason=parent?Core.inferLineageReason(parent,next):"initial";const draft=E.D1.createPlanDraft({planId:planId(tier),familyId:activeFamilyId(),childId:activeChildId(),child:complete,eligibility,dependencyLock:S.data.dependencyLock,climatePersonalizationEnabled:true,climateResult:S.climateResult,decisions:{},lineage:parent?{reason,parentPlanId:parent.planId}:{reason:"initial",parentPlanId:null},createdAt:Date.now(),createdByUid:auth.currentUser?.uid||null});const d2=E.D2.generatePlanContent({draft,catalog:S.data.catalog,rules:S.data.rules,pricing:S.data.pricing});const after=E.D2.applyD2ResultToDraft(draft,d2);return {child:complete,evaluation:d2.evaluation,summary:d2.summary,plan:E.D3.finalizePlanWithD3({draft:after,pricing:S.data.pricing,catalog:S.data.catalog,options:{asOfDate:Core.todayIso()},completedAt:Date.now()})};}
+  async function generateTier(tier,{decisions=null,climateResult=null,forceReason=null,financeOptions=null}={}){const complete=E.B.selectBudgetTier(S.draft,tier,Date.now());const eligibility=E.B.validateChild(complete,{todayIso:Core.todayIso()});const parent=S.currentPlan;const effectiveDecisions=decisions||collectOptionalDecisions();const effectiveFinance=financeOptions||currentFinanceOptions();const effectiveClimate=climateResult||S.climateResult;const next=Core.nextComponents(E.D1,complete,effectiveDecisions,true,effectiveClimate);const reason=forceReason||(parent?Core.inferLineageReason(parent,next):"initial");const draft=E.D1.createPlanDraft({planId:planId(tier),familyId:activeFamilyId(),childId:activeChildId(),child:complete,eligibility,dependencyLock:S.data.dependencyLock,climatePersonalizationEnabled:true,climateResult:effectiveClimate,decisions:effectiveDecisions,lineage:parent?{reason,parentPlanId:parent.planId}:{reason:"initial",parentPlanId:null},createdAt:Date.now(),createdByUid:auth.currentUser?.uid||null});const d2=E.D2.generatePlanContent({draft,catalog:S.data.catalog,rules:S.data.rules,pricing:S.data.pricing});const after=E.D2.applyD2ResultToDraft(draft,d2);return {child:complete,evaluation:d2.evaluation,summary:d2.summary,plan:E.D3.finalizePlanWithD3({draft:after,pricing:S.data.pricing,catalog:S.data.catalog,options:{...effectiveFinance,asOfDate:Core.todayIso()},completedAt:Date.now()})};}
   async function computePreviews(){await loadData();S.climateResult=await resolveClimate();const tiers=["economic","intermediate","premium"];const out={};for(const t of tiers)out[t]=await generateTier(t);S.previews=Object.fromEntries(tiers.map(t=>[t,out[t].plan]));S.previewChildren=Object.fromEntries(tiers.map(t=>[t,out[t].child]));S.previewEvaluations=Object.fromEntries(tiers.map(t=>[t,out[t].evaluation||{}]));S.selectedTier=S.draft.enxoval.settings.budgetTier!=="unselected"?S.draft.enxoval.settings.budgetTier:"intermediate";}
   async function activatePlanCas(plan){const familyId=activeFamilyId(),childId=activeChildId();const planRef=db.ref(E.D1.firebasePlanPath(familyId,childId,plan.planId));const created=await planRef.transaction(cur=>cur?undefined:plan);if(!created.committed)throw new Error("PLAN_ID_ALREADY_EXISTS");const currentRef=db.ref(E.D1.firebaseCurrentPlanPath(familyId,childId));const expected=S.currentPlanId||null;const switched=await currentRef.transaction(cur=>{const normalized=cur||null;if(normalized!==expected)return;return plan.planId;});if(!switched.committed)throw new Error("STALE_CURRENT_PLAN: outro aparelho atualizou o planejamento antes deste.");}
-  async function syncOperationalItems(plan,evaluation={}){const ref=db.ref(childPath("enxoval/items"));await ref.transaction(cur=>Core.buildOperationalItems(plan,cur||{},Date.now(),{catalog:S.data.catalog,evaluation}));}
-  async function commitSelected(){if(S.busy)return;let stage="preparação";try{S.busy=true;const tier=S.selectedTier||"intermediate",plan=S.previews[tier],child=S.previewChildren?.[tier],evaluation=S.previewEvaluations?.[tier]||{};if(!plan||!child)throw new Error("Cenário ainda não calculado.");stage="ativação do plano";await activatePlanCas(plan);stage="salvamento do perfil";await db.ref().update({[childPath("profile")]:Core.firebaseProfile(child),[childPath("enxoval/onboarding")]:child.enxoval.onboarding,[childPath("enxoval/settings")]:child.enxoval.settings});stage="sincronização dos itens";await syncOperationalItems(plan,evaluation);closeWizard();alert("Planejamento atualizado. Itens planejados, sugestões e itens conforme sua rotina foram sincronizados sem alterar aquisições existentes.");}catch(e){console.error("V4.8F2 commit failed at",stage,e);showError(new Error(`${stage}: ${e?.message||e}`));}finally{S.busy=false;}}
+  async function syncOperationalItems(plan,evaluation={}){const ref=db.ref(childPath("enxoval/items"));await ref.transaction(cur=>Core.buildOperationalItems(plan,cur||{},Date.now(),{catalog:S.data.catalog,pricing:S.data.pricing,budgetTier:plan?.financeSnapshot?.budgetTier,itemTierOverrides:plan?.financeSnapshot?.assumptionsSnapshot?.itemTierOverrides||{},evaluation}));}
+  async function rebuildCurrentPlan({decisions=null,financeOptions=null,reason="other"}={}){
+    if(S.busy)throw new Error("Já existe uma atualização de planejamento em andamento.");
+    S.busy=true;
+    try{
+      await loadData();
+      S.draft=Core.childFromFirebase(rawForWizard(),E.B.createChildDraft,Date.now());
+      const tier=S.draft?.enxoval?.settings?.budgetTier;
+      if(!["economic","intermediate","premium"].includes(tier))throw new Error("Escolha uma faixa de orçamento antes de atualizar o planejamento.");
+      const climateResult=climateResultFromCurrentPlan();
+      const generated=await generateTier(tier,{decisions:decisions||collectOptionalDecisions(),financeOptions:financeOptions||currentFinanceOptions(),climateResult,forceReason:reason});
+      await activatePlanCas(generated.plan);
+      await syncOperationalItems(generated.plan,generated.evaluation||{});
+      S.currentPlan=generated.plan;
+      S.currentPlanId=generated.plan.planId;
+      return generated.plan;
+    }finally{
+      S.busy=false;
+    }
+  }
+  async function rebuildCurrentPlanWithDecisions(decisions){return rebuildCurrentPlan({decisions,financeOptions:currentFinanceOptions(),reason:"optional_decision_changed"});}
+  async function setOptionalDecision(itemId,action){
+    await loadData();
+    const id=String(itemId||"").trim();
+    if(!id)throw new Error("Item opcional inválido.");
+    const decisions=collectOptionalDecisions();
+    const accepted=new Set(decisions.acceptedOptionalItemIds||[]);
+    const rejected=new Set(decisions.rejectedOptionalItemIds||[]);
+    if(action==="accept"){accepted.add(id);rejected.delete(id);}
+    else if(action==="reject"){rejected.add(id);accepted.delete(id);}
+    else if(action==="clear"){accepted.delete(id);rejected.delete(id);}
+    else throw new Error("Ação de decisão inválida.");
+    return rebuildCurrentPlanWithDecisions({acceptedOptionalItemIds:[...accepted],rejectedOptionalItemIds:[...rejected]});
+  }
+  async function setItemTierOverride(itemId,tier){
+    await loadData();
+    const id=String(itemId||"").trim();
+    if(!id)throw new Error("Item inválido para faixa de preço.");
+    const allowed=new Set(["economic","intermediate","premium"]);
+    if(tier!==null&&tier!=="inherit"&&!allowed.has(tier))throw new Error("Faixa de preço inválida.");
+    const options=currentFinanceOptions();
+    const overrides={...(options.itemTierOverrides||{})};
+    if(tier===null||tier==="inherit")delete overrides[id]; else overrides[id]=tier;
+    options.itemTierOverrides=overrides;
+    return rebuildCurrentPlan({decisions:collectOptionalDecisions(),financeOptions:options,reason:"budget_changed"});
+  }
+  function closeHiddenSuggestions(){document.getElementById("modalV48HiddenSuggestions")?.classList.add("hidden");}
+  function renderHiddenSuggestions(){
+    ensureUi();
+    const body=document.getElementById("v48HiddenSuggestionsBody");if(!body)return;
+    const rejected=currentDecisionSnapshot().rejectedOptionalItemIds||[];
+    const byId=Object.fromEntries((S.data?.catalog?.items||[]).map(x=>[x.id,x]));
+    body.innerHTML=rejected.length?rejected.map(id=>{const item=byId[id]||{name:id,category:""};return `<div class="rounded-xl border border-gray-100 bg-gray-50 p-3 flex items-center justify-between gap-3"><div class="min-w-0"><strong class="block text-xs text-gray-800">${esc(item.name||id)}</strong><span class="block text-[9px] text-gray-400 mt-0.5">${esc(item.category||"")}</span></div><button type="button" onclick="CoraV48Integration.restoreHiddenSuggestion('${esc(id)}')" class="shrink-0 px-3 py-2 rounded-lg bg-sky-600 text-white text-[10px] font-bold">Restaurar</button></div>`;}).join(""):`<div class="text-center py-8"><p class="text-xs font-semibold text-gray-600">Nenhuma sugestão ocultada.</p><p class="text-[10px] text-gray-400 mt-1">Itens ocultados por você aparecerão aqui.</p></div>`;
+    lucide.createIcons();
+  }
+  async function openHiddenSuggestions(){await loadData();ensureUi();renderHiddenSuggestions();document.getElementById("modalV48HiddenSuggestions")?.classList.remove("hidden");}
+  async function restoreHiddenSuggestion(itemId){
+    try{const plan=await setOptionalDecision(itemId,"clear");S.currentPlan=plan;S.currentPlanId=plan.planId;renderHiddenSuggestions();}
+    catch(e){showError(e);}
+  }
+  function getData(){return S.data;}
+  async function commitSelected(){if(S.busy)return;let stage="preparação";try{S.busy=true;const tier=S.selectedTier||"intermediate",plan=S.previews[tier],child=S.previewChildren?.[tier],evaluation=S.previewEvaluations?.[tier]||{};if(!plan||!child)throw new Error("Cenário ainda não calculado.");stage="ativação do plano";await activatePlanCas(plan);stage="salvamento do perfil";await db.ref().update({[childPath("profile")]:Core.firebaseProfile(child),[childPath("enxoval/onboarding")]:child.enxoval.onboarding,[childPath("enxoval/settings")]:child.enxoval.settings});stage="sincronização dos itens";await syncOperationalItems(plan,evaluation);closeWizard();alert("Planejamento atualizado. Itens planejados, sugestões e itens conforme sua rotina foram sincronizados sem alterar aquisições existentes.");}catch(e){console.error("V4.8F4.1 commit failed at",stage,e);showError(new Error(`${stage}: ${e?.message||e}`));}finally{S.busy=false;}}
   function thermalEmoji(c){return ({very_hot:"☀️",hot:"🌤️",mild:"⛅",cold:"🧥",very_cold:"❄️"})[c]||"🌡️";}
   function renderPlanUi(raw,plan){const header=document.getElementById("headerContext");if(header)header.textContent=Core.buildHeaderText(raw);const widget=document.getElementById("coraSeasonWidget");if(widget){const cards=Core.thermalCards(plan);widget.classList.remove("hidden");widget.innerHTML=`<div class="flex items-center justify-between text-gray-600 mb-2 font-medium"><span class="flex items-center gap-1"><i data-lucide="calendar-range" class="w-3.5 h-3.5 text-rose-500"></i> Clima ao longo do primeiro ano</span><span class="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full font-semibold">${plan?.climateSnapshot?.applied?"Personalizado":"Equilibrado"}</span></div><div class="grid grid-cols-5 gap-1">${cards.map(c=>`<div class="p-1.5 rounded-lg bg-gray-50 border border-gray-100 text-center"><span class="block text-[10px] font-bold text-gray-600">${c.size}</span><span class="block text-xs font-bold text-gray-800">${c.meanTempC===null?"—":thermalEmoji(c.thermalClass)+" "+c.meanTempC+"°"}</span></div>`).join("")}</div>`;}
-    const st=document.getElementById("settingsPlanningStatus");if(st){if(plan){const b=Core.planBudgetSummary(plan);st.textContent=`Plano ${plan.planId} • ${b.plannedItems} itens • referência ${money(b.knownTotalBRL)}${b.complete?"":" (parcial)"}`;}else st.textContent="Este perfil ainda não tem um plano V4.8 ativo.";}lucide.createIcons();}
+    const st=document.getElementById("settingsPlanningStatus");if(st){if(plan){const b=Core.planBudgetSummary(plan);st.textContent=`Plano ${plan.planId} • ${b.plannedItems} planejados • ${b.suggestions} sugestões • referência ${money(b.knownTotalBRL)}${b.complete?"":" (parcial)"}`;}else st.textContent="Este perfil ainda não tem um plano V4.8 ativo.";}lucide.createIcons();}
   function onChildSnapshot(raw){S.rawChild=raw||{};S.currentPlanId=raw?.enxoval?.currentPlanId||null;S.currentPlan=S.currentPlanId?raw?.enxoval?.plans?.[S.currentPlanId]||null:null;ensureUi();renderPlanUi(raw,S.currentPlan);const complete=raw?.enxoval?.onboarding?.status==="complete"&&raw?.enxoval?.onboarding?.currentStep==="done"&&S.currentPlan;if(!complete){const key=`${activeFamilyId()}:${activeChildId()}`;if(!S.autoShown.has(key)){S.autoShown.add(key);setTimeout(()=>openWizard(false),150);}}}
   async function init(){ensureUi();try{await loadData();}catch(e){console.error("V4.8 data load failed",e);}const prior=window.onload; /* index invokes init via explicit hook too; harmless */ }
-  globalThis.CoraV48Integration={init,onChildSnapshot,openWizard,closeWizard,nextStep,backStep,toggleLifeDate,toggleIsofix,chooseTier,commitSelected};
+  globalThis.CoraV48Integration={init,onChildSnapshot,openWizard,closeWizard,nextStep,backStep,toggleLifeDate,toggleIsofix,chooseTier,commitSelected,setOptionalDecision,setItemTierOverride,openHiddenSuggestions,closeHiddenSuggestions,restoreHiddenSuggestion,getData};
   ensureUi();
 })();

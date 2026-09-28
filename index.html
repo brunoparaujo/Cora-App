@@ -45,7 +45,7 @@
     const STANDARD_SIZE_KEYS = ['RN', 'P', 'M', 'G', 'GG'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', GG: 'GG', U: 'Único' };
     const SCHEMA_VERSION = 17; // V4.8E1: perfil + plano V4.8 + tamanho GG
-    const APP_MODEL = 'v4.8-f3-separated-items';
+    const APP_MODEL = 'v4.8-f4.1-decisions-finance';
     const PENDING_INVITE_STORAGE_KEY = 'cora_pending_invite_v451';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
     // V4.5.1 mantém autenticação separada da autorização e fecha o modelo em uma família por conta.
@@ -509,7 +509,8 @@
       'source', 'sourcePlanId', 'priority', 'goalType', 'planningSnapshot',
       'recommendationSnapshot', 'retainedPurchaseHistory', 'quantityUnit',
       'planDisposition', 'planReason', 'conditionState', 'countsTowardPlan',
-      'operationalVariantKey', 'sourceFamilyId', 'sourceFamilyName', 'legacyUnclassifiedVariant'
+      'operationalVariantKey', 'sourceFamilyId', 'sourceFamilyName', 'legacyUnclassifiedVariant',
+      'pricingKey', 'referenceTier'
     ]);
 
     function itemPriority(item) {
@@ -580,6 +581,65 @@
       return '';
     }
 
+    function activeBudgetTier() {
+      return appState.currentPlan?.financeSnapshot?.budgetTier
+        || appState.childData?.enxoval?.settings?.budgetTier
+        || 'intermediate';
+    }
+
+    function budgetTierLabel(tier = activeBudgetTier()) {
+      return ({economic:'Econômico',intermediate:'Intermediário',premium:'Premium'})[tier] || 'Intermediário';
+    }
+
+    function itemPricingScopeId(item) {
+      return item?.sourceFamilyId || item?.id || null;
+    }
+
+    function activeItemBudgetTier(item) {
+      const id = itemPricingScopeId(item);
+      const overrides = appState.currentPlan?.financeSnapshot?.assumptionsSnapshot?.itemTierOverrides || {};
+      return (id && overrides[id]) || item?.referenceTier || activeBudgetTier();
+    }
+
+    function itemHasTierOverride(item) {
+      const id = itemPricingScopeId(item);
+      const overrides = appState.currentPlan?.financeSnapshot?.assumptionsSnapshot?.itemTierOverrides || {};
+      return Boolean(id && overrides[id]);
+    }
+
+    function recommendationTargetQuantity(item) {
+      const target = item?.recommendationSnapshot || {};
+      if (target.kind === 'single') return Math.max(0, Number(target.quantity) || 0);
+      if (target.kind === 'recurring') return Math.max(0, Number(target.initialStockQuantity) || 0);
+      if (target.kind === 'by_size') {
+        return STANDARD_SIZE_KEYS.reduce((sum, size) => sum + Math.max(0, Number(target.sizes?.[size]?.total) || 0), 0);
+      }
+      if (target.kind === 'by_phase') {
+        return (target.phases || []).reduce((sum, phase) => sum + Math.max(0, Number(phase.quantity ?? phase.total) || 0), 0);
+      }
+      if (target.kind === 'deferred') return Math.max(0, Number(target.defaultQuantity) || 0);
+      return 0;
+    }
+
+    function itemReferenceTotal(item) {
+      if (item.unitEstimate === null || item.unitEstimate === undefined) return null;
+      const disposition = itemPlanDisposition(item);
+      const qty = disposition === 'suggested' ? recommendationTargetQuantity(item) : getTargetTotal(item);
+      return qty > 0 ? qty * (Number(item.unitEstimate) || 0) : 0;
+    }
+
+    function itemReferencePriceHtml(item) {
+      if (item.unitEstimate === null || item.unitEstimate === undefined) return '';
+      const unit = itemUnitLabel(item, 1);
+      const total = itemReferenceTotal(item);
+      const totalText = total && total > 0 ? ` • ${money(total)} no item` : '';
+      const tier = activeItemBudgetTier(item);
+      return `<div class="mt-1 flex flex-wrap items-center gap-2 text-[9px] text-gray-500">
+        <span>Referência ${escapeHtml(budgetTierLabel(tier))}: ${money(item.unitEstimate)} / ${escapeHtml(unit)}${totalText}</span>
+        ${item.pricingKey ? `<button type="button" onclick="openPriceReferences('${item.id}')" class="font-bold text-rose-600 hover:underline">Ver referências de preço</button>` : ''}
+      </div>`;
+    }
+
     function renderNonPlannedRecommendation(item) {
       const disposition = itemPlanDisposition(item);
       const acquisitions = getAcquisitions(item);
@@ -587,20 +647,60 @@
       const isSuggested = disposition === 'suggested';
       const title = isSuggested ? 'Sugestão do Cora' : 'Conforme sua rotina';
       const detail = isSuggested
-        ? 'Visível para você considerar. Ainda não conta na meta, no progresso nem no orçamento planejado.'
+        ? 'Você pode incluir no planejamento, comprar diretamente ou simplesmente ignorar. Enquanto não incluir, não conta na meta nem no progresso.'
         : 'Ainda não há informação suficiente para definir uma meta. O item continua visível e não conta no progresso nem no orçamento.';
+      const refTotal = itemReferenceTotal(item);
       return `
         <div class="border ${isSuggested ? 'border-sky-100 bg-sky-50/40' : 'border-violet-100 bg-violet-50/40'} rounded-xl p-3 space-y-2">
           <div>
             <span class="block text-[10px] font-bold ${isSuggested ? 'text-sky-700' : 'text-violet-700'} uppercase tracking-wide">${title}</span>
             <p class="text-[10px] text-gray-600 mt-1">${detail}</p>
             ${targetText ? `<p class="text-[10px] font-semibold text-gray-700 mt-1">${escapeHtml(targetText)}</p>` : ''}
+            ${item.unitEstimate !== null && item.unitEstimate !== undefined ? `<p class="text-[10px] font-semibold text-gray-700 mt-1">Referência ${escapeHtml(budgetTierLabel(activeItemBudgetTier(item)))}: ${money(item.unitEstimate)} / ${escapeHtml(itemUnitLabel(item, 1))}${refTotal && refTotal > 0 ? ` • ${money(refTotal)} nesta sugestão` : ''}</p>` : ''}
+            ${item.pricingKey ? `<button type="button" onclick="openPriceReferences('${item.id}')" class="text-[10px] font-bold text-rose-600 mt-1 hover:underline">Ver referências de preço</button>` : ''}
           </div>
+          ${isSuggested ? `<div class="grid grid-cols-2 gap-2">
+            <button type="button" onclick="includeSuggestion('${item.id}')" class="h-9 px-3 rounded-lg bg-sky-600 text-white text-[10px] font-bold active:scale-95 transition">Incluir no planejamento</button>
+            <button type="button" onclick="hideSuggestion('${item.id}')" class="h-9 px-3 rounded-lg bg-white border border-gray-200 text-gray-600 text-[10px] font-bold active:scale-95 transition">Ocultar sugestão</button>
+          </div>` : ''}
           <div class="flex items-center justify-between gap-2">
             <span class="text-[10px] text-gray-500">${acquisitions.length ? `${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição registrada' : 'aquisições registradas'}` : 'Nenhuma aquisição registrada'}</span>
             <button onclick="openAcquisitionModalForItem('${item.id}')" class="shrink-0 h-8 px-3 rounded-lg bg-emerald-600 text-white text-[10px] font-bold active:scale-95 transition">Registrar aquisição</button>
           </div>
         </div>`;
+    }
+
+    async function includeSuggestion(itemId) {
+      const item = appState.items.find(i => i.id === itemId);
+      if (!item || itemPlanDisposition(item) !== 'suggested') return;
+      try {
+        await runWriteOnce(
+          `suggestion-accept:${itemId}`,
+          null,
+          () => globalThis.CoraV48Integration?.setOptionalDecision?.(item.sourceFamilyId || item.id, 'accept'),
+          'Incluindo...'
+        );
+      } catch (error) {
+        console.error('Erro ao incluir sugestão:', error);
+        alert(error?.message || 'Não foi possível incluir esta sugestão no planejamento.');
+      }
+    }
+
+    async function hideSuggestion(itemId) {
+      const item = appState.items.find(i => i.id === itemId);
+      if (!item || itemPlanDisposition(item) !== 'suggested') return;
+      if (!confirm(`Ocultar "${item.name}" das sugestões deste planejamento? Você poderá revisar essa escolha depois.`)) return;
+      try {
+        await runWriteOnce(
+          `suggestion-reject:${itemId}`,
+          null,
+          () => globalThis.CoraV48Integration?.setOptionalDecision?.(item.sourceFamilyId || item.id, 'reject'),
+          'Ocultando...'
+        );
+      } catch (error) {
+        console.error('Erro ao ocultar sugestão:', error);
+        alert(error?.message || 'Não foi possível ocultar esta sugestão.');
+      }
     }
 
     function normalizeItem(item) {
@@ -1228,7 +1328,7 @@
         Object.keys(item.sizes[size] || {}).every(k => k === 'target')
       );
       const allowedAcquisitionKeys = [
-        'id', 'size', 'quantity', 'unitPrice', 'type', 'brand', 'notes',
+        'id', 'size', 'quantity', 'unitPrice', 'type', 'brand', 'notes', 'variant',
         'revision', 'createdAt', 'updatedAt'
       ];
       const acquisitionsOk = Object.values(item?.acquisitions || {}).every(acq =>
@@ -2794,7 +2894,12 @@
       const searchTerm = (document.getElementById('searchInput').value || '').toLowerCase().trim();
       const statusFilter = document.getElementById('filterStatus').value;
 
-      let filtered = appState.items.filter(item => item.category === appState.activeCategory);
+      let filtered = appState.items
+        .filter(item => item.category === appState.activeCategory)
+        .filter(item => {
+          const disposition = itemPlanDisposition(item);
+          return !['inactive','excluded','rejected'].includes(disposition) || item.retainedPurchaseHistory || getAcquisitions(item).length > 0;
+        });
       if (searchTerm) {
         filtered = filtered.filter(item =>
           item.name.toLowerCase().includes(searchTerm) ||
@@ -2831,6 +2936,7 @@
                   ${isComplete ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded-md">✅ OK</span>' : ''}
                 </div>
                 ${acquisitions.length ? `<p class="text-[10px] text-gray-500 mt-1">${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição' : 'aquisições'} • ${escapeHtml(brandSummary)}</p>` : '<p class="text-[10px] text-gray-400 mt-1">Nenhuma aquisição registrada</p>'}
+                ${!['suggested','deferred'].includes(itemPlanDisposition(item)) ? itemReferencePriceHtml(item) : ''}
               </div>
               ${item.legacyUnclassifiedVariant ? '' : `<button onclick="editItem('${item.id}')" class="p-2 text-gray-400 hover:text-rose-600 transition rounded-lg hover:bg-rose-50" aria-label="Editar item">
                 <i data-lucide="edit-3" class="w-4 h-4"></i>
@@ -2985,6 +3091,74 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       }
     }
 
+    async function pricingData() {
+      const fromIntegration = globalThis.CoraV48Integration?.getData?.()?.pricing;
+      if (fromIntegration) return fromIntegration;
+      const response = await fetch('/cora-engine/data/pricing.json?v=4.8f4.1', { cache: 'no-cache' });
+      if (!response.ok) throw new Error(`Falha ao carregar referências de preço (${response.status}).`);
+      return response.json();
+    }
+
+    async function openPriceReferences(itemId) {
+      const item = appState.items.find(i => i.id === itemId);
+      if (!item || !item.pricingKey) return;
+      try {
+        const pricing = await pricingData();
+        const globalTier = activeBudgetTier();
+        const tier = activeItemBudgetTier(item);
+        const selectedVariant = item?.recommendationSnapshot?.variant?.selectedVariant || null;
+        const refs = (pricing.marketReferences || []).filter(r => r.pricingKey === item.pricingKey && r.tier === tier && (!selectedVariant || !r.variant || r.variant === selectedVariant));
+        const override = itemHasTierOverride(item);
+        document.getElementById('priceReferencesTitle').textContent = item.name;
+        document.getElementById('priceReferencesSubtitle').textContent = `${budgetTierLabel(tier)}${override ? ' • faixa específica deste item' : ' • faixa geral do planejamento'} • referência ${item.unitEstimate !== null && item.unitEstimate !== undefined ? money(item.unitEstimate) : 'não definida'}`;
+        const tierControl = `<div class="rounded-xl border border-rose-100 bg-rose-50/40 p-3"><label class="block text-[10px] font-bold text-gray-600 mb-1">Faixa de preço deste item</label><select onchange="changeItemBudgetTier('${item.id}', this.value)" class="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-lg"><option value="inherit" ${!override ? 'selected' : ''}>Usar faixa geral (${escapeHtml(budgetTierLabel(globalTier))})</option><option value="economic" ${override && tier === 'economic' ? 'selected' : ''}>Econômico</option><option value="intermediate" ${override && tier === 'intermediate' ? 'selected' : ''}>Intermediário</option><option value="premium" ${override && tier === 'premium' ? 'selected' : ''}>Premium</option></select><p class="text-[9px] text-gray-400 mt-1">Mudar a faixa cria uma nova revisão do planejamento; não altera aquisições existentes.</p></div>`;
+        document.getElementById('priceReferencesBody').innerHTML = tierControl + (refs.length ? refs.map(ref => {
+          const regular = ref.observedRegularPriceBRL != null ? money(ref.observedRegularPriceBRL) : null;
+          const promo = ref.observedPromoPriceBRL != null ? money(ref.observedPromoPriceBRL) : null;
+          return `<div class="border border-gray-200 rounded-xl p-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-bold text-gray-900">${escapeHtml(ref.brand || '')}${ref.product ? ` • ${escapeHtml(ref.product)}` : ''}</p>
+                <p class="text-[10px] text-gray-500 mt-1">${escapeHtml(ref.retailerOrSource || 'Referência de mercado')}</p>
+              </div>
+              <div class="text-right shrink-0">
+                ${regular ? `<p class="text-xs font-bold text-gray-900">${regular}</p>` : ''}
+                ${promo ? `<p class="text-[10px] font-bold text-emerald-700">promo observada ${promo}</p>` : ''}
+              </div>
+            </div>
+            ${ref.referenceUrl ? `<a href="${escapeHtml(ref.referenceUrl)}" target="_blank" rel="noopener noreferrer" class="inline-flex mt-2 text-[10px] font-bold text-rose-600 hover:underline">Abrir referência</a>` : ''}
+            ${ref.observedAt ? `<p class="text-[9px] text-gray-400 mt-1">Observado em ${escapeHtml(ref.observedAt.split('-').reverse().join('/'))}</p>` : ''}
+          </div>`;
+        }).join('') : `<div class="text-center py-5"><p class="text-xs text-gray-500">Não há produto real cadastrado nesta faixa ainda.</p><p class="text-[10px] text-gray-400 mt-1">O valor de referência do planejamento continua válido como estimativa.</p></div>`);
+        document.getElementById('modalPriceReferences').classList.remove('hidden');
+        lucide.createIcons();
+      } catch (error) {
+        console.error('Erro ao abrir referências de preço:', error);
+        alert('Não foi possível carregar as referências de preço.');
+      }
+    }
+
+    async function changeItemBudgetTier(itemId, value) {
+      const item = appState.items.find(i => i.id === itemId);
+      if (!item) return;
+      if (!globalThis.CoraV48Integration?.setItemTierOverride) {
+        alert('Integração de planejamento indisponível.');
+        return;
+      }
+      try {
+        closeModal('modalPriceReferences');
+        await runWriteOnce(
+          `item-tier:${itemPricingScopeId(item)}`,
+          null,
+          () => globalThis.CoraV48Integration.setItemTierOverride(itemPricingScopeId(item), value === 'inherit' ? null : value),
+          'Atualizando faixa...'
+        );
+      } catch (error) {
+        console.error('Erro ao alterar faixa de preço do item:', error);
+        alert(error?.message || 'Não foi possível alterar a faixa de preço deste item.');
+      }
+    }
+
     const CATEGORY_META = {
       vestuario: { label: 'Vestuário', color: '#ef476f' },
       quarto: { label: 'Quarto', color: '#f4b942' },
@@ -2995,16 +3169,26 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     };
 
     function getItemPlannedBudget(item) {
+      const disposition = itemPlanDisposition(item);
+      if (['suggested','deferred','inactive','excluded','rejected'].includes(disposition)) return null;
       if (item.unitEstimate === null || item.unitEstimate === undefined) return null;
       return getTargetTotal(item) * (Number(item.unitEstimate) || 0);
+    }
+
+    function getItemSuggestedBudget(item) {
+      if (itemPlanDisposition(item) !== 'suggested') return null;
+      if (item.unitEstimate === null || item.unitEstimate === undefined) return null;
+      return recommendationTargetQuantity(item) * (Number(item.unitEstimate) || 0);
     }
 
     function getCategoryFinanceData() {
       return Object.entries(CATEGORY_META).map(([category, meta]) => {
         const categoryItems = appState.items.filter(item => item.category === category);
         let planned = 0;
+        let suggested = 0;
         let spent = 0;
         let estimatedItems = 0;
+        let suggestedItems = 0;
 
         categoryItems.forEach(item => {
           const itemPlanned = getItemPlannedBudget(item);
@@ -3012,10 +3196,15 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
             planned += itemPlanned;
             estimatedItems += 1;
           }
+          const itemSuggested = getItemSuggestedBudget(item);
+          if (itemSuggested !== null) {
+            suggested += itemSuggested;
+            suggestedItems += 1;
+          }
           spent += getPurchaseTotal(item);
         });
 
-        return { category, ...meta, planned, spent, estimatedItems };
+        return { category, ...meta, planned, suggested, spent, estimatedItems, suggestedItems };
       });
     }
 
@@ -3036,7 +3225,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const planned = Math.max(0, Number(totalPlanned) || 0);
       const spent = Math.max(0, Number(totalSpent) || 0);
       const hasPlanned = planned > 0;
-      const hasAny = categoryData.some(c => (Number(c.planned) || 0) > 0 || (Number(c.spent) || 0) > 0);
+      const hasAny = categoryData.some(c => (Number(c.planned) || 0) > 0 || (Number(c.suggested) || 0) > 0 || (Number(c.spent) || 0) > 0);
 
       if (!hasAny) {
         chart.innerHTML = '<div class="donut-empty"><strong>Sem dados</strong><span>adicione estimativas ou aquisições</span></div>';
@@ -3078,15 +3267,17 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         }
       }
 
-      const rows = categoryData.filter(c => (Number(c.planned) || 0) > 0 || (Number(c.spent) || 0) > 0);
+      const rows = categoryData.filter(c => (Number(c.planned) || 0) > 0 || (Number(c.suggested) || 0) > 0 || (Number(c.spent) || 0) > 0);
       bars.innerHTML = rows.length ? `
         <div class="flex items-center justify-center gap-4 pb-2 text-[9px] text-gray-500">
           <span class="inline-flex items-center gap-1"><span class="legend-swatch legend-light"></span>Planejado</span>
           <span class="inline-flex items-center gap-1"><span class="legend-swatch legend-dark"></span>Gasto</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-sky-200"></span>Sugerido</span>
         </div>
       ` + rows.map(c => {
         const catPlanned = Math.max(0, Number(c.planned) || 0);
         const catSpent = Math.max(0, Number(c.spent) || 0);
+        const catSuggested = Math.max(0, Number(c.suggested) || 0);
         const hasCatPlanned = catPlanned > 0;
         const pct = hasCatPlanned ? Math.min((catSpent / catPlanned) * 100, 100) : 0;
         const over = hasCatPlanned && catSpent > catPlanned;
@@ -3106,6 +3297,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           </div>
           <div class="finance-bar" style="${barStyle}"><div class="finance-bar-fill" style="width:${pct}%;"></div>${over ? '<div class="finance-bar-over"></div>' : ''}</div>
           <div class="text-[9px] ${detailClass} mt-1">${detail}</div>
+          ${catSuggested > 0 ? `<div class="text-[9px] text-sky-700 mt-0.5">+ ${money(catSuggested)} em sugestões</div>` : ''}
         </div>`;
       }).join('') : '<p class="text-[11px] text-gray-400 text-center py-2">Nenhum orçamento ou gasto registrado.</p>';
     }
@@ -3115,7 +3307,9 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       let purchasedPieces = 0;
       let acquisitionCount = 0;
       let plannedTotal = 0;
+      let suggestedTotal = 0;
       let estimatedItemCount = 0;
+      let suggestedItemCount = 0;
       const rows = [];
 
       appState.items.forEach(item => {
@@ -3123,6 +3317,11 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         if (plannedItem !== null) {
           plannedTotal += plannedItem;
           estimatedItemCount += 1;
+        }
+        const suggestedItem = getItemSuggestedBudget(item);
+        if (suggestedItem !== null) {
+          suggestedTotal += suggestedItem;
+          suggestedItemCount += 1;
         }
 
         getAcquisitions(item).forEach(acq => {
@@ -3147,11 +3346,15 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           : `Acima do planejado: ${money(Math.abs(remaining))}`;
       const statusClass = plannedTotal <= 0 ? 'text-gray-500' : remaining >= 0 ? 'text-emerald-700' : 'text-rose-700';
 
+      const totalBudget = plannedTotal + suggestedTotal;
+      document.getElementById('resumoPlanejado').innerText = money(plannedTotal);
+      document.getElementById('resumoSugerido').innerText = money(suggestedTotal);
+      document.getElementById('resumoOrcamentoTotalGeral').innerText = money(totalBudget);
       document.getElementById('resumoGastoReal').innerText = money(spent);
       document.getElementById('resumoPecasCompradas').innerText = `${purchasedPieces} ${purchasedPieces === 1 ? 'unidade de compra paga' : 'unidades de compra pagas'}`;
       document.getElementById('resumoQtdAquisicoes').innerText = `${acquisitionCount} ${acquisitionCount === 1 ? 'aquisição' : 'aquisições'}`;
-      document.getElementById('resumoOrcamentoTotal').innerText = plannedTotal > 0 ? `de ${money(plannedTotal)} planejados` : 'sem orçamento definido';
-      document.getElementById('resumoOrcamentoDetalhe').innerText = `${estimatedItemCount} ${estimatedItemCount === 1 ? 'item com estimativa' : 'itens com estimativa'}`;
+      document.getElementById('resumoOrcamentoTotal').innerText = plannedTotal > 0 ? `${money(spent)} de ${money(plannedTotal)} planejados` : 'sem orçamento planejado';
+      document.getElementById('resumoOrcamentoDetalhe').innerText = `${estimatedItemCount} planejados com estimativa • ${suggestedItemCount} sugestões com estimativa`;
 
       const categoryFinanceData = getCategoryFinanceData();
       renderBudgetDonut(categoryFinanceData, plannedTotal, spent);
@@ -3399,7 +3602,13 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         const result = await runWriteOnce(
           'acquisition-form',
           'acquisitionSubmitButton',
-          () => saveAcquisitionToFirebase(itemId, acquisition, appState.editingAcquisitionBase)
+          async () => {
+            if (itemPlanDisposition(item) === 'suggested') {
+              if (!globalThis.CoraV48Integration?.setOptionalDecision) throw new Error('Integração de planejamento indisponível.');
+              await globalThis.CoraV48Integration.setOptionalDecision(item.sourceFamilyId || item.id, 'accept');
+            }
+            return saveAcquisitionToFirebase(itemId, acquisition, appState.editingAcquisitionBase);
+          }
         );
         if (result?.skipped) return;
         appState.editingAcquisitionBase = null;
@@ -4691,17 +4900,33 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           <h2 class="font-bold text-gray-900 flex items-center gap-2"><i data-lucide="wallet" class="w-5 h-5 text-emerald-600"></i> Financeiro</h2>
         </div>
 
-        <div class="rounded-2xl border border-rose-100 bg-rose-50/30 p-3">
+        <div class="rounded-2xl border border-rose-100 bg-rose-50/30 p-3 space-y-3">
+          <div class="grid grid-cols-2 gap-2">
+            <div class="bg-white/80 border border-gray-100 rounded-xl p-2.5">
+              <span class="block text-[9px] text-gray-400 uppercase font-bold">Planejado</span>
+              <strong id="resumoPlanejado" class="block text-sm text-gray-900 mt-0.5">R$ 0,00</strong>
+            </div>
+            <div class="bg-sky-50/80 border border-sky-100 rounded-xl p-2.5">
+              <span class="block text-[9px] text-sky-600 uppercase font-bold">Sugerido</span>
+              <strong id="resumoSugerido" class="block text-sm text-sky-800 mt-0.5">R$ 0,00</strong>
+            </div>
+            <div class="bg-white/80 border border-gray-100 rounded-xl p-2.5">
+              <span class="block text-[9px] text-gray-400 uppercase font-bold">Orçamento total</span>
+              <strong id="resumoOrcamentoTotalGeral" class="block text-sm text-gray-900 mt-0.5">R$ 0,00</strong>
+            </div>
+            <div class="bg-emerald-50/80 border border-emerald-100 rounded-xl p-2.5">
+              <span class="block text-[9px] text-emerald-600 uppercase font-bold">Gasto</span>
+              <strong id="resumoGastoReal" class="block text-sm text-emerald-800 mt-0.5">R$ 0,00</strong>
+            </div>
+          </div>
           <div class="flex items-center gap-4">
             <div class="shrink-0"><div id="orcamentoDonut" class="donut-chart" aria-label="Progresso do gasto em relação ao orçamento planejado"></div></div>
             <div class="min-w-0 flex-1">
-              <span class="block text-[10px] text-gray-500 uppercase font-semibold">Gasto</span>
-              <p id="resumoGastoReal" class="text-xl font-extrabold text-gray-900 mt-0.5">R$ 0,00</p>
-              <p id="resumoOrcamentoTotal" class="text-xs font-semibold text-gray-600 mt-1">sem orçamento definido</p>
+              <p id="resumoOrcamentoTotal" class="text-xs font-semibold text-gray-600">sem orçamento planejado</p>
               <p id="orcamentoDonutStatus" class="text-[10px] font-semibold mt-2 text-gray-500"></p>
             </div>
           </div>
-          <div class="mt-2 flex items-center justify-between text-[9px] text-gray-400">
+          <div class="flex items-center justify-between gap-2 text-[9px] text-gray-400">
             <span id="resumoOrcamentoDetalhe">0 itens com estimativa</span>
             <span id="resumoQtdAquisicoes">0 aquisições</span>
             <span id="resumoPecasCompradas">0 peças pagas</span>
@@ -5275,9 +5500,23 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
   </div>
 
   <!-- Cora Engine — motor de planejamento -->
+  <div id="modalPriceReferences" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[85] hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto shadow-2xl">
+      <div class="sticky top-0 bg-white px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[10px] uppercase tracking-wider text-rose-500 font-bold">Referências de preço</p>
+          <h3 id="priceReferencesTitle" class="font-bold text-gray-900 text-lg">Item</h3>
+          <p id="priceReferencesSubtitle" class="text-[10px] text-gray-400 mt-1"></p>
+        </div>
+        <button type="button" onclick="closeModal('modalPriceReferences')" class="p-2 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div id="priceReferencesBody" class="p-5 space-y-3"></div>
+    </div>
+  </div>
+
   <script src="/cora-engine/engine-browser.js"></script>
-  <script src="/cora-engine/integration-core.js"></script>
-  <script src="/cora-engine/integration-ui.js"></script>
+  <script src="/cora-engine/integration-core.js?v=4.8f4.1"></script>
+  <script src="/cora-engine/integration-ui.js?v=4.8f4.1"></script>
 
 </body>
 </html>
