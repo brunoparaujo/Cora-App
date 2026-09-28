@@ -6,7 +6,7 @@
   const SIZE_KEYS=["RN","P","M","G","GG","U"];
   const PLAN_SIZES=["RN","P","M","G","GG"];
   const CATEGORY_MAP={vestuario:"vestuario",quarto:"quarto",banho_higiene:"higiene",alimentacao:"alimentacao",passeio:"passeio",mamae:"mamae"};
-  const VERSION="4.8F4.1";
+  const VERSION="4.8F4.2";
   const VARIANT_LABELS={manga_curta:"manga curta",manga_longa:"manga longa",macaquinho_curto:"macaquinho curto",macacao_longo:"macacão longo",calca_culote:"calça / culote",short:"short"};
   const VISIBLE_DISPOSITIONS=new Set(["planned","suggested","deferred"]);
   const OPERATIONAL_VARIANT_NAMES={
@@ -334,6 +334,102 @@
     if(s.climateLocation?.city)bits.push(`${s.climateLocation.city}${s.climateLocation.state?", "+s.climateLocation.state:""}`);
     return bits.length?`${name} • ${bits.join(" • ")}`:`Perfil: ${name}`;
   }
+  function parseIsoDate(value){
+    if(typeof value!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(value))return null;
+    const [y,m,d]=value.split("-").map(Number);const dt=new Date(Date.UTC(y,m-1,d));
+    return dt.getUTCFullYear()===y&&dt.getUTCMonth()===m-1&&dt.getUTCDate()===d?dt:null;
+  }
+  function addDaysIso(value,days){const d=parseIsoDate(value);if(!d)return null;d.setUTCDate(d.getUTCDate()+Number(days||0));return d.toISOString().slice(0,10);}
+  function timelineUrgency(recommendedDate,asOf=todayIso(),windowDays=90){
+    const due=parseIsoDate(recommendedDate),now=parseIsoDate(asOf);if(!due||!now)return "when_needed";
+    if(due<=now)return "buy_now";
+    const limit=parseIsoDate(addDaysIso(asOf,Math.max(0,Number(windowDays)||90)));
+    return due<=limit?"next_phase":"planned_later";
+  }
+  function acquisitionQuantity(item,size=null){
+    let total=0;
+    for(const acq of Object.values(item?.acquisitions||{})){
+      if(size&&acq?.size!==size)continue;
+      total+=Math.max(0,Number(acq?.quantity)||0);
+    }
+    return total;
+  }
+  function timelineQuantityForOperational(item,baseEntry){
+    if(baseEntry?.size&&item?.recommendationSnapshot?.kind==="by_size")return Math.max(0,Number(item.recommendationSnapshot?.sizes?.[baseEntry.size]?.total)||0);
+    const target=item?.recommendationSnapshot||{};
+    if(target.kind==="single")return Math.max(0,Number(target.quantity)||0);
+    if(target.kind==="recurring")return Math.max(0,Number(target.initialStockQuantity)||0);
+    if(target.kind==="by_phase")return Math.max(0,Number(baseEntry?.quantity)||0);
+    if(target.kind==="by_size")return Math.max(0,Number(baseEntry?.quantity)||0);
+    return Math.max(0,Number(baseEntry?.quantity)||0);
+  }
+  function buildOperationalPurchaseTimeline(plan,operationalItems=[],asOf=todayIso()){
+    const timeline=plan?.timelineSnapshot||{};const baseEntries=Array.isArray(timeline.entries)?timeline.entries:[];
+    const items=Array.isArray(operationalItems)?operationalItems:Object.values(operationalItems||{});
+    const planned=items.filter(x=>x&&x.countsTowardPlan!==false&&(x.planDisposition||"planned")==="planned");
+    const direct=Object.fromEntries(planned.map(x=>[x.id,x]));
+    const byFamily={};for(const item of planned){if(item.sourceFamilyId)(byFamily[item.sourceFamilyId]||(byFamily[item.sourceFamilyId]=[])).push(item);}
+    const expanded=[];
+    for(const base of baseEntries){
+      const familyChildren=byFamily[base.itemId]||[];
+      let targets=[];
+      if(familyChildren.length){
+        targets=familyChildren.map(item=>({item,quantity:timelineQuantityForOperational(item,base)})).filter(x=>x.quantity>0);
+      }else if(direct[base.itemId]){
+        targets=[{item:direct[base.itemId],quantity:Math.max(0,Number(base.quantity)||timelineQuantityForOperational(direct[base.itemId],base))}];
+      }else{
+        targets=[{item:null,quantity:Math.max(0,Number(base.quantity)||0)}];
+      }
+      const baseQty=Math.max(0,Number(base.quantity)||0);
+      for(const t of targets){
+        const unit=t.item&&isNum(t.item.unitEstimate)?Number(t.item.unitEstimate):(baseQty>0&&isNum(base.amountBRL)?Number(base.amountBRL)/baseQty:null);
+        const plannedAmount=isNum(unit)?t.quantity*Number(unit):(baseQty>0&&isNum(base.amountBRL)?Number(base.amountBRL)*(t.quantity/baseQty):null);
+        expanded.push({
+          entryId:`${base.entryId}::${t.item?.id||base.itemId}`,
+          sourceEntryId:base.entryId,
+          sourceFamilyId:base.itemId,
+          itemId:t.item?.id||base.itemId,
+          name:t.item?.name||base.name||base.itemId,
+          category:t.item?.category||categoryToLegacy(base.category),
+          quantityUnit:t.item?.quantityUnit||"un",
+          size:base.size||null,
+          quantity:t.quantity,
+          unitReferenceBRL:isNum(unit)?Number(unit):null,
+          plannedReferenceBRL:isNum(plannedAmount)?Number(plannedAmount):null,
+          expectedUseDate:base.expectedUseDate||null,
+          recommendedPurchaseDate:base.recommendedPurchaseDate||null,
+          originalCalendarMonth:base.calendarMonth||null,
+          item:t.item||null
+        });
+      }
+    }
+    expanded.sort((a,b)=>(a.recommendedPurchaseDate||"9999-99-99").localeCompare(b.recommendedPurchaseDate||"9999-99-99")||a.entryId.localeCompare(b.entryId));
+    const pools={};
+    for(const e of expanded){
+      const key=`${e.itemId}|${e.size||"*"}`;
+      if(!Object.prototype.hasOwnProperty.call(pools,key))pools[key]=e.item?acquisitionQuantity(e.item,e.size):0;
+      const credited=Math.min(e.quantity,Math.max(0,pools[key]||0));pools[key]=Math.max(0,(pools[key]||0)-credited);
+      e.acquiredQuantity=credited;e.remainingQuantity=Math.max(0,e.quantity-credited);e.complete=e.remainingQuantity<=0;
+      e.remainingReferenceBRL=e.unitReferenceBRL===null?null:e.remainingQuantity*e.unitReferenceBRL;
+      e.urgency=timelineUrgency(e.recommendedPurchaseDate,asOf,timeline.nextPhaseWindowDays||90);
+      e.cashflowMonth=e.remainingQuantity<=0?null:(e.urgency==="buy_now"?String(asOf).slice(0,7):(e.originalCalendarMonth||null));
+      delete e.item;
+    }
+    const bucketKeys=["buy_now","next_phase","planned_later","when_needed"];
+    const buckets=Object.fromEntries(bucketKeys.map(k=>[k,{key:k,count:0,knownRemainingBRL:0,unresolvedAmountCount:0,entryIds:[]}]))
+    const months={};const unscheduled=[];
+    for(const e of expanded){
+      if(e.complete)continue;
+      const b=buckets[e.urgency]||buckets.when_needed;b.count++;b.entryIds.push(e.entryId);if(isNum(e.remainingReferenceBRL))b.knownRemainingBRL+=Number(e.remainingReferenceBRL);else b.unresolvedAmountCount++;
+      if(e.cashflowMonth){const m=months[e.cashflowMonth]||(months[e.cashflowMonth]={calendarMonth:e.cashflowMonth,count:0,knownRemainingBRL:0,unresolvedAmountCount:0,entries:[]});m.count++;m.entries.push(e);if(isNum(e.remainingReferenceBRL))m.knownRemainingBRL+=Number(e.remainingReferenceBRL);else m.unresolvedAmountCount++;}
+      else unscheduled.push(e);
+    }
+    for(const b of Object.values(buckets))b.knownRemainingBRL=Math.round((b.knownRemainingBRL+Number.EPSILON)*100)/100;
+    for(const m of Object.values(months)){m.knownRemainingBRL=Math.round((m.knownRemainingBRL+Number.EPSILON)*100)/100;m.entries.sort((a,b)=>(a.recommendedPurchaseDate||"9999").localeCompare(b.recommendedPurchaseDate||"9999")||a.name.localeCompare(b.name));}
+    const monthList=Object.values(months).sort((a,b)=>a.calendarMonth.localeCompare(b.calendarMonth));
+    const outstanding=expanded.filter(e=>!e.complete);
+    return {status:timeline.status||"missing",asOfDate:asOf,referenceDate:timeline.referenceDate||null,referenceDateSource:timeline.referenceDateSource||null,nextPhaseWindowDays:timeline.nextPhaseWindowDays||90,entries:expanded,outstandingEntries:outstanding,buckets,months:monthList,unscheduled,totalOutstanding:outstanding.length,knownRemainingBRL:Math.round((outstanding.reduce((s,e)=>s+(isNum(e.remainingReferenceBRL)?Number(e.remainingReferenceBRL):0),0)+Number.EPSILON)*100)/100,unresolvedAmountCount:outstanding.filter(e=>!isNum(e.remainingReferenceBRL)).length};
+  }
   function planBudgetSummary(plan){const f=plan?.financeSnapshot?.initialLayette||{};return {knownTotalBRL:Number(f.knownTotalBRL||0),complete:f.complete===true,unresolvedCount:(f.unresolvedItemIds||[]).length,plannedItems:Object.keys(plan?.generatedSnapshot?.items||{}).length,suggestions:Object.keys(plan?.generatedSnapshot?.suggestions||{}).length};}
   function nextComponents(D1,child,decisions,climateEnabled,climateResult){return {inputSnapshot:D1.buildInputSnapshot(child),decisionSnapshot:D1.buildDecisionSnapshot(decisions||{}),climateSnapshot:D1.buildClimateSnapshot({climatePersonalizationEnabled:climateEnabled,climateResult})};}
   function eq(a,b){return JSON.stringify(a)===JSON.stringify(b);}
@@ -353,5 +449,5 @@
     const periods=plan?.climateSnapshot?.thermalProfile?.agePeriods||{};const labels={RN:"RN",P:"P",M:"M",G:"G",GG:"GG"};
     return PLAN_SIZES.map(s=>{const p=periods[s];return {size:s,label:labels[s],from:p?.from||null,toExclusive:p?.toExclusive||null,meanTempC:isNum(p?.weightedMeanTempC)?Number(p.weightedMeanTempC):null,thermalClass:p?.dominantThermalClass||null,mixed:Boolean(p?.mixedSeason)};});
   }
-  return {VERSION,SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,OPERATIONAL_VARIANT_NAMES,clone,isNum,todayIso,categoryToLegacy,totalTarget,pricingEntry,resolveReferenceUnitPrice,financeReferenceForPlanItem,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,operationalVariantId,operationalVariantName,variantOnlyTarget,mergeAcquisitions,splitParentAcquisitions,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,planVariantToOperational,legacyUnclassifiedOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
+  return {VERSION,SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,OPERATIONAL_VARIANT_NAMES,clone,isNum,todayIso,categoryToLegacy,totalTarget,pricingEntry,resolveReferenceUnitPrice,financeReferenceForPlanItem,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,operationalVariantId,operationalVariantName,variantOnlyTarget,mergeAcquisitions,splitParentAcquisitions,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,planVariantToOperational,legacyUnclassifiedOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,parseIsoDate,addDaysIso,timelineUrgency,acquisitionQuantity,timelineQuantityForOperational,buildOperationalPurchaseTimeline,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
 });
