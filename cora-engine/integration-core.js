@@ -4,9 +4,10 @@
   else root.CoraV48IntegrationCore=factory();
 })(typeof globalThis!=="undefined"?globalThis:this,function(){
   const SIZE_KEYS=["RN","P","M","G","GG","U"];
+  const DIAPER_SIZE_KEYS=["RN","P","M","G","XG","XXG"];
   const PLAN_SIZES=["RN","P","M","G","GG"];
   const CATEGORY_MAP={vestuario:"vestuario",quarto:"quarto",banho_higiene:"higiene",alimentacao:"alimentacao",passeio:"passeio",mamae:"mamae"};
-  const VERSION="4.8F4.2";
+  const VERSION="4.8F4.3";
   const VARIANT_LABELS={manga_curta:"manga curta",manga_longa:"manga longa",macaquinho_curto:"macaquinho curto",macacao_longo:"macacão longo",calca_culote:"calça / culote",short:"short"};
   const VISIBLE_DISPOSITIONS=new Set(["planned","suggested","deferred"]);
   const OPERATIONAL_VARIANT_NAMES={
@@ -430,6 +431,47 @@
     const outstanding=expanded.filter(e=>!e.complete);
     return {status:timeline.status||"missing",asOfDate:asOf,referenceDate:timeline.referenceDate||null,referenceDateSource:timeline.referenceDateSource||null,nextPhaseWindowDays:timeline.nextPhaseWindowDays||90,entries:expanded,outstandingEntries:outstanding,buckets,months:monthList,unscheduled,totalOutstanding:outstanding.length,knownRemainingBRL:Math.round((outstanding.reduce((s,e)=>s+(isNum(e.remainingReferenceBRL)?Number(e.remainingReferenceBRL):0),0)+Number.EPSILON)*100)/100,unresolvedAmountCount:outstanding.filter(e=>!isNum(e.remainingReferenceBRL)).length};
   }
+  function monthDiffClamped(referenceDate,asOf=todayIso()){
+    const ref=parseIsoDate(referenceDate),now=parseIsoDate(asOf);if(!ref||!now)return 0;if(now<ref)return 0;
+    let months=(now.getUTCFullYear()-ref.getUTCFullYear())*12+(now.getUTCMonth()-ref.getUTCMonth());
+    const anchor=new Date(Date.UTC(ref.getUTCFullYear(),ref.getUTCMonth()+months,Math.min(ref.getUTCDate(),new Date(Date.UTC(ref.getUTCFullYear(),ref.getUTCMonth()+months+1,0)).getUTCDate())));
+    if(now<anchor)months--;
+    return Math.max(0,Math.min(11,months));
+  }
+  function acquisitionDay(acq){const ms=Number(acq?.createdAt||acq?.updatedAt||0);return Number.isFinite(ms)&&ms>0?new Date(ms).toISOString().slice(0,10):null;}
+  function median(values){const a=(values||[]).filter(v=>Number.isFinite(Number(v))).map(Number).sort((x,y)=>x-y);if(!a.length)return null;const m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2;}
+  function recurringPurchaseStats(item){
+    const byDay={};
+    for(const acq of Object.values(item?.acquisitions||{})){
+      if(acq?.type!=="purchase")continue;const day=acquisitionDay(acq);if(!day)continue;
+      const row=byDay[day]||(byDay[day]={day,units:0,spendBRL:0});const q=Math.max(0,Number(acq.quantity)||0);row.units+=q;row.spendBRL+=q*Math.max(0,Number(acq.unitPrice)||0);
+    }
+    const events=Object.values(byDay).sort((a,b)=>a.day.localeCompare(b.day));
+    if(events.length<2)return {status:"learning",eventCount:events.length,monthlyUnits:null,monthlySpendBRL:null,medianIntervalDays:null,events};
+    const intervals=[];for(let i=1;i<events.length;i++){const a=parseIsoDate(events[i-1].day),b=parseIsoDate(events[i].day);const d=(b-a)/86400000;if(d>0)intervals.push(d);}
+    const interval=median(intervals);if(!isNum(interval)||Number(interval)<=0)return {status:"learning",eventCount:events.length,monthlyUnits:null,monthlySpendBRL:null,medianIntervalDays:null,events};
+    const avgUnits=events.reduce((s,e)=>s+e.units,0)/events.length;const avgSpend=events.reduce((s,e)=>s+e.spendBRL,0)/events.length;const factor=30.44/Number(interval);
+    return {status:"estimated",eventCount:events.length,monthlyUnits:Math.round((avgUnits*factor+Number.EPSILON)*100)/100,monthlySpendBRL:Math.round((avgSpend*factor+Number.EPSILON)*100)/100,medianIntervalDays:Math.round((Number(interval)+Number.EPSILON)*10)/10,events};
+  }
+  function buildRecurringExpenseModel(plan,operationalItems=[],asOf=todayIso()){
+    const rec=plan?.financeSnapshot?.recurring||{};const assumptions=plan?.financeSnapshot?.assumptionsSnapshot||{};const input=plan?.inputSnapshot||{};const items=Array.isArray(operationalItems)?operationalItems:Object.values(operationalItems||{});const byId=Object.fromEntries(items.map(x=>[x.id,x]));
+    const referenceDate=input.referenceDate||plan?.timelineSnapshot?.referenceDate||null;const ageMonth=monthDiffClamped(referenceDate,asOf);const diaper=rec?.items?.fraldas_descartaveis||null;const diaperSizes=clone(assumptions.diaperSizeByAgeMonth||{});const diaperMonths=Object.values(diaper?.calendarMonths||{}).sort((a,b)=>a.calendarMonth.localeCompare(b.calendarMonth));
+    const currentMonth=String(asOf).slice(0,7);const currentDiaperRow=diaperMonths.find(x=>x.calendarMonth===currentMonth)||diaperMonths.find(x=>x.diaperSizes?.includes(diaperSizes[String(ageMonth)]))||null;
+    const generic=[];
+    for(const item of items){
+      if(!item?.planningSnapshot?.recurringCost||item.id==="fraldas_descartaveis")continue;if(item.planDisposition!=="planned")continue;
+      const snap=rec?.items?.[item.id]||null;const stats=recurringPurchaseStats(item);
+      generic.push({itemId:item.id,name:item.name,category:item.category,quantityUnit:item.quantityUnit||"un",consumptionMode:snap?.consumptionMode||item.recommendationSnapshot?.consumptionMode||null,snapshotStatus:snap?.status||"unresolved",snapshotReason:snap?.reason||null,stats});
+    }
+    generic.sort((a,b)=>a.name.localeCompare(b.name,"pt-BR"));
+    const learnedMonthlyBRL=generic.reduce((s,x)=>s+(isNum(x.stats?.monthlySpendBRL)?Number(x.stats.monthlySpendBRL):0),0);
+    return {
+      asOfDate:asOf,referenceDate,referenceDateSource:input.referenceDateSource||plan?.timelineSnapshot?.referenceDateSource||null,ageMonth,
+      diaperingMode:input?.settings?.diaperingMode||null,feedingMode:input?.settings?.feedingMode||"undecided",
+      diaper:diaper?{status:diaper.status||"unresolved",reason:diaper.reason||null,tier:diaper.tier||plan?.financeSnapshot?.budgetTier||null,consumptionMode:diaper.consumptionMode||null,totalEstimatedUnits:isNum(diaper.totalEstimatedUnits)?Number(diaper.totalEstimatedUnits):null,knownEstimatedAmountBRL:Number(diaper.knownEstimatedAmountBRL||0),amountComplete:diaper.amountComplete===true,calendarMonths:diaperMonths,currentCalendarMonth:currentMonth,currentMonthRow:currentDiaperRow,currentSize:diaperSizes[String(ageMonth)]||null,sizeByAgeMonth:diaperSizes,hybridDisposableRatio:assumptions.hybridDisposableRatio===undefined?null:assumptions.hybridDisposableRatio}:null,
+      generic,learnedMonthlyBRL:Math.round((learnedMonthlyBRL+Number.EPSILON)*100)/100,unresolvedItemIds:clone(rec.unresolvedItemIds||[]),recurringSnapshotComplete:rec.complete===true
+    };
+  }
   function planBudgetSummary(plan){const f=plan?.financeSnapshot?.initialLayette||{};return {knownTotalBRL:Number(f.knownTotalBRL||0),complete:f.complete===true,unresolvedCount:(f.unresolvedItemIds||[]).length,plannedItems:Object.keys(plan?.generatedSnapshot?.items||{}).length,suggestions:Object.keys(plan?.generatedSnapshot?.suggestions||{}).length};}
   function nextComponents(D1,child,decisions,climateEnabled,climateResult){return {inputSnapshot:D1.buildInputSnapshot(child),decisionSnapshot:D1.buildDecisionSnapshot(decisions||{}),climateSnapshot:D1.buildClimateSnapshot({climatePersonalizationEnabled:climateEnabled,climateResult})};}
   function eq(a,b){return JSON.stringify(a)===JSON.stringify(b);}
@@ -449,5 +491,5 @@
     const periods=plan?.climateSnapshot?.thermalProfile?.agePeriods||{};const labels={RN:"RN",P:"P",M:"M",G:"G",GG:"GG"};
     return PLAN_SIZES.map(s=>{const p=periods[s];return {size:s,label:labels[s],from:p?.from||null,toExclusive:p?.toExclusive||null,meanTempC:isNum(p?.weightedMeanTempC)?Number(p.weightedMeanTempC):null,thermalClass:p?.dominantThermalClass||null,mixed:Boolean(p?.mixedSeason)};});
   }
-  return {VERSION,SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,OPERATIONAL_VARIANT_NAMES,clone,isNum,todayIso,categoryToLegacy,totalTarget,pricingEntry,resolveReferenceUnitPrice,financeReferenceForPlanItem,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,operationalVariantId,operationalVariantName,variantOnlyTarget,mergeAcquisitions,splitParentAcquisitions,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,planVariantToOperational,legacyUnclassifiedOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,parseIsoDate,addDaysIso,timelineUrgency,acquisitionQuantity,timelineQuantityForOperational,buildOperationalPurchaseTimeline,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
+  return {VERSION,SIZE_KEYS,DIAPER_SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,OPERATIONAL_VARIANT_NAMES,clone,isNum,todayIso,categoryToLegacy,totalTarget,pricingEntry,resolveReferenceUnitPrice,financeReferenceForPlanItem,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,operationalVariantId,operationalVariantName,variantOnlyTarget,mergeAcquisitions,splitParentAcquisitions,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,planVariantToOperational,legacyUnclassifiedOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,parseIsoDate,addDaysIso,timelineUrgency,acquisitionQuantity,timelineQuantityForOperational,buildOperationalPurchaseTimeline,monthDiffClamped,acquisitionDay,median,recurringPurchaseStats,buildRecurringExpenseModel,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
 });

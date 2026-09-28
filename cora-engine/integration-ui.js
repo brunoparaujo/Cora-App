@@ -1,7 +1,7 @@
 "use strict";
 (function(){
   const E=globalThis.CoraV48Engine, Core=globalThis.CoraV48IntegrationCore;
-  if(!E||!Core){console.error("V4.8E1: engine/core ausentes");return;}
+  if(!E||!Core){console.error("V4.8F4.3: engine/core ausentes");return;}
   const S={data:null,rawChild:null,currentPlan:null,currentPlanId:null,draft:null,step:1,climateResult:null,previews:{},previewEvaluations:{},selectedTier:null,autoShown:new Set(),busy:false};
   const DATA_BASE="/cora-engine/data/";
   function esc(s){return String(s??"").replace(/[&<>'\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'\"':"&quot;"}[c]));}
@@ -119,6 +119,46 @@
     options.itemTierOverrides=overrides;
     return rebuildCurrentPlan({decisions:collectOptionalDecisions(),financeOptions:options,reason:"budget_changed"});
   }
+  async function setDiaperSizeForAgeMonth(ageMonth,size){
+    await loadData();
+    const month=Number(ageMonth);if(!Number.isInteger(month)||month<0||month>11)throw new Error("Fase de fralda inválida.");
+    const allowed=new Set(Core.DIAPER_SIZE_KEYS||["RN","P","M","G","XG","XXG"]);const normalized=String(size||"").trim().toUpperCase();
+    if(normalized&&normalized!=="CLEAR"&&!allowed.has(normalized))throw new Error("Tamanho de fralda inválido.");
+    const options=currentFinanceOptions();const map={...(options.diaperSizeByAgeMonth||{})};
+    if(!normalized||normalized==="CLEAR")delete map[String(month)];else map[String(month)]=normalized;
+    options.diaperSizeByAgeMonth=map;
+    return rebuildCurrentPlan({decisions:collectOptionalDecisions(),financeOptions:options,reason:"other"});
+  }
+  async function setHybridDisposableRatio(value){
+    await loadData();const raw=value===null||value===""||value==="clear"?null:Number(value);
+    if(raw!==null&&(!Number.isFinite(raw)||raw<0||raw>1))throw new Error("Proporção de fraldas descartáveis inválida.");
+    const options=currentFinanceOptions();options.hybridDisposableRatio=raw;
+    return rebuildCurrentPlan({decisions:collectOptionalDecisions(),financeOptions:options,reason:"other"});
+  }
+  async function rebuildCurrentPlanWithSettingsPatch(patch){
+    if(S.busy)throw new Error("Já existe uma atualização de planejamento em andamento.");
+    S.busy=true;
+    try{
+      await loadData();
+      const child=Core.childFromFirebase(rawForWizard(),E.B.createChildDraft,Date.now());
+      child.enxoval.settings={...(child.enxoval.settings||{}),...(patch||{})};
+      S.draft=child;
+      const tier=child.enxoval.settings?.budgetTier;
+      if(!["economic","intermediate","premium"].includes(tier))throw new Error("Escolha uma faixa de orçamento antes de atualizar a rotina.");
+      const climateResult=climateResultFromCurrentPlan();
+      const generated=await generateTier(tier,{decisions:collectOptionalDecisions(),financeOptions:currentFinanceOptions(),climateResult,forceReason:"settings_changed"});
+      await activatePlanCas(generated.plan);
+      await syncOperationalItems(generated.plan,generated.evaluation||{});
+      await db.ref(childPath("enxoval/settings")).set(generated.child.enxoval.settings);
+      S.currentPlan=generated.plan;S.currentPlanId=generated.plan.planId;
+      S.rawChild=S.rawChild||{};S.rawChild.enxoval=S.rawChild.enxoval||{};S.rawChild.enxoval.settings=Core.clone(generated.child.enxoval.settings);
+      return generated.plan;
+    }finally{S.busy=false;}
+  }
+  async function setFeedingMode(mode){
+    const allowed=new Set(["undecided","direct_breastfeeding","expressed_milk","mixed","formula"]);if(!allowed.has(mode))throw new Error("Rotina de alimentação inválida.");
+    return rebuildCurrentPlanWithSettingsPatch({feedingMode:mode});
+  }
   function closeHiddenSuggestions(){document.getElementById("modalV48HiddenSuggestions")?.classList.add("hidden");}
   function renderHiddenSuggestions(){
     ensureUi();
@@ -140,6 +180,6 @@
     const st=document.getElementById("settingsPlanningStatus");if(st){if(plan){const b=Core.planBudgetSummary(plan);st.textContent=`Plano ${plan.planId} • ${b.plannedItems} planejados • ${b.suggestions} sugestões • referência ${money(b.knownTotalBRL)}${b.complete?"":" (parcial)"}`;}else st.textContent="Este perfil ainda não tem um plano V4.8 ativo.";}lucide.createIcons();}
   function onChildSnapshot(raw){S.rawChild=raw||{};S.currentPlanId=raw?.enxoval?.currentPlanId||null;S.currentPlan=S.currentPlanId?raw?.enxoval?.plans?.[S.currentPlanId]||null:null;ensureUi();renderPlanUi(raw,S.currentPlan);const complete=raw?.enxoval?.onboarding?.status==="complete"&&raw?.enxoval?.onboarding?.currentStep==="done"&&S.currentPlan;if(!complete){const key=`${activeFamilyId()}:${activeChildId()}`;if(!S.autoShown.has(key)){S.autoShown.add(key);setTimeout(()=>openWizard(false),150);}}}
   async function init(){ensureUi();try{await loadData();}catch(e){console.error("V4.8 data load failed",e);}const prior=window.onload; /* index invokes init via explicit hook too; harmless */ }
-  globalThis.CoraV48Integration={init,onChildSnapshot,openWizard,closeWizard,nextStep,backStep,toggleLifeDate,toggleIsofix,chooseTier,commitSelected,setOptionalDecision,setItemTierOverride,openHiddenSuggestions,closeHiddenSuggestions,restoreHiddenSuggestion,getData};
+  globalThis.CoraV48Integration={init,onChildSnapshot,openWizard,closeWizard,nextStep,backStep,toggleLifeDate,toggleIsofix,chooseTier,commitSelected,setOptionalDecision,setItemTierOverride,setDiaperSizeForAgeMonth,setHybridDisposableRatio,setFeedingMode,openHiddenSuggestions,closeHiddenSuggestions,restoreHiddenSuggestion,getData};
   ensureUi();
 })();
