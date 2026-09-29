@@ -7,7 +7,7 @@
   const DIAPER_SIZE_KEYS=["RN","P","M","G","XG","XXG"];
   const PLAN_SIZES=["RN","P","M","G","GG"];
   const CATEGORY_MAP={vestuario:"vestuario",quarto:"quarto",banho_higiene:"higiene",alimentacao:"alimentacao",passeio:"passeio",mamae:"mamae"};
-  const VERSION="4.8F4.3A3";
+  const VERSION="4.8F4.3A6";
   const VARIANT_LABELS={manga_curta:"manga curta",manga_longa:"manga longa",macaquinho_curto:"macaquinho curto",macacao_longo:"macacão longo",calca_culote:"calça / culote",short:"short"};
   const VISIBLE_DISPOSITIONS=new Set(["planned","suggested","deferred"]);
   const OPERATIONAL_VARIANT_NAMES={
@@ -482,8 +482,21 @@
       const at=Math.max(0,Number(row.at)||0);
       if(quantity>0||at>0)baselines[size]={quantity,at};
     }
+    const history={};
+    const rawHistory=src.sizeHistory&&typeof src.sizeHistory==="object"?src.sizeHistory:{};
+    for(const [key,rowRaw] of Object.entries(rawHistory)){
+      const row=rowRaw&&typeof rowRaw==="object"?rowRaw:{};
+      const effectiveDate=parseIsoDate(row.effectiveDate||key)?(row.effectiveDate||key):null;
+      const size=DIAPER_SIZE_KEYS.includes(row.size)?row.size:null;
+      if(!effectiveDate||!size)continue;
+      const recordedAt=Math.max(0,Number(row.recordedAt)||0)||null;
+      const prev=history[effectiveDate];
+      if(!prev||Number(recordedAt||0)>=Number(prev.recordedAt||0))history[effectiveDate]={size,effectiveDate,recordedAt};
+    }
     const currentSize=DIAPER_SIZE_KEYS.includes(src.currentSize)?src.currentSize:null;
-    return {schemaVersion:1,currentSize,stockBaselines:baselines,updatedAt:Math.max(0,Number(src.updatedAt)||0)||null};
+    const currentSizeSince=parseIsoDate(src.currentSizeSince)?src.currentSizeSince:null;
+    const currentSizeSelectedAt=Math.max(0,Number(src.currentSizeSelectedAt)||0)||null;
+    return {schemaVersion:2,currentSize,currentSizeSince,currentSizeSelectedAt,sizeHistory:history,stockBaselines:baselines,updatedAt:Math.max(0,Number(src.updatedAt)||0)||null};
   }
   function diaperUnitsFromAcquisition(acq){
     if(!acq)return 0;
@@ -530,10 +543,148 @@
       avgPaidPerDiaper:purchasedUnits>0?Math.round(((spentBRL/purchasedUnits)+Number.EPSILON)*1000)/1000:null
     };
   }
-  function buildDiaperStockModel(item){
-    const stock=diaperInventoryStock(item||{});
+  function diaperReferenceRate(item,ageDays){
+    const ageMonths=Math.max(0,Number(ageDays)||0)/30.44;
+    const phases=Array.isArray(item?.recommendationSnapshot?.phases)?item.recommendationSnapshot.phases:[];
+    for(const p of phases){
+      const from=Math.max(0,Number(p.fromMonths)||0),to=Math.max(from,Number(p.toMonths)||0);
+      const rate=Number(p.unitsPerDay??p.benchmarkFullDisposableUnitsPerDay);
+      if(ageMonths>=from&&ageMonths<to&&Number.isFinite(rate)&&rate>=0)return rate;
+    }
+    if(ageMonths<1)return 11;
+    if(ageMonths<3)return 8;
+    if(ageMonths<12)return 7;
+    return null;
+  }
+  function diaperDisposableRatio(context={}){
+    const mode=context.diaperingMode||"disposable";
+    if(mode==="cloth")return 0;
+    if(mode!=="hybrid")return 1;
+    const ratio=context.hybridDisposableRatio;
+    return isNum(ratio)&&Number(ratio)>=0&&Number(ratio)<=1?Number(ratio):null;
+  }
+  function diaperHistoryRows(inventory){
+    return Object.values(inventory?.sizeHistory||{}).filter(x=>x&&DIAPER_SIZE_KEYS.includes(x.size)&&parseIsoDate(x.effectiveDate)).sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate)||Number(a.recordedAt||0)-Number(b.recordedAt||0));
+  }
+  function diaperUsageBySize(item,inventory,context={}){
+    const out=Object.fromEntries(DIAPER_SIZE_KEYS.map(s=>[s,0]));
+    const daily=[];
+    const lifeStage=context.lifeStage||null;
+    const birthDate=parseIsoDate(context.birthDate)?context.birthDate:null;
+    const asOf=parseIsoDate(context.asOfDate||todayIso())?(context.asOfDate||todayIso()):todayIso();
+    const ratio=diaperDisposableRatio(context);
+    if(lifeStage!=="born"||!birthDate||ratio===0)return {bySize:out,total:0,daily,status:lifeStage!=="born"?"not_started":(!birthDate?"birth_date_missing":"not_applicable"),ratio};
+    if(ratio===null)return {bySize:out,total:0,daily,status:"hybrid_ratio_undefined",ratio:null};
+    const rows=diaperHistoryRows(inventory);
+    if(!rows.length&&inventory.currentSize){
+      let start=inventory.currentSizeSince;
+      if(!parseIsoDate(start)&&inventory.currentSizeSelectedAt){
+        const selectedDay=new Date(Number(inventory.currentSizeSelectedAt)).toISOString().slice(0,10);
+        if(selectedDay<birthDate)start=birthDate;
+      }
+      if(parseIsoDate(start))rows.push({size:inventory.currentSize,effectiveDate:start,recordedAt:inventory.updatedAt||0});
+    }
+    if(!rows.length)return {bySize:out,total:0,daily,status:"size_start_unknown",ratio};
+    const endDate=asOf<birthDate?birthDate:asOf;
+    const birth=parseIsoDate(birthDate),end=parseIsoDate(endDate);
+    for(let i=0;i<rows.length;i++){
+      const row=rows[i];
+      let start=parseIsoDate(row.effectiveDate);if(!start)continue;
+      if(start<birth)start=new Date(birth.getTime());
+      let stop=i+1<rows.length?parseIsoDate(rows[i+1].effectiveDate):new Date(end.getTime());
+      if(!stop||stop>end)stop=new Date(end.getTime());
+      if(start>=stop)continue;
+      const baseline=inventory.stockBaselines?.[row.size]||null;
+      if(baseline?.at){
+        const baselineDay=new Date(Number(baseline.at)).toISOString().slice(0,10);
+        const afterBaseline=parseIsoDate(addDaysIso(baselineDay,1));
+        if(afterBaseline&&start<afterBaseline)start=afterBaseline;
+      }
+      for(let d=new Date(start.getTime());d<stop;d.setUTCDate(d.getUTCDate()+1)){
+        const ageDays=Math.max(0,Math.floor((d-birth)/86400000));
+        const baseRate=diaperReferenceRate(item,ageDays);
+        if(isNum(baseRate)){
+          const units=Number(baseRate)*ratio;
+          out[row.size]+=units;
+          daily.push({date:d.toISOString().slice(0,10),size:row.size,units});
+        }
+      }
+    }
+    const rounded=Object.fromEntries(DIAPER_SIZE_KEYS.map(s=>[s,Math.max(0,Math.round(out[s]))]));
+    return {bySize:rounded,total:Object.values(rounded).reduce((a,b)=>a+b,0),daily,status:"estimated",ratio};
+  }
+  function diaperEstimatedStock(item,inventory,usage,context={}){
+    const asOf=context.asOfDate||todayIso();
+    const stockBySize={},usedBySize={};
+    const acquisitions=Object.values(item?.acquisitions||{});
+    for(const size of DIAPER_SIZE_KEYS){
+      const baseline=inventory.stockBaselines?.[size]||null;
+      const cutoff=baseline?.at||0;
+      const baselineDay=cutoff?new Date(Number(cutoff)).toISOString().slice(0,10):null;
+      let balance=baseline?Number(baseline.quantity||0):0;
+      let deducted=0;
+      const purchaseByDay={};
+      for(const acq of acquisitions){
+        if(acq?.size!==size)continue;
+        const created=Math.max(0,Number(acq.createdAt)||0);
+        if(baseline&&created<=cutoff)continue;
+        const units=diaperUnitsFromAcquisition(acq);if(units<=0)continue;
+        if(!created){if(!baseline)balance+=units;continue;}
+        const day=new Date(created).toISOString().slice(0,10);if(day>asOf)continue;
+        purchaseByDay[day]=(purchaseByDay[day]||0)+units;
+      }
+      const usageByDay={};
+      for(const row of usage.daily||[]){
+        if(row.size!==size||row.date>asOf)continue;
+        if(baselineDay&&row.date<=baselineDay)continue;
+        usageByDay[row.date]=(usageByDay[row.date]||0)+Number(row.units||0);
+      }
+      const days=[...new Set([...Object.keys(purchaseByDay),...Object.keys(usageByDay)])].sort();
+      for(const day of days){
+        balance+=Number(purchaseByDay[day]||0);
+        const wanted=Math.max(0,Number(usageByDay[day]||0));
+        const actual=Math.min(Math.max(0,balance),wanted);
+        balance-=actual;deducted+=actual;
+      }
+      stockBySize[size]=Math.max(0,Math.round(balance));
+      usedBySize[size]=Math.max(0,Math.round(deducted));
+    }
+    return {stockBySize,usedBySize,totalStock:Object.values(stockBySize).reduce((a,b)=>a+b,0),totalUsed:Object.values(usedBySize).reduce((a,b)=>a+b,0)};
+  }
+  function buildDiaperStockModel(item,context={}){
+    const ledger=diaperInventoryStock(item||{});
     const purchases=diaperPurchaseStats(item||{});
-    return {currentSize:stock.inventory.currentSize,stockBySize:stock.bySize,totalStock:stock.total,purchases,inventory:stock.inventory};
+    const usage=diaperUsageBySize(item||{},ledger.inventory,context||{});
+    const estimated=diaperEstimatedStock(item||{},ledger.inventory,usage,context||{});
+    const stockBySize=estimated.stockBySize;
+    const currentSize=ledger.inventory.currentSize;
+    let currentSizeSince=ledger.inventory.currentSizeSince||null;
+    const history=diaperHistoryRows(ledger.inventory);
+    if(!currentSizeSince&&history.length)currentSizeSince=history[history.length-1].effectiveDate;
+    const birthDate=parseIsoDate(context.birthDate)?context.birthDate:null;
+    let currentRatePerDay=null;
+    const ratio=diaperDisposableRatio(context);
+    if(currentSize&&ratio!==null&&ratio>0){
+      const asOf=parseIsoDate(context.asOfDate||todayIso())?(context.asOfDate||todayIso()):todayIso();
+      const ageDays=birthDate&&parseIsoDate(asOf)>=parseIsoDate(birthDate)?Math.max(0,Math.floor((parseIsoDate(asOf)-parseIsoDate(birthDate))/86400000)):0;
+      const base=diaperReferenceRate(item,ageDays);
+      if(isNum(base))currentRatePerDay=Math.round((Number(base)*ratio+Number.EPSILON)*100)/100;
+    }
+    const currentStock=currentSize?Number(stockBySize[currentSize]||0):0;
+    const autonomyDays=currentRatePerDay&&currentRatePerDay>0?Math.round((currentStock/currentRatePerDay+Number.EPSILON)*10)/10:null;
+    return {currentSize,currentSizeSince,sizeHistory:history,stockBySize,totalStock:estimated.totalStock,ledgerStockBySize:ledger.bySize,ledgerTotal:ledger.total,estimatedUsedBySize:estimated.usedBySize,totalEstimatedUsed:estimated.totalUsed,theoreticalUsageBySize:usage.bySize,totalTheoreticalUsage:usage.total,consumptionStatus:usage.status,currentRatePerDay,autonomyDays,purchases,inventory:ledger.inventory};
+  }
+  function buildDiaperAnnualPlanning(plan,pricing,context={}){
+    const snap=plan?.financeSnapshot?.recurring?.items?.fraldas_descartaveis||null;
+    const totalEstimatedUnits=isNum(snap?.totalEstimatedUnits)?Number(snap.totalEstimatedUnits):null;
+    const entry=pricing?.priceReferences?.fralda_descartavel_unit||null;
+    const refs=entry?.planningReferenceM||{};
+    const tier=["economic","intermediate","premium"].includes(context.budgetTier)?context.budgetTier:(plan?.financeSnapshot?.budgetTier||"intermediate");
+    const unitByTier={};for(const t of ["economic","intermediate","premium"])unitByTier[t]=isNum(refs?.[t]?.reference)?Number(refs[t].reference):null;
+    const unitReference=unitByTier[tier];const knownUnits=Object.values(unitByTier).filter(v=>isNum(v)).map(Number);
+    const minUnit=knownUnits.length?Math.min(...knownUnits):null,maxUnit=knownUnits.length?Math.max(...knownUnits):null;
+    const money=(u)=>isNum(totalEstimatedUnits)&&isNum(u)?Math.round((Number(totalEstimatedUnits)*Number(u)+Number.EPSILON)*100)/100:null;
+    return {totalEstimatedUnits,tier,unitReferenceBRL:unitReference,referenceAmountBRL:money(unitReference),rangeMinBRL:money(minUnit),rangeMaxBRL:money(maxUnit),rangeMinUnitBRL:minUnit,rangeMaxUnitBRL:maxUnit,confidence:entry?.confidence||null,status:isNum(totalEstimatedUnits)&&isNum(unitReference)?"estimated":"unresolved"};
   }
   function planBudgetSummary(plan){const f=plan?.financeSnapshot?.initialLayette||{};return {knownTotalBRL:Number(f.knownTotalBRL||0),complete:f.complete===true,unresolvedCount:(f.unresolvedItemIds||[]).length,plannedItems:Object.keys(plan?.generatedSnapshot?.items||{}).length,suggestions:Object.keys(plan?.generatedSnapshot?.suggestions||{}).length};}
   function nextComponents(D1,child,decisions,climateEnabled,climateResult){return {inputSnapshot:D1.buildInputSnapshot(child),decisionSnapshot:D1.buildDecisionSnapshot(decisions||{}),climateSnapshot:D1.buildClimateSnapshot({climatePersonalizationEnabled:climateEnabled,climateResult})};}
@@ -554,5 +705,5 @@
     const periods=plan?.climateSnapshot?.thermalProfile?.agePeriods||{};const labels={RN:"RN",P:"P",M:"M",G:"G",GG:"GG"};
     return PLAN_SIZES.map(s=>{const p=periods[s];return {size:s,label:labels[s],from:p?.from||null,toExclusive:p?.toExclusive||null,meanTempC:isNum(p?.weightedMeanTempC)?Number(p.weightedMeanTempC):null,thermalClass:p?.dominantThermalClass||null,mixed:Boolean(p?.mixedSeason)};});
   }
-  return {VERSION,SIZE_KEYS,DIAPER_SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,OPERATIONAL_VARIANT_NAMES,clone,isNum,todayIso,categoryToLegacy,totalTarget,pricingEntry,resolveReferenceUnitPrice,financeReferenceForPlanItem,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,operationalVariantId,operationalVariantName,variantOnlyTarget,mergeAcquisitions,splitParentAcquisitions,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,planVariantToOperational,legacyUnclassifiedOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,parseIsoDate,addDaysIso,timelineUrgency,acquisitionQuantity,timelineQuantityForOperational,buildOperationalPurchaseTimeline,monthDiffClamped,acquisitionDay,median,recurringPurchaseStats,buildRecurringExpenseModel,normalizeDiaperInventory,diaperUnitsFromAcquisition,diaperInventoryStock,diaperPurchaseStats,buildDiaperStockModel,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
+  return {VERSION,SIZE_KEYS,DIAPER_SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,OPERATIONAL_VARIANT_NAMES,clone,isNum,todayIso,categoryToLegacy,totalTarget,pricingEntry,resolveReferenceUnitPrice,financeReferenceForPlanItem,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,operationalVariantId,operationalVariantName,variantOnlyTarget,mergeAcquisitions,splitParentAcquisitions,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,planVariantToOperational,legacyUnclassifiedOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,parseIsoDate,addDaysIso,timelineUrgency,acquisitionQuantity,timelineQuantityForOperational,buildOperationalPurchaseTimeline,monthDiffClamped,acquisitionDay,median,recurringPurchaseStats,buildRecurringExpenseModel,normalizeDiaperInventory,diaperUnitsFromAcquisition,diaperInventoryStock,diaperPurchaseStats,diaperReferenceRate,diaperDisposableRatio,diaperHistoryRows,diaperUsageBySize,diaperEstimatedStock,buildDiaperStockModel,buildDiaperAnnualPlanning,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
 });
