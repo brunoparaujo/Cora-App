@@ -7,7 +7,7 @@
   const DIAPER_SIZE_KEYS=["RN","P","M","G","XG","XXG"];
   const PLAN_SIZES=["RN","P","M","G","GG"];
   const CATEGORY_MAP={vestuario:"vestuario",quarto:"quarto",banho_higiene:"higiene",alimentacao:"alimentacao",passeio:"passeio",mamae:"mamae"};
-  const VERSION="4.8F4.3";
+  const VERSION="4.8F4.3A3";
   const VARIANT_LABELS={manga_curta:"manga curta",manga_longa:"manga longa",macaquinho_curto:"macaquinho curto",macacao_longo:"macacão longo",calca_culote:"calça / culote",short:"short"};
   const VISIBLE_DISPOSITIONS=new Set(["planned","suggested","deferred"]);
   const OPERATIONAL_VARIANT_NAMES={
@@ -168,7 +168,8 @@
       recommendationSnapshot:clone(target),
       planDisposition:disposition,
       planReason:planItem.inclusionSnapshot?.reason||null,
-      countsTowardPlan
+      countsTowardPlan,
+      ...(planItem.itemId==="fraldas_descartaveis" && existing?.diaperInventory ? {diaperInventory:clone(existing.diaperInventory)} : {})
     };
   }
   function planVariantToOperational(planItem,financeItem,planId,variantKey,existingChild=null,migratedAcquisitions={},now=Date.now()){
@@ -472,6 +473,68 @@
       generic,learnedMonthlyBRL:Math.round((learnedMonthlyBRL+Number.EPSILON)*100)/100,unresolvedItemIds:clone(rec.unresolvedItemIds||[]),recurringSnapshotComplete:rec.complete===true
     };
   }
+  function normalizeDiaperInventory(raw){
+    const src=raw&&typeof raw==="object"?raw:{};
+    const baselines={};
+    for(const size of DIAPER_SIZE_KEYS){
+      const row=src.stockBaselines?.[size]||{};
+      const quantity=Math.max(0,Math.round(Number(row.quantity)||0));
+      const at=Math.max(0,Number(row.at)||0);
+      if(quantity>0||at>0)baselines[size]={quantity,at};
+    }
+    const currentSize=DIAPER_SIZE_KEYS.includes(src.currentSize)?src.currentSize:null;
+    return {schemaVersion:1,currentSize,stockBaselines:baselines,updatedAt:Math.max(0,Number(src.updatedAt)||0)||null};
+  }
+  function diaperUnitsFromAcquisition(acq){
+    if(!acq)return 0;
+    if(isNum(acq.diaperUnits)&&Number(acq.diaperUnits)>0)return Math.max(0,Math.round(Number(acq.diaperUnits)));
+    if(isNum(acq.unitsPerPackage)&&Number(acq.unitsPerPackage)>0)return Math.max(0,Math.round((Number(acq.quantity)||0)*Number(acq.unitsPerPackage)));
+    return Math.max(0,Math.round(Number(acq.quantity)||0));
+  }
+  function diaperInventoryStock(item){
+    const inventory=normalizeDiaperInventory(item?.diaperInventory);
+    const acquisitions=Object.values(item?.acquisitions||{});
+    const bySize={};
+    for(const size of DIAPER_SIZE_KEYS){
+      const baseline=inventory.stockBaselines[size]||null;
+      const cutoff=baseline?.at||0;
+      let units=baseline?Number(baseline.quantity||0):0;
+      for(const acq of acquisitions){
+        if(acq?.size!==size)continue;
+        const created=Math.max(0,Number(acq.createdAt)||0);
+        if(baseline && created<=cutoff)continue;
+        units+=diaperUnitsFromAcquisition(acq);
+      }
+      bySize[size]=Math.max(0,Math.round(units));
+    }
+    return {inventory,bySize,total:Object.values(bySize).reduce((a,b)=>a+b,0)};
+  }
+  function diaperPurchaseStats(item){
+    let purchasedUnits=0,spentBRL=0,giftUnits=0,acquisitionCount=0,packagePurchaseCount=0,legacyAcquisitionCount=0;
+    for(const acq of Object.values(item?.acquisitions||{})){
+      const units=diaperUnitsFromAcquisition(acq);
+      acquisitionCount++;
+      if(isNum(acq.unitsPerPackage)&&Number(acq.unitsPerPackage)>0)packagePurchaseCount++;
+      else legacyAcquisitionCount++;
+      if(acq?.type==="gift")giftUnits+=units;
+      else{
+        purchasedUnits+=units;
+        spentBRL+=Math.max(0,Number(acq.quantity)||0)*Math.max(0,Number(acq.unitPrice)||0);
+      }
+    }
+    return {
+      acquisitionCount,packagePurchaseCount,legacyAcquisitionCount,
+      purchasedUnits:Math.round(purchasedUnits),giftUnits:Math.round(giftUnits),
+      totalUnits:Math.round(purchasedUnits+giftUnits),
+      spentBRL:Math.round((spentBRL+Number.EPSILON)*100)/100,
+      avgPaidPerDiaper:purchasedUnits>0?Math.round(((spentBRL/purchasedUnits)+Number.EPSILON)*1000)/1000:null
+    };
+  }
+  function buildDiaperStockModel(item){
+    const stock=diaperInventoryStock(item||{});
+    const purchases=diaperPurchaseStats(item||{});
+    return {currentSize:stock.inventory.currentSize,stockBySize:stock.bySize,totalStock:stock.total,purchases,inventory:stock.inventory};
+  }
   function planBudgetSummary(plan){const f=plan?.financeSnapshot?.initialLayette||{};return {knownTotalBRL:Number(f.knownTotalBRL||0),complete:f.complete===true,unresolvedCount:(f.unresolvedItemIds||[]).length,plannedItems:Object.keys(plan?.generatedSnapshot?.items||{}).length,suggestions:Object.keys(plan?.generatedSnapshot?.suggestions||{}).length};}
   function nextComponents(D1,child,decisions,climateEnabled,climateResult){return {inputSnapshot:D1.buildInputSnapshot(child),decisionSnapshot:D1.buildDecisionSnapshot(decisions||{}),climateSnapshot:D1.buildClimateSnapshot({climatePersonalizationEnabled:climateEnabled,climateResult})};}
   function eq(a,b){return JSON.stringify(a)===JSON.stringify(b);}
@@ -491,5 +554,5 @@
     const periods=plan?.climateSnapshot?.thermalProfile?.agePeriods||{};const labels={RN:"RN",P:"P",M:"M",G:"G",GG:"GG"};
     return PLAN_SIZES.map(s=>{const p=periods[s];return {size:s,label:labels[s],from:p?.from||null,toExclusive:p?.toExclusive||null,meanTempC:isNum(p?.weightedMeanTempC)?Number(p.weightedMeanTempC):null,thermalClass:p?.dominantThermalClass||null,mixed:Boolean(p?.mixedSeason)};});
   }
-  return {VERSION,SIZE_KEYS,DIAPER_SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,OPERATIONAL_VARIANT_NAMES,clone,isNum,todayIso,categoryToLegacy,totalTarget,pricingEntry,resolveReferenceUnitPrice,financeReferenceForPlanItem,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,operationalVariantId,operationalVariantName,variantOnlyTarget,mergeAcquisitions,splitParentAcquisitions,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,planVariantToOperational,legacyUnclassifiedOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,parseIsoDate,addDaysIso,timelineUrgency,acquisitionQuantity,timelineQuantityForOperational,buildOperationalPurchaseTimeline,monthDiffClamped,acquisitionDay,median,recurringPurchaseStats,buildRecurringExpenseModel,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
+  return {VERSION,SIZE_KEYS,DIAPER_SIZE_KEYS,PLAN_SIZES,CATEGORY_MAP,VISIBLE_DISPOSITIONS,VARIANT_LABELS,OPERATIONAL_VARIANT_NAMES,clone,isNum,todayIso,categoryToLegacy,totalTarget,pricingEntry,resolveReferenceUnitPrice,financeReferenceForPlanItem,operationalSizes,zeroOperationalSizes,sizeModeForTarget,variantText,variantLabel,operationalVariantId,operationalVariantName,variantOnlyTarget,mergeAcquisitions,splitParentAcquisitions,variantTargetKeys,hasVariantTargets,variantTargetsForSize,variantProgress,planItemToOperational,planVariantToOperational,legacyUnclassifiedOperational,catalogItemToDeferredOperational,buildOperationalItems,childFromFirebase,firebaseProfile,buildHeaderText,parseIsoDate,addDaysIso,timelineUrgency,acquisitionQuantity,timelineQuantityForOperational,buildOperationalPurchaseTimeline,monthDiffClamped,acquisitionDay,median,recurringPurchaseStats,buildRecurringExpenseModel,normalizeDiaperInventory,diaperUnitsFromAcquisition,diaperInventoryStock,diaperPurchaseStats,buildDiaperStockModel,planBudgetSummary,nextComponents,inferLineageReason,thermalCards};
 });

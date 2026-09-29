@@ -47,7 +47,7 @@
     const ACQUISITION_SIZE_KEYS = [...SIZE_KEYS, 'XG', 'XXG'];
     const SIZE_LABELS = { RN: 'RN', P: 'P', M: 'M', G: 'G', GG: 'GG', XG: 'XG', XXG: 'XXG', U: 'Único' };
     const SCHEMA_VERSION = 17; // V4.8E1: perfil + plano V4.8 + tamanho GG
-    const APP_MODEL = 'v4.8-f4.3-recurring-diapers-routine';
+    const APP_MODEL = 'v4.8-f4.3a3-diaper-stock';
     const PENDING_INVITE_STORAGE_KEY = 'cora_pending_invite_v451';
     // Google continua como opção principal; e-mail/senha permanece como alternativa.
     // V4.5.1 mantém autenticação separada da autorização e fecha o modelo em uma família por conta.
@@ -433,6 +433,9 @@
         type: acq.type === 'gift' ? 'gift' : 'purchase',
         brand: acq.brand || '',
         notes: acq.notes || '',
+        unitsPerPackage: Math.max(0, Number(acq.unitsPerPackage) || 0) || null,
+        diaperUnits: Math.max(0, Number(acq.diaperUnits) || 0) || null,
+        packagePriceBRL: Math.max(0, Number(acq.packagePriceBRL) || 0) || null,
         revision: Math.max(0, Number(acq.revision) || 0),
         createdAt: Number(acq.createdAt) || null,
         updatedAt: Number(acq.updatedAt) || null
@@ -512,7 +515,7 @@
       'recommendationSnapshot', 'retainedPurchaseHistory', 'quantityUnit',
       'planDisposition', 'planReason', 'conditionState', 'countsTowardPlan',
       'operationalVariantKey', 'sourceFamilyId', 'sourceFamilyName', 'legacyUnclassifiedVariant',
-      'pricingKey', 'referenceTier'
+      'pricingKey', 'referenceTier', 'diaperInventory'
     ]);
 
     function itemPriority(item) {
@@ -885,6 +888,166 @@
 
     function isDisposableDiaperItem(item) {
       return (item?.sourceFamilyId || item?.id) === 'fraldas_descartaveis';
+    }
+
+    function getDisposableDiaperItem() {
+      return appState.items.find(item => (item?.sourceFamilyId || item?.id) === 'fraldas_descartaveis') || null;
+    }
+
+    function localDiaperInventory(item) {
+      const core = globalThis.CoraV48IntegrationCore;
+      return core?.normalizeDiaperInventory ? core.normalizeDiaperInventory(item?.diaperInventory) : {
+        schemaVersion: 1, currentSize: null, stockBaselines: {}, updatedAt: null
+      };
+    }
+
+    function diaperStockModel() {
+      const core = globalThis.CoraV48IntegrationCore;
+      const item = getDisposableDiaperItem();
+      if (!core?.buildDiaperStockModel || !item) return null;
+      return core.buildDiaperStockModel(item);
+    }
+
+    async function saveDiaperInventoryState({ currentSize, stockBySize }) {
+      const item = getDisposableDiaperItem();
+      if (!item) throw new Error('Fraldas descartáveis não estão ativas neste planejamento.');
+      const ref = db.ref(childPath(`enxoval/items/${item.id}`));
+      const now = Date.now();
+      let abortReason = null;
+      const result = await ref.transaction(currentRaw => {
+        if (!currentRaw) {
+          abortReason = 'O item de fraldas não está mais disponível.';
+          return;
+        }
+        const current = normalizeItem(currentRaw);
+        const inv = localDiaperInventory(current);
+        if (currentSize !== undefined) inv.currentSize = DIAPER_SIZE_KEYS.includes(currentSize) ? currentSize : null;
+        if (stockBySize && typeof stockBySize === 'object') {
+          inv.stockBaselines = { ...(inv.stockBaselines || {}) };
+          DIAPER_SIZE_KEYS.forEach(size => {
+            if (stockBySize[size] === undefined) return;
+            inv.stockBaselines[size] = {
+              quantity: Math.max(0, Math.round(Number(stockBySize[size]) || 0)),
+              at: now
+            };
+          });
+        }
+        inv.schemaVersion = 1;
+        inv.updatedAt = now;
+        current.diaperInventory = inv;
+        current.revision = Math.max(0, Number(current.revision) || 0) + 1;
+        current.updatedAt = now;
+        return current;
+      });
+      if (!result.committed && abortReason) throw createConcurrencyError(abortReason);
+      return result.snapshot?.val();
+    }
+
+    async function saveDiaperStockFromModal() {
+      const currentSize = document.getElementById('diaperStockCurrentSize')?.value || '';
+      const stockBySize = {};
+      DIAPER_SIZE_KEYS.forEach(size => {
+        stockBySize[size] = Math.max(0, Math.round(Number(document.getElementById(`diaperStock_${size}`)?.value) || 0));
+      });
+      try {
+        const result = await runWriteOnce('diaper-stock-save', 'diaperStockSaveButton', () =>
+          saveDiaperInventoryState({ currentSize: currentSize || null, stockBySize }), 'Salvando...'
+        );
+        if (result?.skipped) return;
+        await renderDiaperStockModal();
+      } catch (error) {
+        console.error('Erro ao salvar estoque de fraldas:', error);
+        alert(error?.message || 'Não foi possível salvar o estoque de fraldas.');
+      }
+    }
+
+    function openDiaperPurchaseFromStock() {
+      const item = getDisposableDiaperItem();
+      if (!item) return;
+      const model = diaperStockModel();
+      closeModal('modalDiaperStock');
+      openAcquisitionModalForItem(item.id, model?.currentSize || 'RN');
+    }
+
+    async function renderDiaperStockModal() {
+      const body = document.getElementById('diaperStockBody');
+      if (!body) return;
+      const model = diaperStockModel();
+      if (!model) {
+        body.innerHTML = '<p class="text-xs text-gray-400 text-center py-6">O estoque de fraldas não está disponível neste planejamento.</p>';
+        return;
+      }
+      const current = model.currentSize || '';
+      const stockCards = DIAPER_SIZE_KEYS.map(size => `
+        <label class="rounded-xl border ${current === size ? 'border-sky-300 bg-sky-50' : 'border-gray-100 bg-gray-50'} p-2 text-center">
+          <span class="block text-[10px] font-bold ${current === size ? 'text-sky-700' : 'text-gray-500'}">${size}</span>
+          <input id="diaperStock_${size}" type="number" min="0" step="1" value="${Number(model.stockBySize?.[size] || 0)}"
+            class="mt-1 w-full bg-white border border-gray-200 rounded-lg px-1 py-1.5 text-center text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-sky-300">
+          <span class="block text-[8px] text-gray-400 mt-1">fraldas</span>
+        </label>`).join('');
+      body.innerHTML = `
+        <div class="space-y-3">
+          <div class="rounded-xl border border-sky-100 bg-sky-50/50 p-3">
+            <span class="block text-[10px] font-bold text-sky-700 uppercase tracking-wide">F4.3A1–A3 · estoque</span>
+            <p class="text-[10px] text-gray-600 mt-1">O Cora acompanha compras e estoque real por tamanho. Nesta etapa o estoque não é reduzido automaticamente por consumo.</p>
+          </div>
+
+          <div class="rounded-xl border border-gray-100 bg-white p-3">
+            <label class="block text-[10px] font-bold text-gray-700">Tamanho atual / inicial</label>
+            <select id="diaperStockCurrentSize" class="mt-1 w-full p-2.5 text-xs bg-gray-50 border border-gray-200 rounded-lg">
+              <option value="">Ainda não definido</option>
+              ${DIAPER_SIZE_KEYS.map(size => `<option value="${size}" ${current === size ? 'selected' : ''}>${size}</option>`).join('')}
+            </select>
+            <p class="text-[9px] text-gray-400 mt-1">Por enquanto este campo é apenas operacional; não recalcula o enxoval.</p>
+          </div>
+
+          <div class="rounded-xl border border-gray-100 bg-white p-3">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <span class="block text-[10px] font-bold text-gray-700">Estoque por tamanho</span>
+                <p class="text-[9px] text-gray-400 mt-1">Ao salvar, estes valores viram um ponto de partida. Compras registradas depois serão somadas automaticamente.</p>
+              </div>
+              <strong class="text-xs text-gray-900 shrink-0">${Number(model.totalStock || 0).toLocaleString('pt-BR')} total</strong>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mt-2">${stockCards}</div>
+            <button id="diaperStockSaveButton" onclick="saveDiaperStockFromModal()" class="mt-3 w-full py-2.5 rounded-xl bg-sky-600 text-white text-xs font-bold">Salvar tamanho e estoque</button>
+          </div>
+
+          <div class="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div><span class="block text-[9px] text-gray-400">Registradas</span><strong class="text-xs text-gray-800">${model.purchases.totalUnits.toLocaleString('pt-BR')} fraldas</strong></div>
+              <div><span class="block text-[9px] text-gray-400">Gasto</span><strong class="text-xs text-gray-800">${money(model.purchases.spentBRL)}</strong></div>
+              <div><span class="block text-[9px] text-gray-400">Preço médio</span><strong class="text-xs text-gray-800">${model.purchases.avgPaidPerDiaper == null ? '—' : `${money(model.purchases.avgPaidPerDiaper)}/fralda`}</strong></div>
+            </div>
+            <button onclick="openDiaperPurchaseFromStock()" class="mt-3 w-full py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold">+ Registrar compra de fraldas</button>
+            ${model.purchases.legacyAcquisitionCount ? `<p class="text-[9px] text-amber-700 mt-2">${model.purchases.legacyAcquisitionCount} registro(s) anterior(es) não informa(m) fraldas por pacote. Ajuste o estoque uma vez para calibrar o saldo real.</p>` : ''}
+          </div>
+        </div>`;
+      lucide.createIcons();
+    }
+
+    async function openDiaperStock() {
+      document.getElementById('modalDiaperStock')?.classList.remove('hidden');
+      const body = document.getElementById('diaperStockBody');
+      if (body) body.innerHTML = '<p class="text-xs text-gray-400 text-center py-8">Carregando estoque...</p>';
+      await renderDiaperStockModal();
+    }
+
+    function renderDiaperStockCard() {
+      const card = document.getElementById('diaperStockCard');
+      const summary = document.getElementById('diaperStockCardSummary');
+      const meta = document.getElementById('diaperStockCardMeta');
+      if (!card) return;
+      const model = diaperStockModel();
+      if (!model) {
+        card.classList.add('hidden');
+        return;
+      }
+      card.classList.remove('hidden');
+      if (summary) summary.textContent = model.currentSize
+        ? `${model.currentSize} • ${Number(model.stockBySize?.[model.currentSize] || 0)} em estoque`
+        : `${Number(model.totalStock || 0)} fraldas em estoque • tamanho ainda não definido`;
+      if (meta) meta.textContent = `${model.purchases.acquisitionCount} ${model.purchases.acquisitionCount === 1 ? 'aquisição registrada' : 'aquisições registradas'} • ${money(model.purchases.spentBRL)} gastos`;
     }
 
     function syncAcquisitionSizeOptions(item, presetSize = '') {
@@ -1508,7 +1671,10 @@
         unitPrice: normalized.unitPrice,
         type: normalized.type,
         brand: normalized.brand,
-        notes: normalized.notes
+        notes: normalized.notes,
+        unitsPerPackage: normalized.unitsPerPackage || null,
+        diaperUnits: normalized.diaperUnits || null,
+        packagePriceBRL: normalized.packagePriceBRL || null
       };
     }
 
@@ -1587,7 +1753,10 @@
         ['quantity', 'quantidade'],
         ['unitPrice', 'preço'],
         ['brand', 'marca/modelo'],
-        ['notes', 'observação']
+        ['notes', 'observação'],
+        ['unitsPerPackage', 'fraldas por pacote'],
+        ['diaperUnits', 'total de fraldas'],
+        ['packagePriceBRL', 'preço por pacote']
       ];
 
       fields.forEach(([field, label]) => {
@@ -2788,6 +2957,7 @@
       updateDashboard();
       renderItems();
       renderMaternidade();
+      renderDiaperStockCard();
       renderResumoFinanceiro();
       if (!document.getElementById('modalAction').classList.contains('hidden')) lucide.createIcons();
       lucide.createIcons();
@@ -2988,6 +3158,19 @@
     }
 
     function renderOpenEndedRecurringItem(item) {
+      if (isDisposableDiaperItem(item)) {
+        const model = diaperStockModel();
+        const totalStock = Number(model?.totalStock || 0);
+        return `<div class="border border-sky-100 bg-sky-50/40 rounded-xl p-3">
+          <span class="block text-[10px] font-bold text-sky-700 uppercase tracking-wide">Estoque de fraldas</span>
+          <p class="text-[10px] text-gray-600 mt-1">Compras e estoque são acompanhados por RN/P/M/G/XG/XXG. O consumo automático entra nas próximas subtarefas.</p>
+          <p class="text-[10px] font-semibold text-gray-700 mt-1">${model?.currentSize ? `Tamanho atual: ${escapeHtml(model.currentSize)} • ` : ''}${totalStock} fraldas em estoque</p>
+          <div class="flex items-center gap-2 mt-2">
+            <button onclick="openDiaperStock()" class="flex-1 h-8 px-3 rounded-lg bg-sky-600 text-white text-[10px] font-bold active:scale-95 transition">Ver estoque</button>
+            <button onclick="openDiaperPurchaseFromStock()" class="flex-1 h-8 px-3 rounded-lg bg-emerald-600 text-white text-[10px] font-bold active:scale-95 transition">Registrar compra</button>
+          </div>
+        </div>`;
+      }
       const target = item?.recommendationSnapshot || {};
       const acquisitions = getAcquisitions(item);
       const phases = Array.isArray(target.phases) ? target.phases : [];
@@ -3606,11 +3789,15 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
             <div class="flex justify-between items-start gap-2">
               <div class="min-w-0">
                 <span class="font-bold text-gray-800 text-xs">${escapeHtml(item.name)}</span>
-                <span class="text-[10px] text-gray-500 block mt-0.5">${acq.quantity}× ${SIZE_LABELS[acq.size]}${acq.brand ? ' • ' + escapeHtml(acq.brand) : ''}</span>
+                <span class="text-[10px] text-gray-500 block mt-0.5">${isDisposableDiaperItem(item)
+                  ? (Number(acq.unitsPerPackage || 0) > 0
+                    ? `${acq.quantity} ${Number(acq.quantity) === 1 ? 'pacote' : 'pacotes'} • ${SIZE_LABELS[acq.size]} • ${Math.round(globalThis.CoraV48IntegrationCore?.diaperUnitsFromAcquisition?.(acq) || 0)} fraldas${acq.brand ? ' • ' + escapeHtml(acq.brand) : ''}`
+                    : `${Math.round(globalThis.CoraV48IntegrationCore?.diaperUnitsFromAcquisition?.(acq) || acq.quantity)} fraldas • ${SIZE_LABELS[acq.size]}${acq.brand ? ' • ' + escapeHtml(acq.brand) : ''}`)
+                  : `${acq.quantity}× ${SIZE_LABELS[acq.size]}${acq.brand ? ' • ' + escapeHtml(acq.brand) : ''}`}</span>
               </div>
               <span class="font-bold text-xs shrink-0 ${acq.type === 'gift' ? 'text-emerald-600' : 'text-gray-900'}">${acq.type === 'gift' ? 'Presente' : money(total)}</span>
             </div>
-            ${acq.type === 'purchase' ? `<div class="text-[10px] text-gray-400 mt-1">${money(acq.unitPrice)} / un.</div>` : ''}
+            ${acq.type === 'purchase' ? `<div class="text-[10px] text-gray-400 mt-1">${money(acq.unitPrice)} / ${isDisposableDiaperItem(item) && Number(acq.unitsPerPackage || 0) > 0 ? 'pacote' : 'un.'}</div>` : ''}
             ${acq.notes ? `<div class="text-[10px] text-gray-500 mt-1">${escapeHtml(acq.notes)}</div>` : ''}
           </div>`;
       }).join('') : '<p class="text-xs text-gray-400">Nenhuma aquisição registrada ainda.</p>';
@@ -3688,8 +3875,11 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       appState.editingAcquisitionBase = null;
       document.getElementById('acquisitionForm').reset();
       document.getElementById('acquisitionItemId').value = item.id;
-      document.getElementById('acquisitionQuantityLabel').textContent = `Quantidade (${itemUnitLabel(item)})`;
-      document.getElementById('acquisitionUnitPriceLabel').textContent = `Preço por ${itemUnitLabel(item, 1)} (R$)`;
+      const diaperPurchase = isDisposableDiaperItem(item);
+      document.getElementById('acquisitionQuantityLabel').textContent = diaperPurchase ? 'Pacotes' : `Quantidade (${itemUnitLabel(item)})`;
+      document.getElementById('acquisitionUnitPriceLabel').textContent = diaperPurchase ? 'Preço por pacote (R$)' : `Preço por ${itemUnitLabel(item, 1)} (R$)`;
+      document.getElementById('diaperPackageFields')?.classList.toggle('hidden', !diaperPurchase);
+      document.getElementById('diaperLegacyAcquisitionHint')?.classList.add('hidden');
       document.getElementById('acquisitionId').value = '';
       document.getElementById('deleteAcquisitionSection').classList.add('hidden');
       document.getElementById('acquisitionItemName').innerText = item.name;
@@ -3697,6 +3887,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       syncAcquisitionSizeOptions(item, presetSize);
       syncAcquisitionVariantOptions(item, presetVariant);
       document.getElementById('acquisitionQuantity').value = 1;
+      const diaperUnitsField = document.getElementById('acquisitionUnitsPerPackage');
+      if (diaperUnitsField) diaperUnitsField.value = '';
       document.getElementById('acquisitionUnitPrice').value = '';
       document.getElementById('acquisitionBrand').value = '';
       document.getElementById('acquisitionNotes').value = '';
@@ -3717,11 +3909,17 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     function updateAcquisitionPreview() {
       const qty = Number(document.getElementById('acquisitionQuantity').value) || 0;
       const price = Number(document.getElementById('acquisitionUnitPrice').value) || 0;
-      document.getElementById('acquisitionTotalPreview').innerText = `Total desta aquisição: ${money(qty * price)}`;
+      const item = appState.items.find(i => i.id === document.getElementById('acquisitionItemId')?.value);
+      const diaperPurchase = isDisposableDiaperItem(item);
+      const legacyDiaper = diaperPurchase && appState.editingAcquisitionBase && !Number(appState.editingAcquisitionBase.unitsPerPackage || 0);
+      const unitsPerPackage = diaperPurchase && !legacyDiaper ? Math.max(0, Number(document.getElementById('acquisitionUnitsPerPackage')?.value) || 0) : 0;
+      document.getElementById('acquisitionTotalPreview').innerText = diaperPurchase && !legacyDiaper
+        ? `Total: ${money(qty * price)} • ${Math.round(qty * unitsPerPackage)} fraldas`
+        : `Total desta aquisição: ${money(qty * price)}`;
     }
 
     document.addEventListener('input', e => {
-      if (e.target && (e.target.id === 'acquisitionQuantity' || e.target.id === 'acquisitionUnitPrice')) {
+      if (e.target && ['acquisitionQuantity','acquisitionUnitPrice','acquisitionUnitsPerPackage'].includes(e.target.id)) {
         updateAcquisitionPreview();
       }
     });
@@ -3731,7 +3929,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       if (!item) return;
       appState.activeHistoryItemId = itemId;
       document.getElementById('historyItemName').innerText = item.name;
-      document.getElementById('historySummary').innerText = `${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))} • ${getAcquisitions(item).length} aquisições • ${money(getPurchaseTotal(item))} pagos`;
+      const diaperSummary = isDisposableDiaperItem(item) ? diaperStockModel() : null;
+      document.getElementById('historySummary').innerText = diaperSummary
+        ? `${diaperSummary.purchases.totalUnits} fraldas registradas • ${getAcquisitions(item).length} aquisições • ${money(getPurchaseTotal(item))} pagos`
+        : `${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))} • ${getAcquisitions(item).length} aquisições • ${money(getPurchaseTotal(item))} pagos`;
       renderAcquisitionHistory(item);
       document.getElementById('modalAcquisitionHistory').classList.remove('hidden');
       lucide.createIcons();
@@ -3752,9 +3953,13 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           <div class="p-3 rounded-xl border border-gray-100 bg-gray-50">
             <div class="flex justify-between items-start gap-2">
               <div>
-                <span class="text-xs font-bold text-gray-800">${acq.quantity}× ${SIZE_LABELS[acq.size]}${acq.variant && !item?.operationalVariantKey ? ` • ${escapeHtml(variantLabel(acq.variant))}` : ''}</span>
+                <span class="text-xs font-bold text-gray-800">${isDisposableDiaperItem(item)
+                  ? (Number(acq.unitsPerPackage || 0) > 0
+                    ? `${acq.quantity} ${Number(acq.quantity) === 1 ? 'pacote' : 'pacotes'} • ${SIZE_LABELS[acq.size]} • ${Math.round(globalThis.CoraV48IntegrationCore?.diaperUnitsFromAcquisition?.(acq) || 0)} fraldas`
+                    : `${Math.round(globalThis.CoraV48IntegrationCore?.diaperUnitsFromAcquisition?.(acq) || acq.quantity)} fraldas • ${SIZE_LABELS[acq.size]} • registro anterior`)
+                  : `${acq.quantity}× ${SIZE_LABELS[acq.size]}${acq.variant && !item?.operationalVariantKey ? ` • ${escapeHtml(variantLabel(acq.variant))}` : ''}`}</span>
                 ${item.legacyUnclassifiedVariant ? '<span class="block text-[9px] font-semibold text-amber-700 mt-0.5">Aquisição anterior preservada sem classificação de manga/modelo.</span>' : ''}
-                <span class="block text-[10px] text-gray-500 mt-0.5">${acq.type === 'gift' ? '🎁 Presente / Doação' : `🛒 Compra • ${money(acq.unitPrice)} / un.`}</span>
+                <span class="block text-[10px] text-gray-500 mt-0.5">${acq.type === 'gift' ? '🎁 Presente / Doação' : (isDisposableDiaperItem(item) && Number(acq.unitsPerPackage || 0) > 0 ? `🛒 Compra • ${money(acq.unitPrice)} / pacote` : `🛒 Compra • ${money(acq.unitPrice)} / un.`)}</span>
                 ${acq.brand ? `<span class="block text-[10px] text-gray-500">${escapeHtml(acq.brand)}</span>` : ''}
               </div>
               <div class="text-right shrink-0">
@@ -3786,8 +3991,12 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       appState.editingAcquisitionBase = cloneData(normalizeAcquisition(acq, acquisitionId));
       closeModal('modalAcquisitionHistory');
       document.getElementById('acquisitionItemId').value = item.id;
-      document.getElementById('acquisitionQuantityLabel').textContent = `Quantidade (${itemUnitLabel(item)})`;
-      document.getElementById('acquisitionUnitPriceLabel').textContent = `Preço por ${itemUnitLabel(item, 1)} (R$)`;
+      const diaperPurchase = isDisposableDiaperItem(item);
+      const legacyDiaper = diaperPurchase && !Number(acq.unitsPerPackage || 0);
+      document.getElementById('acquisitionQuantityLabel').textContent = legacyDiaper ? 'Fraldas (registro anterior)' : (diaperPurchase ? 'Pacotes' : `Quantidade (${itemUnitLabel(item)})`);
+      document.getElementById('acquisitionUnitPriceLabel').textContent = legacyDiaper ? 'Preço por fralda (R$)' : (diaperPurchase ? 'Preço por pacote (R$)' : `Preço por ${itemUnitLabel(item, 1)} (R$)`);
+      document.getElementById('diaperPackageFields')?.classList.toggle('hidden', !diaperPurchase || legacyDiaper);
+      document.getElementById('diaperLegacyAcquisitionHint')?.classList.toggle('hidden', !legacyDiaper);
       document.getElementById('acquisitionId').value = acquisitionId;
       document.getElementById('deleteAcquisitionSection').classList.remove('hidden');
       document.getElementById('acquisitionItemName').innerText = item.name;
@@ -3795,6 +4004,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       syncAcquisitionSizeOptions(item, acq.size);
       syncAcquisitionVariantOptions(item, acq.variant || '');
       document.getElementById('acquisitionQuantity').value = acq.quantity;
+      const diaperUnitsField = document.getElementById('acquisitionUnitsPerPackage');
+      if (diaperUnitsField) diaperUnitsField.value = diaperPurchase && !legacyDiaper ? (Number(acq.unitsPerPackage) || '') : '';
       document.getElementById('acquisitionBrand').value = acq.brand || '';
       document.getElementById('acquisitionUnitPrice').value = acq.unitPrice || 0;
       document.getElementById('acquisitionNotes').value = acq.notes || '';
@@ -3827,6 +4038,14 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         alert('Escolha a variação desta peça antes de salvar.');
         return;
       }
+      const diaperPurchase = isDisposableDiaperItem(item);
+      const legacyDiaper = diaperPurchase && appState.editingAcquisitionBase && !Number(appState.editingAcquisitionBase.unitsPerPackage || 0);
+      const unitsPerPackageRaw = diaperPurchase && !legacyDiaper ? parseInt(document.getElementById('acquisitionUnitsPerPackage')?.value, 10) : null;
+      if (diaperPurchase && !legacyDiaper && (!Number.isInteger(unitsPerPackageRaw) || unitsPerPackageRaw < 1)) {
+        alert('Informe quantas fraldas vêm em cada pacote.');
+        return;
+      }
+      const unitsPerPackage = diaperPurchase && !legacyDiaper ? unitsPerPackageRaw : null;
       const acquisition = normalizeAcquisition({
         id,
         type,
@@ -3835,7 +4054,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         quantity,
         unitPrice,
         brand: document.getElementById('acquisitionBrand').value.trim(),
-        notes: document.getElementById('acquisitionNotes').value.trim()
+        notes: document.getElementById('acquisitionNotes').value.trim(),
+        unitsPerPackage,
+        diaperUnits: diaperPurchase && !legacyDiaper ? quantity * unitsPerPackage : null,
+        packagePriceBRL: diaperPurchase && !legacyDiaper ? unitPrice : null
       }, id);
 
       try {
@@ -3867,7 +4089,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const item = appState.items.find(i => i.id === itemId);
       const acq = item?.acquisitions?.[acquisitionId];
       if (!item || !acq) return;
-      if (!confirm(`Excluir esta aquisição de ${acq.quantity} ${itemUnitLabel(item, acq.quantity)}?`)) return;
+      const deleteLabel = isDisposableDiaperItem(item)
+        ? `${Math.round(globalThis.CoraV48IntegrationCore?.diaperUnitsFromAcquisition?.(acq) || acq.quantity)} fraldas`
+        : `${acq.quantity} ${itemUnitLabel(item, acq.quantity)}`;
+      if (!confirm(`Excluir esta aquisição de ${deleteLabel}?`)) return;
       try {
         await runWriteOnce(
           `delete-acquisition:${itemId}:${acquisitionId}`,
@@ -5089,6 +5314,22 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           <span id="catBadgeMamae" class="text-[10px] text-gray-400 font-medium">0/0</span>
         </button>
       </div>
+
+      <button id="diaperStockCard" onclick="openDiaperStock()" class="hidden w-full rounded-2xl border border-sky-100 bg-gradient-to-r from-sky-50 to-white p-3 text-left shadow-xs active:scale-[0.99] transition">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-sky-100 text-xl flex items-center justify-center shrink-0">🧷</div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <strong class="text-xs text-gray-900">Fraldas</strong>
+              <span class="text-[9px] font-bold text-sky-700 bg-sky-100 px-1.5 py-0.5 rounded-full">estoque A1–A3</span>
+            </div>
+            <p id="diaperStockCardSummary" class="text-[10px] font-semibold text-gray-700 mt-0.5">Acompanhe o estoque por tamanho.</p>
+            <p id="diaperStockCardMeta" class="text-[9px] text-gray-400 mt-0.5">Compras registradas atualizam o estoque.</p>
+          </div>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-sky-500 shrink-0"></i>
+        </div>
+      </button>
+
       <!-- FILTROS SECUNDÁRIOS & BUSCA -->
       <div class="flex items-center space-x-2">
         <div class="relative flex-1">
@@ -5380,6 +5621,20 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     </div>
   </div>
 
+  <!-- MODAL FRALDAS F4.3A1-A3 -->
+  <div id="modalDiaperStock" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-[70] hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white w-full max-w-md max-h-[92vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+      <div class="p-5 border-b border-gray-100 flex justify-between items-start gap-3">
+        <div>
+          <h3 class="font-bold text-gray-900 text-lg">Estoque de fraldas</h3>
+          <p class="text-[10px] text-gray-400 mt-1">Tamanho, saldo real e compras por pacote.</p>
+        </div>
+        <button onclick="closeModal('modalDiaperStock')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div id="diaperStockBody" class="p-5 overflow-y-auto space-y-3"></div>
+    </div>
+  </div>
+
   <!-- MODAL: NOVA AQUISIÇÃO -->
   <div id="modalAcquisition" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-5 space-y-4 shadow-xl">
@@ -5418,6 +5673,13 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
             <input type="number" id="acquisitionQuantity" min="1" step="1" value="1" required class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
           </div>
         </div>
+
+        <div id="diaperPackageFields" class="hidden rounded-xl border border-sky-100 bg-sky-50/50 p-3">
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Fraldas por pacote</label>
+          <input type="number" id="acquisitionUnitsPerPackage" min="1" step="1" placeholder="Ex.: 36" class="w-full text-sm p-2.5 bg-white border border-sky-100 rounded-xl outline-none">
+          <p class="text-[10px] text-gray-500 mt-1">Obrigatório para novas compras de fraldas. O estoque recebe pacotes × fraldas por pacote.</p>
+        </div>
+        <p id="diaperLegacyAcquisitionHint" class="hidden text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-2.5">Registro anterior à F4.3A: a quantidade representa fraldas individuais. Ele permanece válido e não será convertido automaticamente em pacotes.</p>
 
         <div id="acquisitionVariantWrap" class="hidden">
           <label class="block text-xs font-semibold text-gray-700 mb-1">Variação da peça</label>
@@ -5779,7 +6041,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
   </div>
 
   <script src="/cora-engine/engine-browser.js"></script>
-  <script src="/cora-engine/integration-core.js?v=4.8f4.3"></script>
+  <script src="/cora-engine/integration-core.js?v=4.8f4.3a3"></script>
   <script src="/cora-engine/integration-ui.js?v=4.8f4.3"></script>
 
 </body>
