@@ -422,6 +422,20 @@
       return `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
     }
 
+    function compactReferenceMoney(value) {
+      const amount = Math.max(0, Number(value) || 0);
+      if (amount >= 1000) {
+        return `R$ ${(amount / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mil`;
+      }
+      return `R$ ${Math.round(amount).toLocaleString('pt-BR')}`;
+    }
+
+    function compactNumber(value, maxFractionDigits = 1) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return '—';
+      return number.toLocaleString('pt-BR', { maximumFractionDigits: maxFractionDigits });
+    }
+
     // V4.0 — Aquisição é o único registro de estoque/gasto. Campos legados não são persistidos.
     function normalizeAcquisition(acq, idFallback) {
       return {
@@ -1054,14 +1068,38 @@
       }
     }
 
-    async function saveDiaperStockFromModal() {
-      const stockBySize = {};
-      DIAPER_SIZE_KEYS.forEach(size => {
-        stockBySize[size] = Math.max(0, Math.round(Number(document.getElementById(`diaperStock_${size}`)?.value) || 0));
+    function editDiaperStockCard(size) {
+      if (!DIAPER_SIZE_KEYS.includes(size)) return;
+      DIAPER_SIZE_KEYS.forEach(key => {
+        const view = document.getElementById(`diaperStockView_${key}`);
+        const edit = document.getElementById(`diaperStockEdit_${key}`);
+        if (view) view.classList.toggle('hidden', key === size);
+        if (edit) edit.classList.toggle('hidden', key !== size);
       });
+      const input = document.getElementById(`diaperStock_${size}`);
+      if (input) {
+        input.value = input.dataset.current || input.value || '0';
+        requestAnimationFrame(() => { input.focus(); input.select(); });
+      }
+    }
+
+    function cancelDiaperStockCard(size) {
+      if (!DIAPER_SIZE_KEYS.includes(size)) return;
+      const view = document.getElementById(`diaperStockView_${size}`);
+      const edit = document.getElementById(`diaperStockEdit_${size}`);
+      const input = document.getElementById(`diaperStock_${size}`);
+      if (input) input.value = input.dataset.current || '0';
+      if (view) view.classList.remove('hidden');
+      if (edit) edit.classList.add('hidden');
+    }
+
+    async function saveDiaperStockCard(size) {
+      if (!DIAPER_SIZE_KEYS.includes(size)) return;
+      const input = document.getElementById(`diaperStock_${size}`);
+      const quantity = Math.max(0, Math.round(Number(input?.value) || 0));
       try {
-        const result = await runWriteOnce('diaper-stock-save', 'diaperStockSaveButton', () =>
-          saveDiaperInventoryState({ stockBySize }), 'Salvando...'
+        const result = await runWriteOnce(`diaper-stock-save:${size}`, `diaperStockSave_${size}`, () =>
+          saveDiaperInventoryState({ stockBySize: { [size]: quantity } }), 'Salvando...'
         );
         if (result?.skipped) return;
         await renderDiaperStockModal();
@@ -1100,35 +1138,36 @@
         body.innerHTML = '<p class="text-xs text-gray-400 text-center py-6">O estoque de fraldas não está disponível neste planejamento.</p>';
         return;
       }
-      const planning = await diaperAnnualPlanningModel();
       const context = diaperOperationalContext();
       const born = context.lifeStage === 'born';
       const expecting = context.lifeStage === 'expecting';
       const current = model.currentSize || 'RN';
-      const totalUnits = planning?.totalEstimatedUnits;
-      const annualReference = planning?.referenceAmountBRL == null ? 'a definir' : money(planning.referenceAmountBRL);
-      const annualRange = planning?.rangeMinBRL == null || planning?.rangeMaxBRL == null
-        ? 'a definir'
-        : `${money(planning.rangeMinBRL)} – ${money(planning.rangeMaxBRL)}`;
       const autonomy = model.autonomyDays == null ? null : Math.max(0, Number(model.autonomyDays));
       const currentStock = Number(model.stockBySize?.[current] || 0);
       const rate = model.currentRatePerDay == null ? null : Number(model.currentRatePerDay);
-      const todayLabel = localTodayIso().split('-').reverse().join('/');
 
       const stockCards = DIAPER_SIZE_KEYS.map(size => {
         const estimated = Number(model.stockBySize?.[size] || 0);
-        const used = Number(model.estimatedUsedBySize?.[size] || 0);
-        return `<div class="rounded-xl border ${current === size ? 'border-sky-300 bg-sky-50 shadow-sm' : 'border-gray-100 bg-gray-50'} p-2.5 text-center">
-          <div class="flex items-center justify-center gap-1"><span class="text-[10px] font-bold ${current === size ? 'text-sky-700' : 'text-gray-500'}">${size}</span>${current === size && born ? '<span class="w-1.5 h-1.5 rounded-full bg-sky-500"></span>' : ''}</div>
-          <strong class="block text-sm text-gray-900 mt-1">~${estimated}</strong>
-          <span class="block text-[8px] text-gray-400">em estoque</span>
-          ${used > 0 ? `<span class="block text-[8px] text-violet-500 mt-0.5">~${used} usadas</span>` : ''}
+        const isCurrent = current === size && born;
+        return `<div id="diaperStockCard_${size}" class="rounded-2xl border ${isCurrent ? 'border-sky-300 bg-sky-50/80 shadow-sm' : 'border-gray-100 bg-gray-50/80'} overflow-hidden transition">
+          <button id="diaperStockView_${size}" type="button" onclick="editDiaperStockCard('${size}')" class="w-full min-h-[94px] p-3 text-center active:scale-[0.98] transition" aria-label="Editar estoque ${size}">
+            <div class="flex items-center justify-center gap-1.5">
+              <span class="text-[10px] font-bold ${isCurrent ? 'text-sky-700' : 'text-gray-500'}">${size}</span>
+              ${isCurrent ? '<span class="w-1.5 h-1.5 rounded-full bg-sky-500" aria-hidden="true"></span>' : ''}
+              <i data-lucide="pencil" class="w-2.5 h-2.5 text-gray-300 ml-0.5"></i>
+            </div>
+            <strong class="block text-base text-gray-900 mt-1">${estimated.toLocaleString('pt-BR')}</strong>
+            <span class="block text-[8px] text-gray-400 mt-0.5">fraldas</span>
+          </button>
+          <div id="diaperStockEdit_${size}" class="hidden min-h-[94px] p-2.5">
+            <div class="flex items-center justify-between gap-1 mb-1.5"><span class="text-[9px] font-bold ${isCurrent ? 'text-sky-700' : 'text-gray-500'}">${size}</span><span class="text-[8px] text-gray-400">estoque</span></div>
+            <div class="flex items-center gap-1.5">
+              <input id="diaperStock_${size}" data-current="${estimated}" type="number" inputmode="numeric" min="0" step="1" value="${estimated}" aria-label="Estoque ${size}" onkeydown="if(event.key==='Enter'){event.preventDefault();saveDiaperStockCard('${size}')}else if(event.key==='Escape'){cancelDiaperStockCard('${size}')}" class="min-w-0 flex-1 h-9 bg-white border border-gray-200 rounded-lg px-1.5 text-center text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-sky-300">
+              <button type="button" onclick="cancelDiaperStockCard('${size}')" class="w-8 h-9 rounded-lg border border-gray-200 bg-white text-gray-400 flex items-center justify-center" aria-label="Cancelar"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+              <button id="diaperStockSave_${size}" type="button" onclick="saveDiaperStockCard('${size}')" class="w-8 h-9 rounded-lg bg-sky-600 text-white flex items-center justify-center" aria-label="Salvar estoque ${size}"><i data-lucide="check" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
         </div>`;
-      }).join('');
-
-      const stockInputs = DIAPER_SIZE_KEYS.map(size => {
-        const estimated = Number(model.stockBySize?.[size] || 0);
-        return `<label class="block"><span class="block text-[9px] font-bold text-gray-500 mb-1">${size}</span><input id="diaperStock_${size}" type="number" min="0" step="1" value="${estimated}" aria-label="Contagem física ${size}" class="w-full bg-white border border-gray-200 rounded-lg px-2 py-2 text-center text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-sky-300"></label>`;
       }).join('');
 
       const historyRows = (model.sizeHistory || []).slice().reverse().map(row => `
@@ -1138,9 +1177,8 @@
         </div>`).join('');
 
       const hybridHtml = context.diaperingMode === 'hybrid' ? `
-        <div class="rounded-xl border border-sky-100 bg-sky-50/50 p-3">
+        <div class="rounded-2xl border border-sky-100 bg-sky-50/50 p-3.5">
           <label class="block text-[10px] font-bold text-gray-700">Uso de descartáveis</label>
-          <p class="text-[9px] text-gray-500 mt-0.5">No uso misto com fraldas de pano, indique aproximadamente a parcela de trocas com descartáveis.</p>
           <select onchange="changeHybridDisposableRatio(this.value)" class="mt-2 w-full p-2.5 text-xs bg-white border border-gray-200 rounded-lg">
             <option value="" ${context.hybridDisposableRatio === null ? 'selected' : ''}>Definir depois</option>
             ${[[0.25,'25%'],[0.5,'50%'],[0.75,'75%']].map(([v,l]) => `<option value="${v}" ${Number(context.hybridDisposableRatio) === v ? 'selected' : ''}>${l}</option>`).join('')}
@@ -1148,63 +1186,49 @@
         </div>` : '';
 
       const currentSection = expecting ? `
-        <div class="rounded-2xl border border-sky-100 bg-sky-50/40 p-3.5">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-white border border-sky-100 flex items-center justify-center text-sm font-black text-sky-700">RN</div>
-            <div class="min-w-0"><strong class="block text-xs text-gray-900">Começamos por RN</strong><p class="text-[10px] text-gray-500 mt-0.5">Antes do nascimento, você não precisa escolher um tamanho. O acompanhamento começa em RN e o consumo só passa a ser estimado depois do nascimento.</p></div>
-          </div>
+        <div class="rounded-2xl border border-sky-100 bg-sky-50/50 p-3.5">
+          <span class="block text-[9px] text-sky-700 uppercase tracking-wide font-bold">Tamanho inicial</span>
+          <div class="flex items-baseline gap-2 mt-0.5"><strong class="text-2xl text-gray-900">RN</strong><span class="text-[9px] text-gray-400">o consumo começa após o nascimento</span></div>
         </div>` : `
         <div class="rounded-2xl border border-gray-100 bg-white p-3.5">
-          <div class="flex items-start justify-between gap-3">
-            <div><span class="block text-[9px] text-gray-400 uppercase tracking-wide font-bold">Em uso agora</span><div class="flex items-baseline gap-2 mt-0.5"><strong class="text-2xl text-gray-900">${escapeHtml(current)}</strong><span class="text-[9px] text-gray-400">desde ${escapeHtml((model.currentSizeSince || context.birthDate || localTodayIso()).split('-').reverse().join('/'))}</span></div></div>
-            <span class="text-[9px] font-bold text-sky-700 bg-sky-50 border border-sky-100 rounded-full px-2 py-1">atual</span>
+          <div>
+            <span class="block text-[9px] text-gray-400 uppercase tracking-wide font-bold">Em uso</span>
+            <div class="flex items-baseline gap-2 mt-0.5"><strong class="text-2xl text-gray-900">${escapeHtml(current)}</strong><span class="text-[9px] text-gray-400">desde ${escapeHtml((model.currentSizeSince || context.birthDate || localTodayIso()).split('-').reverse().join('/'))}</span></div>
           </div>
           <div class="grid grid-cols-3 gap-2 mt-3">
-            <div class="rounded-xl bg-gray-50 p-2 text-center"><span class="block text-[8px] text-gray-400">Estoque</span><strong class="text-xs text-gray-800">~${currentStock}</strong></div>
-            <div class="rounded-xl bg-gray-50 p-2 text-center"><span class="block text-[9px] text-gray-400">Uso/dia</span><strong class="text-xs text-gray-800">${rate == null ? '—' : `~${rate}/dia`}</strong></div>
-            <div class="rounded-xl bg-gray-50 p-2 text-center"><span class="block text-[8px] text-gray-400">Autonomia</span><strong class="text-xs text-gray-800">${autonomy == null ? '—' : `~${autonomy} dias`}</strong></div>
+            <div class="rounded-xl bg-gray-50 p-2 text-center"><span class="block text-[8px] text-gray-400">Estoque</span><strong class="text-xs text-gray-800">${currentStock.toLocaleString('pt-BR')}</strong></div>
+            <div class="rounded-xl bg-gray-50 p-2 text-center"><span class="block text-[8px] text-gray-400">Uso/dia</span><strong class="text-xs text-gray-800">${rate == null ? '—' : `${compactNumber(rate)}/dia`}</strong></div>
+            <div class="rounded-xl bg-gray-50 p-2 text-center"><span class="block text-[8px] text-gray-400">Autonomia</span><strong class="text-xs text-gray-800">${autonomy == null ? '—' : `${compactNumber(autonomy)} dias`}</strong></div>
           </div>
-          <div class="mt-3 rounded-xl border border-gray-100 bg-gray-50/70 p-2.5">
-            <label class="block text-[10px] font-bold text-gray-600">O tamanho mudou?</label>
+          <div class="mt-3 pt-3 border-t border-gray-100">
+            <label class="block text-[10px] font-bold text-gray-600">Trocar tamanho</label>
             <div class="grid grid-cols-[1fr_auto] gap-2 mt-1.5">
               <select id="diaperStockCurrentSize" class="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-lg"><option value="" selected disabled>Selecione o novo tamanho</option>${DIAPER_SIZE_KEYS.filter(size => size !== current).map(size => `<option value="${size}">${size}</option>`).join('')}</select>
               <button id="diaperSizeSaveButton" onclick="saveDiaperCurrentSizeFromModal()" class="px-3 rounded-lg bg-violet-600 text-white text-[10px] font-bold">Registrar</button>
             </div>
-            <p class="text-[9px] text-gray-400 mt-1.5">A troca será registrada com a data de hoje (${todayLabel}). O estoque dos tamanhos anteriores continua preservado.</p>
+            <p class="text-[9px] text-gray-400 mt-1.5">A troca vale a partir de hoje.</p>
           </div>
-          ${historyRows ? `<details class="mt-2"><summary class="text-[9px] font-bold text-violet-700 cursor-pointer">Histórico de tamanhos</summary><div class="mt-1">${historyRows}</div></details>` : ''}
+          ${historyRows ? `<details class="mt-2"><summary class="text-[9px] font-bold text-violet-700 cursor-pointer">Histórico</summary><div class="mt-1">${historyRows}</div></details>` : ''}
         </div>`;
 
       body.innerHTML = `
         <div class="space-y-3">
-          <div class="rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50/80 to-white p-3.5">
-            <div class="flex items-start justify-between gap-3">
-              <div><span class="block text-[9px] font-bold text-rose-700 uppercase tracking-wide">Primeiro ano</span><strong class="block text-lg text-gray-900 mt-0.5">${totalUnits == null ? 'Estimativa em cálculo' : `~${Math.round(totalUnits).toLocaleString('pt-BR')} fraldas`}</strong><p class="text-[10px] text-gray-500 mt-1">Use como referência de quantidade e orçamento. Os tamanhos serão acompanhados conforme o bebê crescer.</p></div>
-              <div class="text-right shrink-0"><span class="block text-[8px] text-gray-400">${escapeHtml(budgetTierLabel(planning?.tier || activeBudgetTier()))}</span><strong class="block text-xs text-gray-900">${escapeHtml(annualReference)}</strong></div>
-            </div>
-            <div class="mt-3 flex items-center justify-between gap-3 rounded-xl bg-white/80 border border-rose-100 px-3 py-2"><span class="text-[9px] text-gray-500">Faixa de referência</span><strong class="text-[10px] text-gray-800">${escapeHtml(annualRange)}</strong></div>
-          </div>
-
           ${currentSection}
           ${hybridHtml}
 
           <div class="rounded-2xl border border-gray-100 bg-white p-3.5">
-            <div class="flex items-start justify-between gap-3"><div><strong class="block text-xs text-gray-900">Estoque por tamanho</strong><p class="text-[10px] text-gray-500 mt-0.5">Compras e presentes entram automaticamente. Corrija apenas quando conferir o estoque real.</p></div><strong class="text-xs text-gray-900 shrink-0">~${Number(model.totalStock || 0).toLocaleString('pt-BR')} total</strong></div>
+            <div class="flex items-center justify-between gap-3"><strong class="text-xs text-gray-900">Estoque por tamanho</strong><strong class="text-[10px] font-semibold text-gray-500 shrink-0">${Number(model.totalStock || 0).toLocaleString('pt-BR')} fraldas</strong></div>
             <div class="grid grid-cols-3 gap-2 mt-3">${stockCards}</div>
-            <details class="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 overflow-hidden">
-              <summary class="cursor-pointer list-none px-3 py-2.5 flex items-center justify-between gap-2"><span class="text-[10px] font-bold text-sky-700">Conferir / ajustar estoque</span><i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 text-sky-500"></i></summary>
-              <div class="px-3 pb-3"><p class="text-[10px] text-gray-500 mb-2">Informe quantas fraldas você tem agora. Essa contagem passa a ser a nova referência do estoque.</p><div class="grid grid-cols-3 gap-2">${stockInputs}</div><button id="diaperStockSaveButton" onclick="saveDiaperStockFromModal()" class="mt-3 w-full py-2.5 rounded-xl bg-sky-600 text-white text-xs font-bold">Salvar contagem</button></div>
-            </details>
           </div>
 
-          <div class="rounded-2xl border border-emerald-100 bg-emerald-50/35 p-3.5">
-            <div class="flex items-center justify-between gap-3"><div><strong class="block text-xs text-gray-900">Compras e presentes</strong><p class="text-[10px] text-gray-500 mt-0.5">Tudo o que entrou no estoque fica reunido aqui.</p></div><button onclick="openDiaperPurchaseFromStock()" class="shrink-0 px-3 py-2 rounded-xl bg-emerald-600 text-white text-[10px] font-bold">+ Registrar</button></div>
+          <div class="rounded-2xl border border-emerald-100 bg-emerald-50/30 p-3.5">
+            <div class="flex items-center justify-between gap-3"><strong class="text-xs text-gray-900">Compras e presentes</strong><button onclick="openDiaperPurchaseFromStock()" class="shrink-0 px-3 py-2 rounded-xl bg-emerald-600 text-white text-[10px] font-bold">+ Registrar</button></div>
             <div class="grid grid-cols-3 gap-2 text-center mt-3">
               <div><span class="block text-[8px] text-gray-400">Fraldas</span><strong class="text-xs text-gray-800">${model.purchases.totalUnits.toLocaleString('pt-BR')}</strong></div>
               <div><span class="block text-[8px] text-gray-400">Gasto</span><strong class="text-xs text-gray-800">${money(model.purchases.spentBRL)}</strong></div>
               <div><span class="block text-[8px] text-gray-400">Preço médio</span><strong class="text-xs text-gray-800">${model.purchases.avgPaidPerDiaper == null ? '—' : `${money(model.purchases.avgPaidPerDiaper)}/un`}</strong></div>
             </div>
-            ${model.purchases.legacyAcquisitionCount ? `<p class="text-[9px] text-amber-700 mt-2">${model.purchases.legacyAcquisitionCount} registro(s) antigo(s) não informa(m) fraldas por pacote. Uma contagem física corrige o saldo sem alterar o histórico financeiro.</p>` : ''}
+            ${model.purchases.legacyAcquisitionCount ? `<p class="text-[9px] text-amber-700 mt-2">${model.purchases.legacyAcquisitionCount} registro(s) antigo(s) sem quantidade por pacote. Ajuste o estoque pelo tamanho quando necessário.</p>` : ''}
           </div>
         </div>`;
       lucide.createIcons();
@@ -1231,8 +1255,8 @@
       const context = diaperOperationalContext();
       const current = model.currentSize || 'RN';
       if (summary) summary.textContent = context.lifeStage === 'expecting'
-        ? `Começa em RN • ~${Number(model.totalStock || 0)} fraldas no estoque total`
-        : `${current} • ~${Number(model.stockBySize?.[current] || 0)} em estoque${model.autonomyDays == null ? '' : ` • ~${model.autonomyDays} dias`}`;
+        ? `RN inicial • ${Number(model.totalStock || 0).toLocaleString('pt-BR')} fraldas`
+        : `${current} • ${Number(model.stockBySize?.[current] || 0).toLocaleString('pt-BR')} fraldas${model.autonomyDays == null ? '' : ` • ${compactNumber(model.autonomyDays)} dias`}`;
       if (meta) meta.textContent = `${model.purchases.acquisitionCount} ${model.purchases.acquisitionCount === 1 ? 'entrada registrada' : 'entradas registradas'} • ${money(model.purchases.spentBRL)} gastos`;
     }
 
@@ -3350,7 +3374,7 @@
         return `<div class="border border-sky-100 bg-sky-50/40 rounded-xl p-3">
           <span class="block text-[10px] font-bold text-sky-700 uppercase tracking-wide">Estoque de fraldas</span>
           <p class="text-[10px] text-gray-600 mt-1">Compras, tamanho real e estoque estimado são acompanhados por RN/P/M/G/XG/XXG, sem prever quando ocorrerá a próxima troca de tamanho.</p>
-          <p class="text-[10px] font-semibold text-gray-700 mt-1">${model?.currentSize ? `Tamanho atual: ${escapeHtml(model.currentSize)} • ` : ''}~${totalStock} fraldas em estoque${model?.autonomyDays == null ? '' : ` • ~${model.autonomyDays} dias`}</p>
+          <p class="text-[10px] font-semibold text-gray-700 mt-1">${model?.currentSize ? `Tamanho atual: ${escapeHtml(model.currentSize)} • ` : ''}${totalStock.toLocaleString('pt-BR')} fraldas em estoque${model?.autonomyDays == null ? '' : ` • ${compactNumber(model.autonomyDays)} dias`}</p>
           <div class="flex items-center gap-2 mt-2">
             <button onclick="openDiaperStock()" class="flex-1 h-8 px-3 rounded-lg bg-sky-600 text-white text-[10px] font-bold active:scale-95 transition">Ver estoque</button>
             <button onclick="openDiaperPurchaseFromStock()" class="flex-1 h-8 px-3 rounded-lg bg-emerald-600 text-white text-[10px] font-bold active:scale-95 transition">Registrar compra</button>
@@ -3365,7 +3389,7 @@
         if (!Number.isFinite(rate)) return null;
         const from = Number(p.fromMonths || 0);
         const to = Number(p.toMonths || 0);
-        return `${from}–${to}m: ~${rate} un/dia`;
+        return `${from}–${to}m: ${compactNumber(rate)} un/dia`;
       }).filter(Boolean).join(' • ') : '';
       return `<div class="border border-sky-100 bg-sky-50/40 rounded-xl p-3">
         <span class="block text-[10px] font-bold text-sky-700 uppercase tracking-wide">Consumo recorrente</span>
@@ -3869,22 +3893,27 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         return;
       }
       const planning = await diaperAnnualPlanningModel();
-      const annualReference = planning?.referenceAmountBRL == null ? 'a definir' : money(planning.referenceAmountBRL);
-      const annualRange = planning?.rangeMinBRL == null || planning?.rangeMaxBRL == null ? null : `${money(planning.rangeMinBRL)} – ${money(planning.rangeMaxBRL)}`;
+      const annualRange = planning?.rangeMinBRL == null || planning?.rangeMaxBRL == null
+        ? null
+        : `${compactReferenceMoney(planning.rangeMinBRL)} – ${compactReferenceMoney(planning.rangeMaxBRL)}`;
       const current = stock.currentSize || 'RN';
       const currentStock = Number(stock.stockBySize?.[current] || 0);
       const autonomy = stock.autonomyDays == null ? null : Number(stock.autonomyDays);
       root.innerHTML = `
-        <div class="rounded-2xl border border-sky-100 bg-sky-50/35 p-3.5">
-          <div class="flex items-start justify-between gap-3"><div><span class="block text-[9px] font-bold text-sky-700 uppercase tracking-wide">Fraldas</span><strong class="block text-xs text-gray-900 mt-0.5">${escapeHtml(current)} • ~${currentStock} em estoque${autonomy == null ? '' : ` • ~${autonomy} dias`}</strong><p class="text-[9px] text-gray-500 mt-1">O Financeiro mostra apenas o impacto. Tamanho, estoque e compras são gerenciados no módulo de fraldas.</p></div><button onclick="openDiaperStock()" class="shrink-0 px-3 py-2 rounded-xl bg-white border border-sky-200 text-sky-700 text-[9px] font-bold">Abrir módulo</button></div>
-          <div class="grid grid-cols-3 gap-2 mt-3 text-center">
-            <div class="rounded-xl bg-white p-2"><span class="block text-[8px] text-gray-400">Gasto real</span><strong class="text-[10px] text-gray-800">${money(stock.purchases.spentBRL)}</strong></div>
-            <div class="rounded-xl bg-white p-2"><span class="block text-[8px] text-gray-400">Preço médio</span><strong class="text-[10px] text-gray-800">${stock.purchases.avgPaidPerDiaper == null ? '—' : `${money(stock.purchases.avgPaidPerDiaper)}/un`}</strong></div>
-            <div class="rounded-xl bg-white p-2"><span class="block text-[8px] text-gray-400">Ref. anual</span><strong class="text-[10px] text-gray-800">${escapeHtml(annualReference)}</strong></div>
+        <button type="button" onclick="openDiaperStock()" class="w-full rounded-2xl border border-sky-100 bg-sky-50/30 p-3.5 text-left active:scale-[0.99] transition">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <span class="block text-[9px] font-bold text-sky-700 uppercase tracking-wide">Fraldas</span>
+              <strong class="block text-xs text-gray-900 mt-0.5">${escapeHtml(current)} • ${currentStock.toLocaleString('pt-BR')} fraldas${autonomy == null ? '' : ` • ${compactNumber(autonomy)} dias`}</strong>
+            </div>
+            <span class="w-8 h-8 rounded-full bg-white border border-sky-100 text-sky-600 flex items-center justify-center shrink-0"><i data-lucide="chevron-right" class="w-4 h-4"></i></span>
           </div>
-          ${annualRange ? `<p class="text-[8px] text-gray-400 mt-2">Faixa ampla de referência do primeiro ano: ${escapeHtml(annualRange)}.</p>` : ''}
-        </div>
-        <div class="rounded-xl border border-gray-100 bg-gray-50/60 p-3"><strong class="block text-[10px] text-gray-700">Outros consumíveis</strong><p class="text-[10px] text-gray-500 mt-1">O controle detalhado de estoque e reposição dos outros consumíveis será adicionado em uma próxima etapa. Suas aquisições continuam registradas normalmente.</p></div>`;
+          <div class="grid grid-cols-2 gap-2 mt-3 text-center">
+            <div class="rounded-xl bg-white p-2.5"><span class="block text-[8px] text-gray-400">Gasto real</span><strong class="text-[10px] text-gray-800">${money(stock.purchases.spentBRL)}</strong></div>
+            <div class="rounded-xl bg-white p-2.5"><span class="block text-[8px] text-gray-400">Preço médio</span><strong class="text-[10px] text-gray-800">${stock.purchases.avgPaidPerDiaper == null ? '—' : `${money(stock.purchases.avgPaidPerDiaper)}/un`}</strong></div>
+          </div>
+          ${annualRange ? `<div class="mt-2.5 flex items-center justify-between gap-3 px-1"><span class="text-[8px] text-gray-400">Referência do 1º ano</span><strong class="text-[9px] text-gray-600">${escapeHtml(annualRange)}</strong></div>` : ''}
+        </button>`;
       lucide.createIcons();
     }
 
@@ -5484,10 +5513,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-full bg-sky-100 text-xl flex items-center justify-center shrink-0">🧷</div>
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <strong class="text-xs text-gray-900">Fraldas</strong>
-              <span class="text-[9px] font-bold text-sky-700 bg-sky-100 px-1.5 py-0.5 rounded-full">estoque</span>
-            </div>
+            <strong class="text-xs text-gray-900">Fraldas</strong>
             <p id="diaperStockCardSummary" class="text-[10px] font-semibold text-gray-700 mt-0.5">Estoque, tamanho atual e autonomia.</p>
             <p id="diaperStockCardMeta" class="text-[9px] text-gray-400 mt-0.5">Compras e contagens físicas mantêm a estimativa atualizada.</p>
           </div>
@@ -5603,11 +5629,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         </div>
 
         <div class="mt-5 border-t border-gray-100 pt-4">
-          <div class="flex items-center justify-between gap-2">
-            <h3 class="text-xs font-bold text-gray-700 flex items-center gap-1.5"><i data-lucide="repeat-2" class="w-4 h-4 text-sky-600"></i> Fraldas e consumo</h3>
-            <span class="text-[9px] text-gray-400">separado do enxoval inicial</span>
-          </div>
-          <p class="text-[9px] text-gray-500 mt-1 leading-relaxed">Gastos recorrentes ficam separados do orçamento inicial do enxoval.</p>
+          <h3 class="text-xs font-bold text-gray-700 flex items-center gap-1.5"><i data-lucide="repeat-2" class="w-4 h-4 text-sky-600"></i> Consumo recorrente</h3>
           <div id="recurringExpenses" class="space-y-2 mt-3"></div>
         </div>
 
@@ -5790,10 +5812,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
   <div id="modalDiaperStock" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-[70] hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-white w-full max-w-md max-h-[92vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col">
       <div class="p-5 border-b border-gray-100 flex justify-between items-start gap-3">
-        <div>
-          <h3 class="font-bold text-gray-900 text-lg">Fraldas</h3>
-          <p class="text-[10px] text-gray-400 mt-1">Estoque, tamanho atual, autonomia e compras.</p>
-        </div>
+        <h3 class="font-bold text-gray-900 text-lg">Fraldas</h3>
         <button onclick="closeModal('modalDiaperStock')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
       <div id="diaperStockBody" class="p-5 overflow-y-auto space-y-3"></div>
