@@ -1068,6 +1068,43 @@
       }
     }
 
+    function ensureDiaperStockCardVisible(size, behavior = 'smooth') {
+      const card = document.getElementById(`diaperStockCard_${size}`);
+      const scroller = document.getElementById('diaperStockBody');
+      if (!card || !scroller) return;
+
+      const viewport = window.visualViewport;
+      const viewportBottom = viewport
+        ? viewport.offsetTop + viewport.height
+        : window.innerHeight;
+      const scrollerRect = scroller.getBoundingClientRect();
+      const cardRect = card.getBoundingClientRect();
+      const visibleTop = scrollerRect.top + 10;
+      const visibleBottom = Math.min(scrollerRect.bottom, viewportBottom) - 14;
+
+      let delta = 0;
+      if (cardRect.bottom > visibleBottom) delta = cardRect.bottom - visibleBottom;
+      else if (cardRect.top < visibleTop) delta = cardRect.top - visibleTop;
+
+      if (Math.abs(delta) > 1) {
+        scroller.scrollBy({ top: delta, behavior });
+      }
+    }
+
+    function scheduleDiaperStockCardVisibility(size) {
+      // O teclado virtual altera o visual viewport depois do focus. Reposicionamos
+      // novamente durante a animação para manter o card ativo sempre visível.
+      const viewport = window.visualViewport;
+      if (viewport) {
+        viewport.addEventListener('resize', () => {
+          requestAnimationFrame(() => ensureDiaperStockCardVisible(size, 'auto'));
+        }, { once: true });
+      }
+      requestAnimationFrame(() => ensureDiaperStockCardVisible(size, 'auto'));
+      setTimeout(() => ensureDiaperStockCardVisible(size, 'smooth'), 120);
+      setTimeout(() => ensureDiaperStockCardVisible(size, 'smooth'), 280);
+    }
+
     function editDiaperStockCard(size, { preserveKeyboard = false } = {}) {
       if (!DIAPER_SIZE_KEYS.includes(size)) return;
 
@@ -1083,6 +1120,7 @@
         // Isso evita o ciclo fechar/abrir do teclado ao alternar entre tamanhos.
         view.classList.add('hidden');
         edit.classList.remove('hidden');
+        scheduleDiaperStockCardVisibility(size);
         try { input.focus({ preventScroll: true }); } catch (_) { input.focus(); }
         input.select();
       }
@@ -1095,6 +1133,7 @@
       });
 
       if (!preserveKeyboard) {
+        scheduleDiaperStockCardVisibility(size);
         requestAnimationFrame(() => {
           try { input.focus({ preventScroll: true }); } catch (_) { input.focus(); }
           input.select();
