@@ -1099,8 +1099,17 @@
         return edit && !edit.classList.contains('hidden');
       });
       if (!openEdit) return;
-      const card = document.getElementById(`diaperStockCard_${openEdit}`);
-      if (card?.contains(event.target)) return;
+
+      const openCard = document.getElementById(`diaperStockCard_${openEdit}`);
+      if (openCard?.contains(event.target)) return;
+
+      const targetCard = event.target.closest?.('[id^="diaperStockCard_"]');
+      const targetSize = targetCard?.id?.replace('diaperStockCard_', '');
+      if (targetSize && DIAPER_SIZE_KEYS.includes(targetSize) && targetSize !== openEdit) {
+        editDiaperStockCard(targetSize);
+        return;
+      }
+
       cancelDiaperStockCard(openEdit);
     });
 
@@ -1169,12 +1178,10 @@
             <strong class="block text-base text-gray-900 mt-1">${estimated.toLocaleString('pt-BR')}</strong>
             <span class="block text-[8px] text-gray-400 mt-0.5">fraldas</span>
           </button>
-          <div id="diaperStockEdit_${size}" class="hidden min-h-[94px] p-2.5">
-            <div class="flex items-center justify-center mb-2"><span class="text-[10px] font-bold ${isCurrent ? 'text-sky-700' : 'text-gray-500'}">${size}</span></div>
-            <div class="grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-2">
-              <input id="diaperStock_${size}" data-current="${estimated}" type="number" inputmode="numeric" min="0" step="1" value="${estimated}" aria-label="Estoque ${size}" onkeydown="if(event.key==='Enter'){event.preventDefault();saveDiaperStockCard('${size}')}else if(event.key==='Escape'){cancelDiaperStockCard('${size}')}" class="w-full min-w-0 h-10 bg-white border border-gray-200 rounded-xl px-2 text-center text-base font-bold text-gray-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-200">
-              <button id="diaperStockSave_${size}" type="button" onclick="saveDiaperStockCard('${size}')" class="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center active:scale-95 transition" aria-label="Salvar estoque ${size}"><i data-lucide="check" class="w-4 h-4"></i></button>
-            </div>
+          <div id="diaperStockEdit_${size}" class="hidden min-h-[94px] p-2.5 relative">
+            <div class="flex items-center justify-center mb-2 pr-7"><span class="text-[10px] font-bold ${isCurrent ? 'text-sky-700' : 'text-gray-500'}">${size}</span></div>
+            <button id="diaperStockSave_${size}" type="button" onclick="saveDiaperStockCard('${size}')" class="absolute top-2 right-2 w-7 h-7 rounded-lg bg-sky-600 text-white flex items-center justify-center active:scale-95 transition" aria-label="Salvar estoque ${size}"><i data-lucide="check" class="w-3.5 h-3.5"></i></button>
+            <input id="diaperStock_${size}" data-current="${estimated}" type="number" inputmode="numeric" min="0" step="1" value="${estimated}" aria-label="Estoque ${size}" onkeydown="if(event.key==='Enter'){event.preventDefault();saveDiaperStockCard('${size}')}else if(event.key==='Escape'){cancelDiaperStockCard('${size}')}" class="block w-full min-w-0 h-11 bg-white border border-gray-200 rounded-xl px-1 text-center text-[15px] font-bold leading-none text-gray-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-200">
           </div>
         </div>`;
       }).join('');
