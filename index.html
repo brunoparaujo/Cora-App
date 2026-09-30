@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#be123c">
   <meta name="application-name" content="Cora">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1068,41 +1068,79 @@
       }
     }
 
-    function ensureDiaperStockCardVisible(size, behavior = 'smooth') {
+    function activeDiaperStockEditSize() {
+      return DIAPER_SIZE_KEYS.find(size => {
+        const edit = document.getElementById(`diaperStockEdit_${size}`);
+        return edit && !edit.classList.contains('hidden');
+      }) || null;
+    }
+
+    function syncDiaperStockViewport() {
+      const modal = document.getElementById('modalDiaperStock');
+      if (!modal || modal.classList.contains('hidden')) return;
+
+      // Chrome/Android moderno respeita interactive-widget=resizes-content.
+      // O VisualViewport abaixo funciona como fallback (Samsung Internet e
+      // navegadores que mantêm o layout viewport atrás do teclado).
+      const viewport = window.visualViewport;
+      if (viewport) {
+        modal.style.top = `${Math.max(0, viewport.offsetTop)}px`;
+        modal.style.height = `${Math.max(1, viewport.height)}px`;
+        modal.style.bottom = 'auto';
+      } else {
+        modal.style.top = '0px';
+        modal.style.height = '100dvh';
+        modal.style.bottom = 'auto';
+      }
+    }
+
+    function ensureDiaperStockCardVisible(size) {
       const card = document.getElementById(`diaperStockCard_${size}`);
       const scroller = document.getElementById('diaperStockBody');
       if (!card || !scroller) return;
 
-      const viewport = window.visualViewport;
-      const viewportBottom = viewport
-        ? viewport.offsetTop + viewport.height
-        : window.innerHeight;
       const scrollerRect = scroller.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();
-      const visibleTop = scrollerRect.top + 10;
-      const visibleBottom = Math.min(scrollerRect.bottom, viewportBottom) - 14;
+      const padding = 14;
+      const visibleTop = scrollerRect.top + padding;
+      const visibleBottom = scrollerRect.bottom - padding;
 
       let delta = 0;
       if (cardRect.bottom > visibleBottom) delta = cardRect.bottom - visibleBottom;
       else if (cardRect.top < visibleTop) delta = cardRect.top - visibleTop;
 
-      if (Math.abs(delta) > 1) {
-        scroller.scrollBy({ top: delta, behavior });
-      }
+      if (Math.abs(delta) > 1) scroller.scrollBy({ top: delta, behavior: 'auto' });
     }
 
+    let diaperViewportSyncFrame = 0;
+    function handleDiaperViewportChange() {
+      cancelAnimationFrame(diaperViewportSyncFrame);
+      diaperViewportSyncFrame = requestAnimationFrame(() => {
+        syncDiaperStockViewport();
+        const size = activeDiaperStockEditSize();
+        if (!size) return;
+        // Um segundo frame garante que o flex/overflow já refluiu com a nova
+        // altura visível antes de calcularmos a rolagem do card.
+        requestAnimationFrame(() => ensureDiaperStockCardVisible(size));
+      });
+    }
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleDiaperViewportChange);
+      window.visualViewport.addEventListener('scroll', handleDiaperViewportChange);
+    }
+    window.addEventListener('resize', handleDiaperViewportChange);
+
     function scheduleDiaperStockCardVisibility(size) {
-      // O teclado virtual altera o visual viewport depois do focus. Reposicionamos
-      // novamente durante a animação para manter o card ativo sempre visível.
-      const viewport = window.visualViewport;
-      if (viewport) {
-        viewport.addEventListener('resize', () => {
-          requestAnimationFrame(() => ensureDiaperStockCardVisible(size, 'auto'));
-        }, { once: true });
-      }
-      requestAnimationFrame(() => ensureDiaperStockCardVisible(size, 'auto'));
-      setTimeout(() => ensureDiaperStockCardVisible(size, 'smooth'), 120);
-      setTimeout(() => ensureDiaperStockCardVisible(size, 'smooth'), 280);
+      // Recalcula durante a animação do teclado. Usamos rolagem imediata para
+      // não disputar uma animação smooth com a animação nativa do teclado.
+      handleDiaperViewportChange();
+      [60, 140, 260, 420].forEach(delay => {
+        setTimeout(() => {
+          syncDiaperStockViewport();
+          ensureDiaperStockCardVisible(size);
+        }, delay);
+      });
     }
 
     function editDiaperStockCard(size, { preserveKeyboard = false } = {}) {
@@ -1311,6 +1349,7 @@
 
     async function openDiaperStock() {
       document.getElementById('modalDiaperStock')?.classList.remove('hidden');
+      syncDiaperStockViewport();
       const body = document.getElementById('diaperStockBody');
       if (body) body.innerHTML = '<p class="text-xs text-gray-400 text-center py-8">Carregando estoque...</p>';
       await renderDiaperStockModal();
@@ -5884,13 +5923,13 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
   </div>
 
   <!-- MODAL FRALDAS -->
-  <div id="modalDiaperStock" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-[70] hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
-    <div class="bg-white w-full max-w-md max-h-[92vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+  <div id="modalDiaperStock" class="fixed inset-x-0 top-0 bg-black/50 backdrop-blur-xs z-[70] hidden flex items-end sm:items-center justify-center p-0 sm:p-4" style="height:100dvh;">
+    <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col min-h-0" style="max-height:92%;">
       <div class="p-5 border-b border-gray-100 flex justify-between items-start gap-3">
         <h3 class="font-bold text-gray-900 text-lg">Fraldas</h3>
         <button onclick="closeModal('modalDiaperStock')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
-      <div id="diaperStockBody" class="p-5 overflow-y-auto space-y-3"></div>
+      <div id="diaperStockBody" class="p-5 min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-3"></div>
     </div>
   </div>
 
