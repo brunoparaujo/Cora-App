@@ -7,7 +7,7 @@
   const DIAPER_SIZE_KEYS=["RN","P","M","G","XG","XXG"];
   const PLAN_SIZES=["RN","P","M","G","GG"];
   const CATEGORY_MAP={vestuario:"vestuario",quarto:"quarto",banho_higiene:"higiene",alimentacao:"alimentacao",passeio:"passeio",mamae:"mamae"};
-  const VERSION="4.8F4.3A6";
+  const VERSION="4.8F4.3A8";
   const VARIANT_LABELS={manga_curta:"manga curta",manga_longa:"manga longa",macaquinho_curto:"macaquinho curto",macacao_longo:"macacão longo",calca_culote:"calça / culote",short:"short"};
   const VISIBLE_DISPOSITIONS=new Set(["planned","suggested","deferred"]);
   const OPERATIONAL_VARIANT_NAMES={
@@ -584,7 +584,10 @@
       }
       if(parseIsoDate(start))rows.push({size:inventory.currentSize,effectiveDate:start,recordedAt:inventory.updatedAt||0});
     }
-    if(!rows.length)return {bySize:out,total:0,daily,status:"size_start_unknown",ratio};
+    // A7/A8: sem histórico explícito, RN é o ponto de partida operacional após o nascimento.
+    // Isso não tenta prever a próxima troca; apenas evita pedir uma configuração desnecessária no nascimento.
+    if(!rows.length)rows.push({size:"RN",effectiveDate:birthDate,recordedAt:0,implicit:true});
+    else if(rows[0].effectiveDate>birthDate)rows.unshift({size:"RN",effectiveDate:birthDate,recordedAt:0,implicit:true});
     const endDate=asOf<birthDate?birthDate:asOf;
     const birth=parseIsoDate(birthDate),end=parseIsoDate(endDate);
     for(let i=0;i<rows.length;i++){
@@ -657,11 +660,15 @@
     const usage=diaperUsageBySize(item||{},ledger.inventory,context||{});
     const estimated=diaperEstimatedStock(item||{},ledger.inventory,usage,context||{});
     const stockBySize=estimated.stockBySize;
-    const currentSize=ledger.inventory.currentSize;
-    let currentSizeSince=ledger.inventory.currentSizeSince||null;
     const history=diaperHistoryRows(ledger.inventory);
-    if(!currentSizeSince&&history.length)currentSizeSince=history[history.length-1].effectiveDate;
+    const lastHistory=history[history.length-1]||null;
+    // RN é o default de interface/consumo quando nenhum tamanho real foi registrado.
+    // Não é persistido durante a gestação e não é uma previsão de troca futura.
+    const born=context.lifeStage==="born";
+    const currentSize=born?(ledger.inventory.currentSize||lastHistory?.size||"RN"):"RN";
+    let currentSizeSince=born?(ledger.inventory.currentSizeSince||lastHistory?.effectiveDate||null):null;
     const birthDate=parseIsoDate(context.birthDate)?context.birthDate:null;
+    if(!currentSizeSince&&born&&!ledger.inventory.currentSize&&birthDate)currentSizeSince=birthDate;
     let currentRatePerDay=null;
     const ratio=diaperDisposableRatio(context);
     if(currentSize&&ratio!==null&&ratio>0){
@@ -672,7 +679,7 @@
     }
     const currentStock=currentSize?Number(stockBySize[currentSize]||0):0;
     const autonomyDays=currentRatePerDay&&currentRatePerDay>0?Math.round((currentStock/currentRatePerDay+Number.EPSILON)*10)/10:null;
-    return {currentSize,currentSizeSince,sizeHistory:history,stockBySize,totalStock:estimated.totalStock,ledgerStockBySize:ledger.bySize,ledgerTotal:ledger.total,estimatedUsedBySize:estimated.usedBySize,totalEstimatedUsed:estimated.totalUsed,theoreticalUsageBySize:usage.bySize,totalTheoreticalUsage:usage.total,consumptionStatus:usage.status,currentRatePerDay,autonomyDays,purchases,inventory:ledger.inventory};
+    return {currentSize,currentSizeSince,sizeHistory:history,stockBySize,totalStock:estimated.totalStock,ledgerStockBySize:ledger.bySize,ledgerTotal:ledger.total,estimatedUsedBySize:estimated.usedBySize,totalEstimatedUsed:estimated.totalUsed,theoreticalUsageBySize:usage.bySize,totalTheoreticalUsage:usage.total,consumptionStatus:usage.status,currentRatePerDay,autonomyDays,purchases,inventory:ledger.inventory,defaultedToRN:!ledger.inventory.currentSize&&!lastHistory};
   }
   function buildDiaperAnnualPlanning(plan,pricing,context={}){
     const snap=plan?.financeSnapshot?.recurring?.items?.fraldas_descartaveis||null;
