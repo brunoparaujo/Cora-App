@@ -1068,18 +1068,37 @@
       }
     }
 
-    function editDiaperStockCard(size) {
+    function editDiaperStockCard(size, { preserveKeyboard = false } = {}) {
       if (!DIAPER_SIZE_KEYS.includes(size)) return;
-      DIAPER_SIZE_KEYS.forEach(key => {
-        const view = document.getElementById(`diaperStockView_${key}`);
-        const edit = document.getElementById(`diaperStockEdit_${key}`);
-        if (view) view.classList.toggle('hidden', key === size);
-        if (edit) edit.classList.toggle('hidden', key !== size);
-      });
+
       const input = document.getElementById(`diaperStock_${size}`);
-      if (input) {
-        input.value = input.dataset.current || input.value || '0';
-        requestAnimationFrame(() => { input.focus(); input.select(); });
+      const view = document.getElementById(`diaperStockView_${size}`);
+      const edit = document.getElementById(`diaperStockEdit_${size}`);
+      if (!input || !view || !edit) return;
+
+      input.value = input.dataset.current || input.value || '0';
+
+      if (preserveKeyboard) {
+        // Em mobile, transfere o foco input→input antes de ocultar o card anterior.
+        // Isso evita o ciclo fechar/abrir do teclado ao alternar entre tamanhos.
+        view.classList.add('hidden');
+        edit.classList.remove('hidden');
+        try { input.focus({ preventScroll: true }); } catch (_) { input.focus(); }
+        input.select();
+      }
+
+      DIAPER_SIZE_KEYS.forEach(key => {
+        const keyView = document.getElementById(`diaperStockView_${key}`);
+        const keyEdit = document.getElementById(`diaperStockEdit_${key}`);
+        if (keyView) keyView.classList.toggle('hidden', key === size);
+        if (keyEdit) keyEdit.classList.toggle('hidden', key !== size);
+      });
+
+      if (!preserveKeyboard) {
+        requestAnimationFrame(() => {
+          try { input.focus({ preventScroll: true }); } catch (_) { input.focus(); }
+          input.select();
+        });
       }
     }
 
@@ -1106,7 +1125,8 @@
       const targetCard = event.target.closest?.('[id^="diaperStockCard_"]');
       const targetSize = targetCard?.id?.replace('diaperStockCard_', '');
       if (targetSize && DIAPER_SIZE_KEYS.includes(targetSize) && targetSize !== openEdit) {
-        editDiaperStockCard(targetSize);
+        event.preventDefault();
+        editDiaperStockCard(targetSize, { preserveKeyboard: true });
         return;
       }
 
@@ -1180,7 +1200,7 @@
           </button>
           <div id="diaperStockEdit_${size}" class="hidden min-h-[94px] p-2.5 relative">
             <div class="flex items-center justify-center mb-2 pr-7"><span class="text-[10px] font-bold ${isCurrent ? 'text-sky-700' : 'text-gray-500'}">${size}</span></div>
-            <button id="diaperStockSave_${size}" type="button" onclick="saveDiaperStockCard('${size}')" class="absolute top-2 right-2 w-7 h-7 rounded-lg bg-sky-600 text-white flex items-center justify-center active:scale-95 transition" aria-label="Salvar estoque ${size}"><i data-lucide="check" class="w-3.5 h-3.5"></i></button>
+            <button id="diaperStockSave_${size}" type="button" onclick="saveDiaperStockCard('${size}')" class="absolute top-1.5 right-1.5 w-6 h-6 rounded-md bg-sky-600 text-white flex items-center justify-center shadow-sm active:scale-95 transition" aria-label="Salvar estoque ${size}"><i data-lucide="check" class="w-3 h-3"></i></button>
             <input id="diaperStock_${size}" data-current="${estimated}" type="number" inputmode="numeric" min="0" step="1" value="${estimated}" aria-label="Estoque ${size}" onkeydown="if(event.key==='Enter'){event.preventDefault();saveDiaperStockCard('${size}')}else if(event.key==='Escape'){cancelDiaperStockCard('${size}')}" class="block w-full min-w-0 h-11 bg-white border border-gray-200 rounded-xl px-1 text-center text-[15px] font-bold leading-none text-gray-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-200">
           </div>
         </div>`;
