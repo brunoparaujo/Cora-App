@@ -3389,9 +3389,7 @@
       const phase = shellChildPhase();
       const babyName = appState.childName || appState.childData?.profile?.babyName || appState.childData?.profile?.name || 'Cora';
       const headerName = document.getElementById('headerChildName');
-      const headerContext = document.getElementById('headerContext');
       if (headerName) headerName.textContent = babyName;
-      if (headerContext) headerContext.textContent = phase.header;
 
       const stageLabel = document.getElementById('homeStageLabel');
       const stageValue = document.getElementById('homeStageValue');
@@ -3437,7 +3435,9 @@
       if (toolDiaperMeta) toolDiaperMeta.textContent = diaperText;
 
       const homeMaternityCard = document.getElementById('homeMaternityCard');
+      const homeDiaperCard = document.getElementById('homeDiaperCard');
       if (homeMaternityCard) homeMaternityCard.classList.toggle('hidden', phase.lifeStage === 'born');
+      if (homeDiaperCard) homeDiaperCard.classList.toggle('hidden', phase.lifeStage !== 'born');
 
       const toolEnxoval = document.getElementById('toolEnxovalCard');
       const toolDiaper = document.getElementById('toolDiaperCard');
@@ -3445,7 +3445,7 @@
       const toolsContainer = document.getElementById('sectionFerramentas');
       const homePriorities = document.getElementById('homePriorities');
       const homeEnxoval = homeEnxovalValue?.closest('button') || null;
-      const homeDiaper = document.getElementById('homeDiaperCard');
+      const homeDiaper = homeDiaperCard;
       if (toolsContainer) {
         const orderedTools = phase.lifeStage === 'born'
           ? [toolDiaper, toolEnxoval, toolMaternity]
@@ -3455,7 +3455,7 @@
       if (homePriorities) {
         const orderedHome = phase.lifeStage === 'born'
           ? [homeDiaper, homeEnxoval]
-          : [homeEnxoval, homeMaternityCard, homeDiaper];
+          : [homeEnxoval, homeMaternityCard];
         orderedHome.filter(Boolean).forEach(card => homePriorities.appendChild(card));
       }
 
@@ -5707,7 +5707,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .category-pair-swatch { display:flex; width:9px; height:16px; border-radius:4px; overflow:hidden; flex-direction:column; }
     .category-pair-swatch span { flex:1; }
 
-    /* V4.9UI UI3.1 — shell visual */
+    /* V4.9UI UI3.2 — refinamento do shell */
     :root {
       --cora-wine: #711A2A;
       --cora-wine-soft: #8A2E42;
@@ -5718,16 +5718,17 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       --cora-line: #EEE4E3;
     }
     body { background: var(--cora-cream); }
-    .cora-shell-header { padding-top:max(10px, env(safe-area-inset-top)); background: rgba(252,247,241,.94); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid rgba(113,26,42,.06); }
-    .cora-header-action { width:38px; height:38px; border-radius:13px; display:flex; align-items:center; justify-content:center; color:#6E6063; background:rgba(255,255,255,.8); border:1px solid #EEE4E3; transition:.18s ease; }
+    .cora-shell-header { padding-top:max(8px, env(safe-area-inset-top)); background: rgba(252,247,241,.94); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid rgba(113,26,42,.05); }
+    .cora-header-action { width:36px; height:36px; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#6E6063; background:transparent; border:0; transition:.18s ease; }
     .cora-header-action:active { transform:scale(.96); background:#F7ECEB; }
-    .cora-stage-card { position:relative; overflow:hidden; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:20px; border-radius:24px; background:linear-gradient(135deg,#FDEBEC 0%,#FFF8F5 72%); border:1px solid rgba(113,26,42,.08); }
+    .cora-stage-card { position:relative; overflow:hidden; display:flex; align-items:center; justify-content:flex-start; padding:20px; border-radius:24px; background:linear-gradient(135deg,#FDEBEC 0%,#FFF8F5 72%); border:1px solid rgba(113,26,42,.08); }
     .cora-stage-card::after { content:''; position:absolute; width:130px; height:130px; border-radius:999px; right:-56px; top:-64px; background:rgba(252,212,212,.45); }
-    .cora-stage-mark { width:48px; height:48px; border-radius:17px; background:rgba(255,255,255,.72); color:#8A2E42; display:flex; align-items:center; justify-content:center; position:relative; z-index:1; box-shadow:0 5px 18px rgba(113,26,42,.06); }
     .cora-eyebrow { font-size:10px; line-height:1; letter-spacing:.09em; text-transform:uppercase; font-weight:700; color:#9A6874; }
     .cora-priority-card { width:100%; display:flex; align-items:center; gap:12px; padding:13px 14px; border-radius:18px; background:#fff; border:1px solid rgba(113,26,42,.055); box-shadow:0 4px 16px rgba(66,39,45,.035); transition:transform .16s ease, box-shadow .16s ease; }
     .cora-priority-card:active { transform:scale(.988); box-shadow:0 2px 8px rgba(66,39,45,.03); }
     .cora-card-icon { width:40px; height:40px; border-radius:14px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+    .cora-diaper-glyph { width:1em; height:1em; display:block; }
+    .cora-diaper-glyph path { vector-effect:non-scaling-stroke; }
     .cora-tool-card { width:100%; min-height:86px; display:flex; align-items:center; gap:14px; padding:14px; border-radius:21px; background:#fff; border:1px solid rgba(113,26,42,.06); box-shadow:0 5px 18px rgba(66,39,45,.035); transition:transform .16s ease; }
     .cora-tool-card:active { transform:scale(.988); }
     .cora-tool-illustration { width:58px; height:58px; border-radius:19px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
@@ -5750,12 +5751,9 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
   <!-- TOP HEADER -->
   <header class="cora-shell-header sticky top-0 z-40 px-4 pb-2.5">
     <div class="max-w-md mx-auto flex items-center justify-between gap-3">
-      <div class="flex items-center gap-2.5 min-w-0">
-        <img src="/apple-touch-icon.png" alt="" class="w-10 h-10 rounded-[14px] shadow-sm shrink-0">
-        <div class="min-w-0">
-          <h1 id="headerChildName" class="text-[17px] font-semibold text-[#302A2B] leading-tight truncate">Cora</h1>
-          <p id="headerContext" class="text-[12px] text-[#8B6670] font-medium leading-tight mt-0.5">Gestação</p>
-        </div>
+      <div class="flex items-center gap-2.5 min-w-0" aria-label="Perfil ativo">
+        <img src="/apple-touch-icon.png" alt="" class="w-9 h-9 rounded-[13px] shadow-sm shrink-0">
+        <h1 id="headerChildName" class="text-[16px] font-semibold text-[#302A2B] leading-tight truncate">Cora</h1>
       </div>
       <button onclick="openSettingsModal()" aria-label="Perfil e configurações" class="cora-header-action">
         <i data-lucide="user-round" class="w-[18px] h-[18px]"></i>
@@ -5764,16 +5762,13 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
   </header>
   <main class="max-w-md mx-auto px-4 pt-4 pb-4">
 
-    <!-- UI3.1 — INÍCIO CONTEXTUAL -->
+    <!-- UI3.2 — INÍCIO CONTEXTUAL -->
     <section id="sectionInicio" class="space-y-5">
       <div class="cora-stage-card">
         <div class="min-w-0">
           <span id="homeStageLabel" class="cora-eyebrow">Gestação</span>
           <strong id="homeStageValue" class="block text-[30px] leading-none tracking-[-0.035em] text-[#4B252F] mt-1.5">—</strong>
           <p id="homeStageMeta" class="text-[12px] font-medium text-[#916E77] mt-2">—</p>
-        </div>
-        <div class="cora-stage-mark" aria-hidden="true">
-          <i data-lucide="heart" class="w-6 h-6"></i>
         </div>
       </div>
 
@@ -5798,22 +5793,20 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
               <span class="block text-[14px] font-semibold text-[#302A2B]">Maternidade</span>
               <span id="homeMaternityMeta" class="block text-[11px] text-[#7C7476] mt-0.5 truncate">Checklist da maternidade</span>
             </span>
-            <i data-lucide="chevron-right" class="w-4 h-4 text-[#B6A9AC] shrink-0"></i>
           </button>
 
           <button id="homeDiaperCard" type="button" onclick="openDiaperStock()" class="cora-priority-card group">
-            <span class="cora-card-icon bg-[#E4F0F1] text-[#47777B]"><i data-lucide="package-open" class="w-5 h-5"></i></span>
+            <span class="cora-card-icon bg-[#E4F0F1] text-[#47777B]" aria-hidden="true"><svg class="cora-diaper-glyph w-5 h-5" viewBox="0 0 24 24" fill="none"><path d="M4.5 6.5 9 8.4h6l4.5-1.9v6.7c0 4.6-3.3 7.8-7.5 7.8s-7.5-3.2-7.5-7.8V6.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 8.4c0 2.5-1.4 4.5-4.3 5.2M15 8.4c0 2.5 1.4 4.5 4.3 5.2M8.4 17c2.2-1.2 5-1.2 7.2 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
             <span class="min-w-0 flex-1 text-left">
               <span class="block text-[14px] font-semibold text-[#302A2B]">Fraldas</span>
               <span id="homeDiaperMeta" class="block text-[11px] text-[#7C7476] mt-0.5 truncate">Estoque e consumo</span>
             </span>
-            <i data-lucide="chevron-right" class="w-4 h-4 text-[#B6A9AC] shrink-0"></i>
           </button>
         </div>
       </div>
     </section>
 
-    <!-- UI3.1 — HUB DE FERRAMENTAS -->
+    <!-- UI3.2 — FERRAMENTAS -->
     <section id="sectionFerramentas" class="hidden space-y-3">
       <button id="toolEnxovalCard" type="button" onclick="switchTab('enxoval')" class="cora-tool-card">
         <span class="cora-tool-illustration bg-[#FCE4E5] text-[#8A2E42]"><i data-lucide="list-checks" class="w-7 h-7"></i></span>
@@ -5825,7 +5818,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       </button>
 
       <button id="toolDiaperCard" type="button" onclick="openDiaperStock()" class="cora-tool-card">
-        <span class="cora-tool-illustration bg-[#E4F0F1] text-[#47777B]"><i data-lucide="package-open" class="w-7 h-7"></i></span>
+        <span class="cora-tool-illustration bg-[#E4F0F1] text-[#47777B]" aria-hidden="true"><svg class="cora-diaper-glyph w-7 h-7" viewBox="0 0 24 24" fill="none"><path d="M4.5 6.5 9 8.4h6l4.5-1.9v6.7c0 4.6-3.3 7.8-7.5 7.8s-7.5-3.2-7.5-7.8V6.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 8.4c0 2.5-1.4 4.5-4.3 5.2M15 8.4c0 2.5 1.4 4.5 4.3 5.2M8.4 17c2.2-1.2 5-1.2 7.2 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
         <span class="min-w-0 flex-1 text-left">
           <strong class="block text-[16px] font-semibold text-[#302A2B]">Fraldas</strong>
           <span id="toolDiaperMeta" class="block text-[12px] text-[#7C7476] mt-1">Estoque e consumo</span>
@@ -6045,7 +6038,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     <i data-lucide="plus" class="w-6 h-6"></i>
   </button>
 
-  <!-- UI3.1 — NAVEGAÇÃO GLOBAL -->
+  <!-- UI3.2 — NAVEGAÇÃO GLOBAL -->
   <nav class="cora-bottom-nav fixed bottom-0 left-0 right-0 z-40" aria-label="Navegação principal">
     <div class="cora-bottom-nav-inner max-w-md mx-auto grid grid-cols-3 items-end px-5 pt-2">
       <button type="button" onclick="switchTab('inicio')" id="navBtnInicio" class="cora-nav-item is-active" aria-label="Início" aria-current="page">
