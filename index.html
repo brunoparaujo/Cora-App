@@ -318,21 +318,21 @@
     ];
 
     const CATEGORY_TIPS = {
-      vestuario: '💡 **Estratégia RJ/Niterói:** Em fevereiro faz muito calor. No RN, use bodies curtos de dia e macacões finos no ar-condicionado. Em M (Junho), o inverno é suave (apenas algodão ou moletim leve).',
-      quarto: '💡 **Bebê no Verão:** Prefira lençóis de malha 100% algodão e cueiros leves em vez de cobertores pesados.',
-      higiene: '💡 **Fraldas e Limpeza:** Invista bastante em fraldas de pano/ombro (meta de 10 a 12 un). São as que mais sujam.',
-      alimentacao: '💡 **Apoio no Início:** Esterilizador de micro-ondas e conchas de amamentação ajudam bastante na rotina inicial.',
-      passeio: '💡 **Passeios na Orla:** Carrinho com capota extensível e protetor UV é indispensável no sol do Rio.',
-      mamae: '💡 **Pós-Parto Confortável:** Camisolas leves de algodão facilitam a amamentação no calor do verão.'
+      vestuario: '**Estratégia RJ/Niterói:** Em fevereiro faz muito calor. No RN, use bodies curtos de dia e macacões finos no ar-condicionado. Em M (Junho), o inverno é suave (apenas algodão ou moletim leve).',
+      quarto: '**Bebê no Verão:** Prefira lençóis de malha 100% algodão e cueiros leves em vez de cobertores pesados.',
+      higiene: '**Fraldas e Limpeza:** Invista bastante em fraldas de pano/ombro (meta de 10 a 12 un). São as que mais sujam.',
+      alimentacao: '**Apoio no Início:** Esterilizador de micro-ondas e conchas de amamentação ajudam bastante na rotina inicial.',
+      passeio: '**Passeios na Orla:** Carrinho com capota extensível e protetor UV é indispensável no sol do Rio.',
+      mamae: '**Pós-Parto Confortável:** Camisolas leves de algodão facilitam a amamentação no calor do verão.'
     };
 
     const GENERIC_CATEGORY_TIPS = {
-      vestuario: '💡 Organize as peças por tamanho e ajuste as metas à estação e ao clima da sua região.',
-      quarto: '💡 Priorize itens seguros, laváveis e adequados ao espaço disponível.',
-      higiene: '💡 Comece pelo essencial e ajuste as quantidades conforme a rotina do bebê.',
-      alimentacao: '💡 Cadastre somente os itens que fizerem sentido para a rotina de alimentação da família.',
-      passeio: '💡 Considere segurança, praticidade e conforto nos itens de transporte e passeio.',
-      mamae: '💡 Priorize conforto e praticidade para o pós-parto e a rotina de cuidados.'
+      vestuario: 'Organize as peças por tamanho e ajuste as metas à estação e ao clima da sua região.',
+      quarto: 'Priorize itens seguros, laváveis e adequados ao espaço disponível.',
+      higiene: 'Comece pelo essencial e ajuste as quantidades conforme a rotina do bebê.',
+      alimentacao: 'Cadastre somente os itens que fizerem sentido para a rotina de alimentação da família.',
+      passeio: 'Considere segurança, praticidade e conforto nos itens de transporte e passeio.',
+      mamae: 'Priorize conforto e praticidade para o pós-parto e a rotina de cuidados.'
     };
 
     let appState = {
@@ -3549,10 +3549,19 @@
       lucide.createIcons();
     }
 
+    function updateCategorySelectionUI() {
+      document.querySelectorAll('.cat-card[data-category]').forEach(card => {
+        const selected = card.dataset.category === appState.activeCategory;
+        card.classList.toggle('is-selected', selected);
+        card.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      });
+    }
+
     function filterCategory(cat) {
       appState.activeCategory = cat;
       const tips = appState.familyId === PRIMARY_FAMILY_ID ? CATEGORY_TIPS : GENERIC_CATEGORY_TIPS;
       document.getElementById('categoryTipText').textContent = tips[cat] || 'Organize as compras de forma inteligente.';
+      updateCategorySelectionUI();
       renderItems();
     }
 
@@ -3605,6 +3614,7 @@
           donut.setAttribute('aria-label', tar > 0 ? `${cur} de ${tar} no enxoval` : 'Sem meta definida');
         }
       });
+      updateCategorySelectionUI();
     }
 
     function getSearchableBrands(item) {
@@ -3667,14 +3677,14 @@
         const brandSummary = brands.length ? brands.slice(0, 2).join(' • ') + (brands.length > 2 ? ' • +' + (brands.length - 2) : '') : 'Sem marca informada';
 
         return `
-          <div class="bg-white rounded-2xl border ${isComplete ? 'border-emerald-200 bg-emerald-50/20' : 'border-gray-200'} p-4 shadow-xs relative space-y-3">
+          <div class="cora-item-card ${isComplete ? 'is-complete' : ''} relative space-y-3">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-1.5">
                   <h3 class="font-bold text-gray-900 text-sm">${escapeHtml(item.name)}</h3>
                   ${itemPriorityBadge(item)}
                   ${itemDispositionBadge(item)}
-                  ${isComplete ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded-md">✅ OK</span>' : ''}
+                  ${isComplete ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded-md">Concluído</span>' : ''}
                 </div>
                 ${acquisitions.length ? `<p class="text-[10px] text-gray-500 mt-1">${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição' : 'aquisições'} • ${escapeHtml(brandSummary)}</p>` : '<p class="text-[10px] text-gray-400 mt-1">Nenhuma aquisição registrada</p>'}
                 ${!['suggested','deferred'].includes(itemPlanDisposition(item)) ? itemReferencePriceHtml(item) : ''}
@@ -5835,6 +5845,28 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .cora-nav-item.is-active .nav-label { opacity:1; transform:translateY(0); }
 
 
+
+    /* V4.9UI UI3.5 — Enxoval */
+    .cora-enxoval-overview { padding:16px; border-radius:22px; background:linear-gradient(145deg,#FFFFFF 0%,#FFF8F6 100%); border:1px solid rgba(113,26,42,.06); box-shadow:0 5px 20px rgba(66,39,45,.03); }
+    .cora-enxoval-progress-track { height:7px; border-radius:999px; overflow:hidden; background:#F0E6E4; }
+    .cora-enxoval-progress-fill { height:100%; border-radius:999px; background:var(--cora-wine); transition:width .35s ease; }
+    .cora-category-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }
+    .cat-card { --category-color:#711A2A; --category-soft:#FFF7F6; min-width:0; min-height:105px; padding:11px 7px 10px; border-radius:19px; background:#fff; border:1px solid rgba(113,26,42,.055); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; transition:transform .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease; }
+    .cat-card:active { transform:scale(.975); }
+    .cat-card.is-selected { border-color:var(--category-color); background:var(--category-soft); box-shadow:0 0 0 1px color-mix(in srgb,var(--category-color) 14%, transparent),0 4px 14px rgba(66,39,45,.035); }
+    .category-donut { width:52px; height:52px; padding:3px; margin-bottom:6px; }
+    .category-donut-icon { width:46px; height:46px; background:#fff; color:var(--category-color); }
+    .category-donut-icon svg { width:25px; height:25px; display:block; }
+    .cora-enxoval-filters { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; }
+    .cora-enxoval-search { min-height:38px; border-radius:13px; border:1px solid #E9E0DE; background:#fff; }
+    .cora-enxoval-select { min-height:38px; max-width:132px; border-radius:13px; border:1px solid #E9E0DE; background:#fff; color:#655C5E; }
+    .cora-category-tip { border-radius:15px; padding:11px 12px; background:#FFF9EC; border:1px solid #F2E5C9; color:#6F6147; }
+    .cora-item-card { background:#fff; border:1px solid #ECE5E3; border-radius:20px; padding:15px; box-shadow:0 4px 15px rgba(66,39,45,.025); }
+    .cora-item-card.is-complete { border-color:#DDEBE3; background:#FCFFFD; }
+    @supports not (color: color-mix(in srgb, black, white)) {
+      .cat-card.is-selected { box-shadow:0 0 0 1px rgba(113,26,42,.10),0 4px 14px rgba(66,39,45,.035); }
+    }
+
     /* V4.9UI UI3.4 — Finanças */
     .cora-finance-overview { padding:17px; border-radius:22px; background:linear-gradient(145deg,#FFFFFF 0%,#FFF9F7 100%); border:1px solid rgba(113,26,42,.065); box-shadow:0 5px 20px rgba(66,39,45,.035); }
     .cora-finance-toggle { min-height:32px; display:inline-flex; align-items:center; gap:7px; padding:5px 9px 5px 6px; border-radius:999px; background:#F5EFED; color:#786D70; font-size:10px; line-height:1; font-weight:650; transition:.18s ease; }
@@ -5959,10 +5991,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       </div>
 
       <!-- DASHBOARD DO ENXOVAL -->
-      <div class="bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-100 rounded-2xl p-4 shadow-xs">
+      <div class="cora-enxoval-overview">
         <div class="flex justify-between items-center mb-2">
           <div>
-            <span id="progressPercentText" class="text-2xl font-extrabold text-rose-600">0%</span>
+            <span id="progressPercentText" class="text-[26px] font-semibold tracking-[-0.04em] text-[#711A2A]">0%</span>
             <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider ml-1">concluído</span>
           </div>
           <div class="text-right">
@@ -5970,77 +6002,57 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
             <p id="financeTotalSpent" class="text-xs text-rose-700 font-semibold">Gasto: R$ 0,00</p>
           </div>
         </div>
-        <div class="w-full bg-rose-200/60 rounded-full h-2.5 overflow-hidden mb-3">
-          <div id="progressBar" class="bg-rose-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
-        </div>
-        <div id="coraSeasonWidget" class="bg-white/80 rounded-xl p-3 border border-rose-100 text-xs">
+        <div class="cora-enxoval-progress-track mb-3"><div id="progressBar" class="cora-enxoval-progress-fill" style="width:0%"></div></div>
+        <div id="coraSeasonWidget" class="bg-white/70 rounded-[15px] p-3 border border-[#EFE5E3] text-xs">
           <div class="text-gray-500 text-center py-2">O planejamento V4.8 aparecerá aqui após o onboarding.</div>
         </div>
       </div>
       
       <!-- CATEGORIAS -->
-      <div class="grid grid-cols-3 gap-2">
-        <button onclick="filterCategory('vestuario')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div id="catDonutVestuario" class="category-donut" data-color="#ef476f"><div class="category-donut-icon bg-rose-100 text-rose-600">👚</div></div>
-          <span class="text-xs font-bold text-gray-800">Vestuário</span>
-          <span id="catBadgeVestuario" class="text-[10px] text-gray-400 font-medium">0/0</span>
+      <div class="cora-category-grid" role="group" aria-label="Categorias do enxoval">
+        <button type="button" data-category="vestuario" aria-pressed="true" onclick="filterCategory('vestuario')" class="cat-card" style="--category-color:#C84D6B;--category-soft:#FFF5F7">
+          <div id="catDonutVestuario" class="category-donut" data-color="#C84D6B"><div class="category-donut-icon" style="--category-color:#C84D6B"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.2 5.2 5.1 6.7 3.6 10l2.8 1.4V19h11.2v-7.6l2.8-1.4-1.5-3.3-3.1-1.5c-.8 1.3-2.1 2-3.8 2s-3-.7-3.8-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></div></div>
+          <span class="text-[12px] font-semibold text-[#3B3436]">Vestuário</span><span id="catBadgeVestuario" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
-        <button onclick="filterCategory('quarto')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div id="catDonutQuarto" class="category-donut" data-color="#f4b942"><div class="category-donut-icon bg-amber-100 text-amber-600">🛏️</div></div>
-          <span class="text-xs font-bold text-gray-800">Quarto</span>
-          <span id="catBadgeQuarto" class="text-[10px] text-gray-400 font-medium">0/0</span>
+        <button type="button" data-category="quarto" aria-pressed="false" onclick="filterCategory('quarto')" class="cat-card" style="--category-color:#C98B2E;--category-soft:#FFFAEF">
+          <div id="catDonutQuarto" class="category-donut" data-color="#C98B2E"><div class="category-donut-icon" style="--category-color:#C98B2E"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 18V9.5M20 18V12M4 14h16M7 9.5h7a3 3 0 0 1 3 3V14H7V9.5Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 9.5V7.8h4.8c1.2 0 2.2.7 2.6 1.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div></div>
+          <span class="text-[12px] font-semibold text-[#3B3436]">Quarto</span><span id="catBadgeQuarto" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
-        <button onclick="filterCategory('higiene')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div id="catDonutHigiene" class="category-donut" data-color="#4f86c6"><div class="category-donut-icon bg-blue-100 text-blue-600">🛁</div></div>
-          <span class="text-xs font-bold text-gray-800">Higiene</span>
-          <span id="catBadgeHigiene" class="text-[10px] text-gray-400 font-medium">0/0</span>
+        <button type="button" data-category="higiene" aria-pressed="false" onclick="filterCategory('higiene')" class="cat-card" style="--category-color:#4F83A7;--category-soft:#F3F9FC">
+          <div id="catDonutHigiene" class="category-donut" data-color="#4F83A7"><div class="category-donut-icon" style="--category-color:#4F83A7"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 11h16v2.2A5.8 5.8 0 0 1 14.2 19H9.8A5.8 5.8 0 0 1 4 13.2V11Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7 11V7.8A2.8 2.8 0 0 1 9.8 5h.4M6 19v1M18 19v1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div></div>
+          <span class="text-[12px] font-semibold text-[#3B3436]">Higiene</span><span id="catBadgeHigiene" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
-        <button onclick="filterCategory('alimentacao')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div id="catDonutAlimentacao" class="category-donut" data-color="#50bfa3"><div class="category-donut-icon bg-emerald-100 text-emerald-600">🍼</div></div>
-          <span class="text-xs font-bold text-gray-800">Alimentação</span>
-          <span id="catBadgeAlimentacao" class="text-[10px] text-gray-400 font-medium">0/0</span>
+        <button type="button" data-category="alimentacao" aria-pressed="false" onclick="filterCategory('alimentacao')" class="cat-card" style="--category-color:#4B9B83;--category-soft:#F2FAF7">
+          <div id="catDonutAlimentacao" class="category-donut" data-color="#4B9B83"><div class="category-donut-icon" style="--category-color:#4B9B83"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4h6M10 4v3l-2 2.2V18a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.2L14 7V4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 12h8" stroke="currentColor" stroke-width="1.7"/></svg></div></div>
+          <span class="text-[12px] font-semibold text-[#3B3436]">Alimentação</span><span id="catBadgeAlimentacao" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
-        <button onclick="filterCategory('passeio')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div id="catDonutPasseio" class="category-donut" data-color="#8e6bbd"><div class="category-donut-icon bg-purple-100 text-purple-600">👶</div></div>
-          <span class="text-xs font-bold text-gray-800">Passeio</span>
-          <span id="catBadgePasseio" class="text-[10px] text-gray-400 font-medium">0/0</span>
+        <button type="button" data-category="passeio" aria-pressed="false" onclick="filterCategory('passeio')" class="cat-card" style="--category-color:#8066A4;--category-soft:#F8F5FC">
+          <div id="catDonutPasseio" class="category-donut" data-color="#8066A4"><div class="category-donut-icon" style="--category-color:#8066A4"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 8h9.5a3.5 3.5 0 0 1 3.5 3.5V14H8a2 2 0 0 1-2-2V8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7 8 5.5 5.5H4M9 14l-1.5 3h10L16 14M9 19h.01M17 19h.01" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div></div>
+          <span class="text-[12px] font-semibold text-[#3B3436]">Passeio</span><span id="catBadgePasseio" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
-        <button onclick="filterCategory('mamae')" class="cat-card p-3 bg-white rounded-2xl border border-rose-100 shadow-xs flex flex-col items-center justify-center text-center hover:border-rose-300 transition active:scale-95">
-          <div id="catDonutMamae" class="category-donut" data-color="#e07a5f"><div class="category-donut-icon bg-pink-100 text-pink-600">🤰</div></div>
-          <span class="text-xs font-bold text-gray-800">Mamãe</span>
-          <span id="catBadgeMamae" class="text-[10px] text-gray-400 font-medium">0/0</span>
+        <button type="button" data-category="mamae" aria-pressed="false" onclick="filterCategory('mamae')" class="cat-card" style="--category-color:#B96869;--category-soft:#FFF6F5">
+          <div id="catDonutMamae" class="category-donut" data-color="#B96869"><div class="category-donut-icon" style="--category-color:#B96869"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10" cy="5.5" r="2.1" stroke="currentColor" stroke-width="1.7"/><path d="M8.4 9.2c-1.3 1.8-1.8 4.1-1.2 6.3.5 1.9 2 3.4 4 3.9M10 9c2.5.4 4.3 1.8 5 4.1.8 2.7-.5 5.3-3 6.5M12.2 12.4c2.4-.4 4.5.7 5.2 2.5.7 1.7-.2 3.4-1.8 4.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div></div>
+          <span class="text-[12px] font-semibold text-[#3B3436]">Mamãe</span><span id="catBadgeMamae" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
       </div>
 
-      <button id="diaperStockCard" onclick="openDiaperStock()" class="hidden w-full rounded-2xl border border-sky-100 bg-gradient-to-r from-sky-50 to-white p-3 text-left shadow-xs active:scale-[0.99] transition">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-full bg-sky-100 text-xl flex items-center justify-center shrink-0">🧷</div>
-          <div class="min-w-0 flex-1">
-            <strong class="text-xs text-gray-900">Fraldas</strong>
-            <p id="diaperStockCardSummary" class="text-[10px] font-semibold text-gray-700 mt-0.5">Estoque, tamanho atual e autonomia.</p>
-            <p id="diaperStockCardMeta" class="text-[9px] text-gray-400 mt-0.5">Compras e contagens físicas mantêm a estimativa atualizada.</p>
-          </div>
-          <i data-lucide="chevron-right" class="w-4 h-4 text-sky-500 shrink-0"></i>
-        </div>
-      </button>
-
       <!-- FILTROS SECUNDÁRIOS & BUSCA -->
-      <div class="flex items-center space-x-2">
-        <div class="relative flex-1">
+      <div class="cora-enxoval-filters">
+        <div class="relative min-w-0">
           <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-gray-400"></i>
-          <input type="text" id="searchInput" onkeyup="renderItems()" placeholder="Buscar item ou marca..." class="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-400">
+          <input type="text" id="searchInput" onkeyup="renderItems()" placeholder="Buscar item ou marca..." class="cora-enxoval-search w-full pl-9 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#E8B6BF]">
         </div>
-        <select id="filterStatus" onchange="renderItems()" class="bg-white border border-gray-200 text-xs rounded-xl px-2 py-1.5 focus:outline-none font-medium text-gray-600">
+        <select id="filterStatus" onchange="renderItems()" class="cora-enxoval-select text-xs px-2 py-1.5 focus:outline-none font-medium">
           <option value="todos">Todos os Itens</option>
-          <option value="faltam">🚨 O que falta</option>
-          <option value="completos">✅ Comprados / OK</option>
-          <option value="essenciais">⭐ Essenciais</option>
+          <option value="faltam">O que falta</option>
+          <option value="completos">Concluídos</option>
+          <option value="essenciais">Essenciais</option>
         </select>
       </div>
 
       <!-- DICA DA CATEGORIA SELECCIONADA -->
-      <div id="categoryTipBox" class="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 flex items-start gap-2">
-        <i data-lucide="lightbulb" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
+      <div id="categoryTipBox" class="cora-category-tip text-xs flex items-start gap-2">
+        <i data-lucide="lightbulb" class="w-4 h-4 text-[#A27A35] shrink-0 mt-0.5"></i>
         <p id="categoryTipText">Para o RJ em Fev: Dê prioridade a tecidos 100% algodão bem leves para o dia e manga longa fina para o ar-condicionado.</p>
       </div>
 
