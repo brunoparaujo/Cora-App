@@ -340,6 +340,7 @@
       maternidade: [],
       activeCategory: 'vestuario',
       activeTab: 'inicio',
+      lastToolsTab: 'ferramentas',
       activeHistoryItemId: null,
       editingItemBase: null,
       editingAcquisitionBase: null,
@@ -546,10 +547,15 @@
     }
 
     function itemPriorityBadge(item) {
-      const labels = {essential:'Essencial',recommended:'Vale a pena ter',optional:'Opcional',conditional:'Conforme sua rotina'};
       const priority = itemPriority(item);
-      const color = priority === 'essential' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600';
-      return `<span class="text-[9px] ${color} font-bold px-1.5 py-0.5 rounded-md">${labels[priority]}</span>`;
+      const disposition = itemPlanDisposition(item);
+      if (priority === 'essential') {
+        return '<span class="cora-item-badge is-essential">Essencial</span>';
+      }
+      if (priority === 'optional' && disposition === 'planned') {
+        return '<span class="cora-item-badge">Opcional</span>';
+      }
+      return '';
     }
 
     function itemPlanDisposition(item) {
@@ -561,13 +567,13 @@
     function itemDispositionBadge(item) {
       const disposition = itemPlanDisposition(item);
       if (disposition === 'suggested') {
-        return '<span class="text-[9px] bg-sky-100 text-sky-700 font-bold px-1.5 py-0.5 rounded-md">Sugestão</span>';
+        return '<span class="cora-item-badge is-optional">Opcional</span>';
       }
       if (disposition === 'deferred') {
-        return '<span class="text-[9px] bg-violet-100 text-violet-700 font-bold px-1.5 py-0.5 rounded-md">A definir</span>';
+        return '<span class="cora-item-badge is-pending">A decidir</span>';
       }
       if (item.retainedPurchaseHistory && ['inactive','excluded','rejected'].includes(disposition)) {
-        return '<span class="text-[9px] bg-gray-100 text-gray-500 font-bold px-1.5 py-0.5 rounded-md">Histórico preservado</span>';
+        return '<span class="cora-item-badge">Histórico</span>';
       }
       return '';
     }
@@ -651,42 +657,47 @@
       if (item.unitEstimate === null || item.unitEstimate === undefined) return '';
       const unit = itemUnitLabel(item, 1);
       const total = itemReferenceTotal(item);
-      const totalText = total && total > 0 ? ` • ${money(total)} no item` : '';
-      const tier = activeItemBudgetTier(item);
-      return `<div class="mt-1 flex flex-wrap items-center gap-2 text-[9px] text-gray-500">
-        <span>Referência ${escapeHtml(budgetTierLabel(tier))}: ${money(item.unitEstimate)} / ${escapeHtml(unit)}${totalText}</span>
-        ${item.pricingKey ? `<button type="button" onclick="openPriceReferences('${item.id}')" class="font-bold text-rose-600 hover:underline">Ver referências de preço</button>` : ''}
+      const totalText = total && total > 0 ? ` • ${money(total)}` : '';
+      return `<div class="cora-item-reference">
+        <span>Ref. ${money(item.unitEstimate)} / ${escapeHtml(unit)}${totalText}</span>
+        ${item.pricingKey ? `<button type="button" onclick="openPriceReferences('${item.id}')">Preços</button>` : ''}
       </div>`;
     }
 
     function renderNonPlannedRecommendation(item) {
       const disposition = itemPlanDisposition(item);
-      const acquisitions = getAcquisitions(item);
-      const targetText = recommendationTargetText(item);
+      const targetText = recommendationTargetText(item)
+        .replace('Referência sugerida: ', '')
+        .replace('Referência quando aplicável: ', '')
+        .replace('Estoque inicial sugerido: ', '');
       const isSuggested = disposition === 'suggested';
-      const title = isSuggested ? 'Sugestão do Cora' : 'Conforme sua rotina';
-      const detail = isSuggested
-        ? 'Você pode incluir no planejamento, comprar diretamente ou simplesmente ignorar. Enquanto não incluir, não conta na meta nem no progresso.'
-        : 'Ainda não há informação suficiente para definir uma meta. O item continua visível e não conta no progresso nem no orçamento.';
       const refTotal = itemReferenceTotal(item);
-      return `
-        <div class="border ${isSuggested ? 'border-sky-100 bg-sky-50/40' : 'border-violet-100 bg-violet-50/40'} rounded-xl p-3 space-y-2">
-          <div>
-            <span class="block text-[10px] font-bold ${isSuggested ? 'text-sky-700' : 'text-violet-700'} uppercase tracking-wide">${title}</span>
-            <p class="text-[10px] text-gray-600 mt-1">${detail}</p>
-            ${targetText ? `<p class="text-[10px] font-semibold text-gray-700 mt-1">${escapeHtml(targetText)}</p>` : ''}
-            ${item.unitEstimate !== null && item.unitEstimate !== undefined ? `<p class="text-[10px] font-semibold text-gray-700 mt-1">Referência ${escapeHtml(budgetTierLabel(activeItemBudgetTier(item)))}: ${money(item.unitEstimate)} / ${escapeHtml(itemUnitLabel(item, 1))}${refTotal && refTotal > 0 ? ` • ${money(refTotal)} nesta sugestão` : ''}</p>` : ''}
-            ${item.pricingKey ? `<button type="button" onclick="openPriceReferences('${item.id}')" class="text-[10px] font-bold text-rose-600 mt-1 hover:underline">Ver referências de preço</button>` : ''}
+      const refText = item.unitEstimate !== null && item.unitEstimate !== undefined
+        ? `${money(item.unitEstimate)} / ${escapeHtml(itemUnitLabel(item, 1))}${refTotal && refTotal > 0 ? ` • ${money(refTotal)}` : ''}`
+        : '';
+      if (isSuggested) {
+        return `<div class="cora-item-decision is-optional">
+          <div class="min-w-0">
+            <strong>Item opcional</strong>
+            <span>${escapeHtml(targetText || 'Pode ser incluído se fizer sentido para vocês.')}${refText ? ` • ${refText}` : ''}</span>
           </div>
-          ${isSuggested ? `<div class="grid grid-cols-2 gap-2">
-            <button type="button" onclick="includeSuggestion('${item.id}')" class="h-9 px-3 rounded-lg bg-sky-600 text-white text-[10px] font-bold active:scale-95 transition">Incluir no planejamento</button>
-            <button type="button" onclick="hideSuggestion('${item.id}')" class="h-9 px-3 rounded-lg bg-white border border-gray-200 text-gray-600 text-[10px] font-bold active:scale-95 transition">Ocultar sugestão</button>
-          </div>` : ''}
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-[10px] text-gray-500">${acquisitions.length ? `${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição registrada' : 'aquisições registradas'}` : 'Nenhuma aquisição registrada'}</span>
-            <button onclick="openAcquisitionModalForItem('${item.id}')" class="shrink-0 h-8 px-3 rounded-lg bg-emerald-600 text-white text-[10px] font-bold active:scale-95 transition">Registrar aquisição</button>
+          <div class="cora-item-decision-actions">
+            <button type="button" onclick="includeSuggestion('${item.id}')" class="is-primary">Incluir</button>
+            <button type="button" onclick="hideSuggestion('${item.id}')">Não preciso</button>
           </div>
         </div>`;
+      }
+      const routineAction = item.category === 'alimentacao'
+        ? `openRoutineDecision('${item.id}')`
+        : `globalThis.CoraV48Integration?.openWizard(true)`;
+      const routineLabel = item.category === 'alimentacao' ? 'Definir rotina' : 'Revisar';
+      return `<div class="cora-item-decision is-pending">
+        <div class="min-w-0">
+          <strong>A decidir</strong>
+          <span>${escapeHtml(targetText || 'A meta depende de uma preferência da família.')}</span>
+        </div>
+        <button type="button" onclick="${routineAction}" class="cora-item-compact-action">${routineLabel}</button>
+      </div>`;
     }
 
     async function includeSuggestion(itemId) {
@@ -3530,7 +3541,21 @@
       updateRootNavigation(rootTabForView(appState.activeTab));
     }
 
-    function switchTab(tab) {
+    function openToolsTab() {
+      const currentlyInTools = rootTabForView(appState.activeTab) === 'ferramentas';
+      if (currentlyInTools) {
+        if (appState.activeTab !== 'ferramentas') switchTab('ferramentas', { resetTools: true });
+        return;
+      }
+      const target = ['enxoval', 'maternidade'].includes(appState.lastToolsTab)
+        ? appState.lastToolsTab
+        : 'ferramentas';
+      switchTab(target, { restoreTools: true });
+    }
+
+    function switchTab(tab, options = {}) {
+      if (tab === 'enxoval' || tab === 'maternidade') appState.lastToolsTab = tab;
+      if (tab === 'ferramentas' && options.resetTools) appState.lastToolsTab = 'ferramentas';
       appState.activeTab = tab;
       const sections = {
         inicio: document.getElementById('sectionInicio'),
@@ -3560,7 +3585,8 @@
     function filterCategory(cat) {
       appState.activeCategory = cat;
       const tips = appState.familyId === PRIMARY_FAMILY_ID ? CATEGORY_TIPS : GENERIC_CATEGORY_TIPS;
-      document.getElementById('categoryTipText').textContent = tips[cat] || 'Organize as compras de forma inteligente.';
+      const tip = document.getElementById('categoryTipText');
+      if (tip) tip.textContent = tips[cat] || '';
       updateCategorySelectionUI();
       renderItems();
     }
@@ -3663,18 +3689,25 @@
       if (!filtered.length) {
         container.innerHTML = `
           <div class="text-center py-8 bg-white rounded-2xl border border-dashed border-gray-200">
-            <p class="text-xs text-gray-400 font-medium">Nenhum item encontrado nesta categoria com os filtros atuais.</p>
+            <p class="text-xs text-gray-400 font-medium">Nenhum item encontrado nesta categoria.</p>
             <button onclick="openActionModal()" class="mt-2 text-xs text-rose-600 font-bold underline">+ Adicionar</button>
           </div>`;
         return;
       }
 
       container.innerHTML = filtered.map(item => {
+        const disposition = itemPlanDisposition(item);
         const isComplete = itemMatchesStatus(item, 'completos');
         const acquisitions = getAcquisitions(item);
         const purchaseTotal = getPurchaseTotal(item);
         const brands = [...new Set(acquisitions.map(a => a.brand).filter(Boolean))];
-        const brandSummary = brands.length ? brands.slice(0, 2).join(' • ') + (brands.length > 2 ? ' • +' + (brands.length - 2) : '') : 'Sem marca informada';
+        const brandSummary = brands.length ? brands.slice(0, 2).join(' • ') + (brands.length > 2 ? ' • +' + (brands.length - 2) : '') : '';
+        const acquisitionFooter = acquisitions.length
+          ? `<button onclick="openAcquisitionHistory('${item.id}')" class="cora-acquisition-row" aria-label="Ver aquisições do item">
+              <span class="min-w-0"><strong>${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição' : 'aquisições'}</strong>${brandSummary ? `<small>${escapeHtml(brandSummary)}</small>` : ''}</span>
+              <span class="shrink-0">${purchaseTotal > 0 ? money(purchaseTotal) : 'Sem gasto'} <i data-lucide="chevron-right"></i></span>
+            </button>`
+          : `<div class="cora-acquisition-empty"><span>Sem aquisição</span><button type="button" onclick="openAcquisitionModalForItem('${item.id}')">Registrar</button></div>`;
 
         return `
           <div class="cora-item-card ${isComplete ? 'is-complete' : ''} relative space-y-3">
@@ -3684,20 +3717,19 @@
                   <h3 class="font-bold text-gray-900 text-sm">${escapeHtml(item.name)}</h3>
                   ${itemPriorityBadge(item)}
                   ${itemDispositionBadge(item)}
-                  ${isComplete ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded-md">Concluído</span>' : ''}
+                  ${isComplete ? '<span class="cora-item-badge is-complete">Concluído</span>' : ''}
                 </div>
-                ${acquisitions.length ? `<p class="text-[10px] text-gray-500 mt-1">${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição' : 'aquisições'} • ${escapeHtml(brandSummary)}</p>` : '<p class="text-[10px] text-gray-400 mt-1">Nenhuma aquisição registrada</p>'}
-                ${!['suggested','deferred'].includes(itemPlanDisposition(item)) ? itemReferencePriceHtml(item) : ''}
+                ${!['suggested','deferred'].includes(disposition) ? itemReferencePriceHtml(item) : ''}
               </div>
               ${item.legacyUnclassifiedVariant ? '' : `<button onclick="editItem('${item.id}')" class="p-2 text-gray-400 hover:text-rose-600 transition rounded-lg hover:bg-rose-50" aria-label="Editar item">
                 <i data-lucide="edit-3" class="w-4 h-4"></i>
               </button>`}
             </div>
 
-            <div class="pt-1">
+            <div>
               ${item.legacyUnclassifiedVariant
                 ? renderLegacyUnclassifiedVariant(item)
-                : (['suggested','deferred'].includes(itemPlanDisposition(item))
+                : (['suggested','deferred'].includes(disposition)
                   ? renderNonPlannedRecommendation(item)
                   : (item?.recommendationSnapshot?.kind === 'recurring' && !Number(item?.recommendationSnapshot?.initialStockQuantity || 0)
                     ? renderOpenEndedRecurringItem(item)
@@ -3705,26 +3737,15 @@
                       ? renderVariantMatrix(item)
                       : (isUniqueSizeItem(item) ? renderUniqueQuantity(item) : `
                         <div class="flex items-center justify-between gap-2 mb-1.5">
-                          <span class="text-[10px] font-semibold text-gray-500">Quantidade por tamanho</span>
-                          <span class="text-[10px] font-bold text-gray-600">Adquirido: ${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))}</span>
+                          <span class="text-[10px] font-semibold text-gray-500">Por tamanho</span>
+                          <span class="text-[10px] font-bold text-gray-600">${getOwnedTotal(item)} ${itemUnitLabel(item, getOwnedTotal(item))} adquiridos</span>
                         </div>
                         <div class="grid grid-cols-5 gap-1.5">
                           ${getDisplaySizes(item).map(size => renderSizeCell(item, size)).join('')}
                         </div>`))))}
             </div>
 
-            <button onclick="openAcquisitionHistory('${item.id}')" class="w-full pt-2.5 pb-2.5 px-3 rounded-xl border border-emerald-100 bg-emerald-50/40 hover:bg-emerald-50 transition text-left flex items-center justify-between gap-3" aria-label="Ver aquisições do item">
-              <div class="min-w-0">
-                <span class="block text-xs font-bold text-gray-800">${acquisitions.length ? `${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição' : 'aquisições'}` : 'Nenhuma aquisição'}</span>
-                <span class="block text-[10px] text-gray-500 mt-0.5">Ver detalhes, editar ou excluir</span>
-              </div>
-              <div class="shrink-0 flex items-center gap-1.5">
-                <span class="text-[10px] font-semibold text-emerald-700">${purchaseTotal > 0 ? money(purchaseTotal) + ' pagos' : 'Sem gasto'}</span>
-                <i data-lucide="chevron-right" class="w-4 h-4 text-emerald-600"></i>
-              </div>
-            </button>
-
-            ${item.notes ? `<div class="bg-gray-50 rounded-xl p-2.5 text-[11px] text-gray-600">${escapeHtml(item.notes)}</div>` : ''}
+            ${acquisitionFooter}
           </div>`;
       }).join('');
       lucide.createIcons();
@@ -3734,18 +3755,12 @@
       if (isDisposableDiaperItem(item)) {
         const model = diaperStockModel();
         const totalStock = Number(model?.totalStock || 0);
-        return `<div class="border border-sky-100 bg-sky-50/40 rounded-xl p-3">
-          <span class="block text-[10px] font-bold text-sky-700 uppercase tracking-wide">Estoque de fraldas</span>
-          <p class="text-[10px] text-gray-600 mt-1">Compras, tamanho real e estoque estimado são acompanhados por RN/P/M/G/XG/XXG, sem prever quando ocorrerá a próxima troca de tamanho.</p>
-          <p class="text-[10px] font-semibold text-gray-700 mt-1">${model?.currentSize ? `Tamanho atual: ${escapeHtml(model.currentSize)} • ` : ''}${totalStock.toLocaleString('pt-BR')} fraldas em estoque${model?.autonomyDays == null ? '' : ` • ${compactNumber(model.autonomyDays)} dias`}</p>
-          <div class="flex items-center gap-2 mt-2">
-            <button onclick="openDiaperStock()" class="flex-1 h-8 px-3 rounded-lg bg-sky-600 text-white text-[10px] font-bold active:scale-95 transition">Ver estoque</button>
-            <button onclick="openDiaperPurchaseFromStock()" class="flex-1 h-8 px-3 rounded-lg bg-emerald-600 text-white text-[10px] font-bold active:scale-95 transition">Registrar compra</button>
-          </div>
+        return `<div class="cora-item-decision">
+          <div class="min-w-0"><strong>Fraldas</strong><span>${model?.currentSize ? `${escapeHtml(model.currentSize)} • ` : ''}${totalStock.toLocaleString('pt-BR')} em estoque${model?.autonomyDays == null ? '' : ` • ${compactNumber(model.autonomyDays)} dias`}</span></div>
+          <button type="button" onclick="openDiaperStock()" class="cora-item-compact-action">Abrir</button>
         </div>`;
       }
       const target = item?.recommendationSnapshot || {};
-      const acquisitions = getAcquisitions(item);
       const phases = Array.isArray(target.phases) ? target.phases : [];
       const phaseText = phases.length ? phases.map(p => {
         const rate = Number(p.unitsPerDay ?? p.benchmarkFullDisposableUnitsPerDay);
@@ -3754,14 +3769,8 @@
         const to = Number(p.toMonths || 0);
         return `${from}–${to}m: ${compactNumber(rate)} un/dia`;
       }).filter(Boolean).join(' • ') : '';
-      return `<div class="border border-sky-100 bg-sky-50/40 rounded-xl p-3">
-        <span class="block text-[10px] font-bold text-sky-700 uppercase tracking-wide">Consumo recorrente</span>
-        <p class="text-[10px] text-gray-600 mt-1">Este item não entra como uma meta fixa do enxoval. Estoque e custo ao longo do primeiro ano são acompanhados separadamente no Financeiro.</p>
-        ${phaseText ? `<p class="text-[10px] font-semibold text-gray-700 mt-1">Referência de uso: ${escapeHtml(phaseText)}</p>` : ''}
-        <div class="flex items-center justify-between gap-2 mt-2">
-          <span class="text-[10px] text-gray-500">${acquisitions.length ? `${acquisitions.length} ${acquisitions.length === 1 ? 'aquisição registrada' : 'aquisições registradas'}` : 'Nenhuma aquisição registrada'}</span>
-          <button onclick="openAcquisitionModalForItem('${item.id}')" class="shrink-0 h-8 px-3 rounded-lg bg-emerald-600 text-white text-[10px] font-bold active:scale-95 transition">Registrar aquisição</button>
-        </div>
+      return `<div class="cora-item-decision">
+        <div class="min-w-0"><strong>Consumo recorrente</strong>${phaseText ? `<span>${escapeHtml(phaseText)}</span>` : '<span>Acompanhado conforme as compras.</span>'}</div>
       </div>`;
     }
 
@@ -4236,6 +4245,37 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       }
     }
 
+    function openRoutineDecision(itemId) {
+      const item = appState.items.find(entry => entry.id === itemId);
+      if (!item) return;
+      const modal = document.getElementById('modalRoutineDecision');
+      if (!modal) return;
+      const current = appState.currentPlan?.inputSnapshot?.settings?.feedingMode || appState.childData?.enxoval?.settings?.feedingMode || 'undecided';
+      modal.dataset.itemId = itemId;
+      modal.querySelectorAll('input[name="routineFeedingMode"]').forEach(input => {
+        input.checked = input.value === current;
+      });
+      modal.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeRoutineDecision() {
+      const modal = document.getElementById('modalRoutineDecision');
+      if (!modal) return;
+      modal.classList.add('hidden');
+      modal.dataset.itemId = '';
+      if (!document.querySelector('.fixed.inset-0:not(.hidden), .fixed.inset-x-0:not(.hidden)')) {
+        document.body.classList.remove('modal-open');
+      }
+    }
+
+    async function saveRoutineDecision() {
+      const selected = document.querySelector('input[name="routineFeedingMode"]:checked');
+      if (!selected) return;
+      closeRoutineDecision();
+      await changeFeedingMode(selected.value);
+    }
+
     async function changeCurrentDiaperSize(ageMonth, value) {
       if (!globalThis.CoraV48Integration?.setDiaperSizeForAgeMonth) return alert('Integração de planejamento indisponível.');
       try {
@@ -4428,7 +4468,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
       container.innerHTML = items.length ? items.map(item => `
         <button onclick="openAcquisitionModalForItem('${item.id}')" class="w-full p-3 rounded-xl border border-gray-100 hover:bg-emerald-50 text-left flex items-center justify-between gap-3">
-          <span class="min-w-0"><strong class="block text-xs text-gray-900 truncate">${escapeHtml(item.name)}</strong><span class="block text-[10px] text-gray-500">${['suggested','deferred'].includes(itemPlanDisposition(item)) ? (itemPlanDisposition(item) === 'suggested' ? 'Sugestão • fora da meta atual' : 'Conforme sua rotina • meta a definir') : `Possui ${getOwnedTotal(item)} • Meta ${getTargetTotal(item)}`}</span></span>
+          <span class="min-w-0"><strong class="block text-xs text-gray-900 truncate">${escapeHtml(item.name)}</strong><span class="block text-[10px] text-gray-500">${['suggested','deferred'].includes(itemPlanDisposition(item)) ? (itemPlanDisposition(item) === 'suggested' ? 'Sugestão • fora da meta atual' : 'A decidir • sem meta') : `Possui ${getOwnedTotal(item)} • Meta ${getTargetTotal(item)}`}</span></span>
           <i data-lucide="chevron-right" class="w-4 h-4 text-gray-400 shrink-0"></i>
         </button>`).join('') : '<p class="text-xs text-gray-400 text-center py-6">Nenhum item encontrado.</p>';
       lucide.createIcons();
@@ -5867,6 +5907,39 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       .cat-card.is-selected { box-shadow:0 0 0 1px rgba(113,26,42,.10),0 4px 14px rgba(66,39,45,.035); }
     }
 
+    /* V4.9UI UI3.5A — refinamento do Enxoval */
+    body.modal-open { overflow:hidden; }
+    .category-donut-icon { background:color-mix(in srgb,var(--category-soft) 68%,#fff); }
+    .category-donut-icon svg { width:29px; height:29px; }
+    .cora-item-card { padding:14px; }
+    .cora-item-badge { display:inline-flex; align-items:center; min-height:19px; padding:2px 7px; border-radius:999px; background:#F4F0EF; color:#746A6C; font-size:9px; line-height:1; font-weight:700; }
+    .cora-item-badge.is-essential { background:#FFF0D8; color:#9A681A; }
+    .cora-item-badge.is-optional { background:#EEF7FA; color:#397489; }
+    .cora-item-badge.is-pending { background:#F2ECF7; color:#72558A; }
+    .cora-item-badge.is-complete { background:#EAF6EF; color:#39775A; }
+    .cora-item-reference { margin-top:5px; display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:9px; line-height:1.35; color:#8A8082; }
+    .cora-item-reference button { color:#8A2E42; font-weight:700; }
+    .cora-item-decision { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 11px; border-radius:14px; background:#FAF8F7; border:1px solid #EEE8E6; }
+    .cora-item-decision.is-optional { background:#F4F9FA; border-color:#E0EEF1; }
+    .cora-item-decision.is-pending { background:#F8F5FA; border-color:#ECE4F0; }
+    .cora-item-decision strong { display:block; color:#4A4143; font-size:10px; line-height:1.25; font-weight:750; }
+    .cora-item-decision span { display:block; margin-top:2px; color:#8A8082; font-size:9px; line-height:1.35; }
+    .cora-item-decision-actions { flex:0 0 auto; display:flex; align-items:center; gap:5px; }
+    .cora-item-decision-actions button, .cora-item-compact-action { min-height:31px; padding:0 10px; border-radius:10px; background:#fff; border:1px solid #E6DEDC; color:#695F61; font-size:9px; font-weight:750; white-space:nowrap; }
+    .cora-item-decision-actions button.is-primary { background:#711A2A; border-color:#711A2A; color:#fff; }
+    .cora-acquisition-row { width:100%; min-height:43px; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border-radius:13px; background:#F7FBF9; border:1px solid #E2EFE8; text-align:left; }
+    .cora-acquisition-row strong { display:block; color:#3F4843; font-size:10px; line-height:1.2; }
+    .cora-acquisition-row small { display:block; margin-top:2px; color:#88908B; font-size:9px; line-height:1.2; }
+    .cora-acquisition-row > span:last-child { display:flex; align-items:center; gap:4px; color:#477B61; font-size:9px; font-weight:700; }
+    .cora-acquisition-row svg { width:14px; height:14px; }
+    .cora-acquisition-empty { min-height:42px; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 7px 6px 10px; border-radius:13px; background:#FBFAF9; border:1px solid #EEE9E7; color:#948A8C; font-size:9px; }
+    .cora-acquisition-empty button { min-height:30px; padding:0 11px; border-radius:9px; background:#EEF7F3; color:#267251; font-size:9px; font-weight:750; }
+    .cora-routine-option { min-height:48px; display:flex; align-items:center; gap:11px; padding:10px 12px; border-radius:14px; border:1px solid #ECE5E3; background:#fff; cursor:pointer; }
+    .cora-routine-option:has(input:checked) { border-color:#B86C7B; background:#FFF5F6; box-shadow:0 0 0 1px rgba(113,26,42,.08); }
+    .cora-routine-option input { accent-color:#711A2A; }
+    .cora-routine-option strong { display:block; font-size:12px; color:#40383A; }
+    .cora-routine-option small { display:block; margin-top:1px; font-size:9px; color:#8A8082; }
+
     /* V4.9UI UI3.4 — Finanças */
     .cora-finance-overview { padding:17px; border-radius:22px; background:linear-gradient(145deg,#FFFFFF 0%,#FFF9F7 100%); border:1px solid rgba(113,26,42,.065); box-shadow:0 5px 20px rgba(66,39,45,.035); }
     .cora-finance-toggle { min-height:32px; display:inline-flex; align-items:center; gap:7px; padding:5px 9px 5px 6px; border-radius:999px; background:#F5EFED; color:#786D70; font-size:10px; line-height:1; font-weight:650; transition:.18s ease; }
@@ -5965,7 +6038,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       </button>
 
       <button id="toolDiaperCard" type="button" onclick="openDiaperStock()" class="cora-tool-card">
-        <span class="cora-tool-illustration bg-[#E4F0F1] text-[#47777B]" aria-hidden="true"><svg class="cora-diaper-glyph w-7 h-7" viewBox="0 0 24 24" fill="none"><path d="M4.5 6.5 9 8.4h6l4.5-1.9v6.7c0 4.6-3.3 7.8-7.5 7.8s-7.5-3.2-7.5-7.8V6.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 8.4c0 2.5-1.4 4.5-4.3 5.2M15 8.4c0 2.5 1.4 4.5 4.3 5.2M8.4 17c2.2-1.2 5-1.2 7.2 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <span class="cora-tool-illustration bg-[#E4F0F1] text-[#47777B]" aria-hidden="true"><svg class="cora-diaper-glyph w-8 h-8" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 8.5 12 11h8l6-2.5V18c0 5.8-4.3 10-10 10S6 23.8 6 18V8.5Z" fill="currentColor" opacity=".17"/><path d="M6 8.5 12 11h8l6-2.5V18c0 5.8-4.3 10-10 10S6 23.8 6 18V8.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 11c-.1 3.2-2 5.8-5.7 6.7M20 11c.1 3.2 2 5.8 5.7 6.7M11.5 23.2c2.8-1.5 6.2-1.5 9 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
         <span class="min-w-0 flex-1 text-left">
           <strong class="block text-[16px] font-semibold text-[#302A2B]">Fraldas</strong>
           <span id="toolDiaperMeta" class="block text-[12px] text-[#7C7476] mt-1">Estoque e consumo</span>
@@ -5986,7 +6059,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     <!-- SEÇÃO INTERNA: ENXOVAL -->
     <div id="sectionEnxoval" class="hidden space-y-4">
       <div class="cora-module-heading">
-        <button type="button" onclick="switchTab('ferramentas')" class="cora-back-button" aria-label="Voltar para Ferramentas"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+        <button type="button" onclick="switchTab('ferramentas', { resetTools: true })" class="cora-back-button" aria-label="Voltar para Ferramentas"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
         <div><h2 class="text-[21px] font-semibold tracking-[-0.02em] text-[#302A2B]">Enxoval</h2></div>
       </div>
 
@@ -6011,27 +6084,27 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       <!-- CATEGORIAS -->
       <div class="cora-category-grid" role="group" aria-label="Categorias do enxoval">
         <button type="button" data-category="vestuario" aria-pressed="true" onclick="filterCategory('vestuario')" class="cat-card" style="--category-color:#C84D6B;--category-soft:#FFF5F7">
-          <div id="catDonutVestuario" class="category-donut" data-color="#C84D6B"><div class="category-donut-icon" style="--category-color:#C84D6B"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.2 5.2 5.1 6.7 3.6 10l2.8 1.4V19h11.2v-7.6l2.8-1.4-1.5-3.3-3.1-1.5c-.8 1.3-2.1 2-3.8 2s-3-.7-3.8-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></div></div>
+          <div id="catDonutVestuario" class="category-donut" data-color="#C84D6B"><div class="category-donut-icon" style="--category-color:#C84D6B"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M11 6.2c1.3 1.8 3 2.7 5 2.7s3.8-.9 5-2.7l5 2.8-2.6 5-2.1-1.1V26H10.7V12.9L8.6 14 6 9l5-2.8Z" fill="currentColor" opacity=".18"/><path d="M11 6.2c1.3 1.8 3 2.7 5 2.7s3.8-.9 5-2.7l5 2.8-2.6 5-2.1-1.1V26H10.7V12.9L8.6 14 6 9l5-2.8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M13.2 23.5h5.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div></div>
           <span class="text-[12px] font-semibold text-[#3B3436]">Vestuário</span><span id="catBadgeVestuario" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
         <button type="button" data-category="quarto" aria-pressed="false" onclick="filterCategory('quarto')" class="cat-card" style="--category-color:#C98B2E;--category-soft:#FFFAEF">
-          <div id="catDonutQuarto" class="category-donut" data-color="#C98B2E"><div class="category-donut-icon" style="--category-color:#C98B2E"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 18V9.5M20 18V12M4 14h16M7 9.5h7a3 3 0 0 1 3 3V14H7V9.5Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 9.5V7.8h4.8c1.2 0 2.2.7 2.6 1.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div></div>
+          <div id="catDonutQuarto" class="category-donut" data-color="#C98B2E"><div class="category-donut-icon" style="--category-color:#C98B2E"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="5" y="12" width="22" height="10" rx="3.5" fill="currentColor" opacity=".16"/><path d="M6 24V11M26 24V14M6 19h20M10 11h8a4 4 0 0 1 4 4v4H10v-8Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11V8h6.3c1.8 0 3.4 1.2 3.8 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div></div>
           <span class="text-[12px] font-semibold text-[#3B3436]">Quarto</span><span id="catBadgeQuarto" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
         <button type="button" data-category="higiene" aria-pressed="false" onclick="filterCategory('higiene')" class="cat-card" style="--category-color:#4F83A7;--category-soft:#F3F9FC">
-          <div id="catDonutHigiene" class="category-donut" data-color="#4F83A7"><div class="category-donut-icon" style="--category-color:#4F83A7"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 11h16v2.2A5.8 5.8 0 0 1 14.2 19H9.8A5.8 5.8 0 0 1 4 13.2V11Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7 11V7.8A2.8 2.8 0 0 1 9.8 5h.4M6 19v1M18 19v1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div></div>
+          <div id="catDonutHigiene" class="category-donut" data-color="#4F83A7"><div class="category-donut-icon" style="--category-color:#4F83A7"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M5 15h22v3a8 8 0 0 1-8 8h-6a8 8 0 0 1-8-8v-3Z" fill="currentColor" opacity=".16"/><path d="M5 15h22v3a8 8 0 0 1-8 8h-6a8 8 0 0 1-8-8v-3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 15v-4.2A3.8 3.8 0 0 1 12.8 7H14M9 26v2M23 26v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="22" cy="8" r="2" fill="currentColor" opacity=".35"/><circle cx="26" cy="5" r="1.2" fill="currentColor" opacity=".24"/></svg></div></div>
           <span class="text-[12px] font-semibold text-[#3B3436]">Higiene</span><span id="catBadgeHigiene" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
         <button type="button" data-category="alimentacao" aria-pressed="false" onclick="filterCategory('alimentacao')" class="cat-card" style="--category-color:#4B9B83;--category-soft:#F2FAF7">
-          <div id="catDonutAlimentacao" class="category-donut" data-color="#4B9B83"><div class="category-donut-icon" style="--category-color:#4B9B83"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4h6M10 4v3l-2 2.2V18a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.2L14 7V4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 12h8" stroke="currentColor" stroke-width="1.7"/></svg></div></div>
+          <div id="catDonutAlimentacao" class="category-donut" data-color="#4B9B83"><div class="category-donut-icon" style="--category-color:#4B9B83"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M12 7h8l-1.3 4 3.3 4v9a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4v-9l3.3-4L12 7Z" fill="currentColor" opacity=".16"/><path d="M12 7h8M13.3 7 12 11l-2 3.5V24a4 4 0 0 0 4 4h4a4 4 0 0 0 4-4v-9.5L20 11l-1.3-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 18h12M13 4h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div></div>
           <span class="text-[12px] font-semibold text-[#3B3436]">Alimentação</span><span id="catBadgeAlimentacao" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
         <button type="button" data-category="passeio" aria-pressed="false" onclick="filterCategory('passeio')" class="cat-card" style="--category-color:#8066A4;--category-soft:#F8F5FC">
-          <div id="catDonutPasseio" class="category-donut" data-color="#8066A4"><div class="category-donut-icon" style="--category-color:#8066A4"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 8h9.5a3.5 3.5 0 0 1 3.5 3.5V14H8a2 2 0 0 1-2-2V8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7 8 5.5 5.5H4M9 14l-1.5 3h10L16 14M9 19h.01M17 19h.01" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div></div>
+          <div id="catDonutPasseio" class="category-donut" data-color="#8066A4"><div class="category-donut-icon" style="--category-color:#8066A4"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M10 10h11a6 6 0 0 1 6 6v2H12a4 4 0 0 1-4-4v-4h2Z" fill="currentColor" opacity=".16"/><path d="M8 10h13a6 6 0 0 1 6 6v2H12a4 4 0 0 1-4-4v-4ZM9 10 7 6H4M13 18l-2 5h12l-2-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="26" r="2" fill="currentColor"/><circle cx="22" cy="26" r="2" fill="currentColor"/></svg></div></div>
           <span class="text-[12px] font-semibold text-[#3B3436]">Passeio</span><span id="catBadgePasseio" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
         <button type="button" data-category="mamae" aria-pressed="false" onclick="filterCategory('mamae')" class="cat-card" style="--category-color:#B96869;--category-soft:#FFF6F5">
-          <div id="catDonutMamae" class="category-donut" data-color="#B96869"><div class="category-donut-icon" style="--category-color:#B96869"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10" cy="5.5" r="2.1" stroke="currentColor" stroke-width="1.7"/><path d="M8.4 9.2c-1.3 1.8-1.8 4.1-1.2 6.3.5 1.9 2 3.4 4 3.9M10 9c2.5.4 4.3 1.8 5 4.1.8 2.7-.5 5.3-3 6.5M12.2 12.4c2.4-.4 4.5.7 5.2 2.5.7 1.7-.2 3.4-1.8 4.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div></div>
+          <div id="catDonutMamae" class="category-donut" data-color="#B96869"><div class="category-donut-icon" style="--category-color:#B96869"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="13" cy="7" r="3" fill="currentColor" opacity=".22"/><circle cx="20.5" cy="17" r="3.2" fill="currentColor" opacity=".32"/><path d="M10 11c-2.4 3-3 7.2-1.4 10.5 1.7 3.5 5.3 5.5 9.1 5M13 11c4 .6 6.8 2.8 7.7 6.2.9 3.5-.7 6.8-3.8 8.6M16 18c1.8 2.1 4.1 3.1 6.8 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div></div>
           <span class="text-[12px] font-semibold text-[#3B3436]">Mamãe</span><span id="catBadgeMamae" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
       </div>
@@ -6050,11 +6123,6 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         </select>
       </div>
 
-      <!-- DICA DA CATEGORIA SELECCIONADA -->
-      <div id="categoryTipBox" class="cora-category-tip text-xs flex items-start gap-2">
-        <i data-lucide="lightbulb" class="w-4 h-4 text-[#A27A35] shrink-0 mt-0.5"></i>
-        <p id="categoryTipText">Para o RJ em Fev: Dê prioridade a tecidos 100% algodão bem leves para o dia e manga longa fina para o ar-condicionado.</p>
-      </div>
 
       <!-- LISTA DINÂMICA DE ITENS (CARDS COM STEPPER POR TAMANHO) -->
       <div id="itemsContainer" class="space-y-4">
@@ -6065,7 +6133,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     <!-- SEÇÃO: MALA DA MATERNIDADE -->
     <div id="sectionMaternidade" class="hidden space-y-4">
       <div class="cora-module-heading">
-        <button type="button" onclick="switchTab('ferramentas')" class="cora-back-button" aria-label="Voltar para Ferramentas"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+        <button type="button" onclick="switchTab('ferramentas', { resetTools: true })" class="cora-back-button" aria-label="Voltar para Ferramentas"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
         <div><h2 class="text-[21px] font-semibold tracking-[-0.02em] text-[#302A2B]">Maternidade</h2></div>
       </div>
       <div class="bg-white rounded-2xl border border-rose-100 p-4 shadow-xs">
@@ -6194,7 +6262,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         <i data-lucide="house" class="w-[21px] h-[21px]"></i>
         <span class="nav-label" aria-hidden="false">Início</span>
       </button>
-      <button type="button" onclick="switchTab('ferramentas')" id="navBtnFerramentas" class="cora-nav-item" aria-label="Ferramentas" aria-current="false">
+      <button type="button" onclick="openToolsTab()" id="navBtnFerramentas" class="cora-nav-item" aria-label="Ferramentas" aria-current="false">
         <i data-lucide="layout-grid" class="w-[21px] h-[21px]"></i>
         <span class="nav-label" aria-hidden="true">Ferramentas</span>
       </button>
@@ -6259,7 +6327,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
               <option value="essential">Essencial</option>
               <option value="recommended">Vale a pena ter</option>
               <option value="optional">Opcional</option>
-              <option value="conditional">Conforme sua rotina</option>
+              <option value="conditional">Depende da rotina</option>
             </select>
           </div>
         </div>
@@ -6746,6 +6814,23 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
   </div>
 
   <!-- Cora Engine — motor de planejamento -->
+  <div id="modalRoutineDecision" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-[84] hidden flex items-end sm:items-center justify-center p-0 sm:p-4" onclick="if(event.target===this) closeRoutineDecision()">
+    <div class="w-full sm:max-w-md bg-white rounded-t-[26px] sm:rounded-[24px] p-5 pb-7 shadow-2xl">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <div><h3 class="text-[18px] font-semibold text-[#302A2B]">Rotina de alimentação</h3><p class="text-[11px] text-[#7C7476] mt-1">Isso ajusta os itens que fazem sentido no enxoval.</p></div>
+        <button type="button" onclick="closeRoutineDecision()" class="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400" aria-label="Fechar"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="space-y-2">
+        <label class="cora-routine-option"><input type="radio" name="routineFeedingMode" value="undecided"><span><strong>Ainda não sei</strong><small>Decidir depois</small></span></label>
+        <label class="cora-routine-option"><input type="radio" name="routineFeedingMode" value="direct_breastfeeding"><span><strong>Amamentação direta</strong></span></label>
+        <label class="cora-routine-option"><input type="radio" name="routineFeedingMode" value="expressed_milk"><span><strong>Leite ordenhado</strong></span></label>
+        <label class="cora-routine-option"><input type="radio" name="routineFeedingMode" value="mixed"><span><strong>Misto</strong></span></label>
+        <label class="cora-routine-option"><input type="radio" name="routineFeedingMode" value="formula"><span><strong>Fórmula</strong></span></label>
+      </div>
+      <button type="button" onclick="saveRoutineDecision()" class="mt-4 w-full h-11 rounded-xl bg-[#711A2A] text-white text-sm font-semibold">Aplicar</button>
+    </div>
+  </div>
+
   <div id="modalPriceReferences" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[85] hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto shadow-2xl">
       <div class="sticky top-0 bg-white px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between gap-3">
@@ -6762,7 +6847,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
   <script src="/cora-engine/engine-browser.js"></script>
   <script src="/cora-engine/integration-core.js?v=4.8f4.3a8"></script>
-  <script src="/cora-engine/integration-ui.js?v=4.8f4.3"></script>
+  <script src="/cora-engine/integration-ui.js?v=4.9ui3.5a"></script>
 
 </body>
 </html>
