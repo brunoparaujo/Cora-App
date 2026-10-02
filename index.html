@@ -3995,64 +3995,29 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     }
 
     function renderBudgetDonut(categoryData, totalPlanned, totalSpent) {
-      const chart = document.getElementById('orcamentoDonut');
       const bars = document.getElementById('orcamentoCategorias');
-      const status = document.getElementById('orcamentoDonutStatus');
-      if (!chart || !bars) return;
+      const status = document.getElementById('financeBudgetStatus');
+      const fillEl = document.getElementById('financeBudgetProgressFill');
+      if (!bars) return;
 
       const planned = Math.max(0, Number(totalPlanned) || 0);
       const spent = Math.max(0, Number(totalSpent) || 0);
       const hasPlanned = planned > 0;
-      const hasAny = categoryData.some(c => (Number(c.planned) || 0) > 0 || (Number(c.suggested) || 0) > 0 || (Number(c.spent) || 0) > 0);
+      const rawProgress = hasPlanned ? (spent / planned) * 100 : 0;
+      const progress = Math.min(Math.max(rawProgress, 0), 100);
+      const over = hasPlanned && spent > planned;
 
-      if (!hasAny) {
-        chart.innerHTML = '<div class="donut-empty"><strong>Sem dados</strong><span>adicione estimativas ou aquisições</span></div>';
-        if (status) status.innerText = '';
-      } else {
-        const rawProgress = hasPlanned ? (spent / planned) * 100 : 0;
-        const progress = Math.min(Math.max(rawProgress, 0), 100);
-        const over = hasPlanned && spent > planned;
-        const overAmount = over ? spent - planned : 0;
-        const centerStrong = hasPlanned ? `${Math.round(rawProgress)}%` : money(spent);
-        const centerSub = hasPlanned ? `${money(spent)} de ${money(planned)}` : 'sem orçamento';
-        const radius = 53;
-        const circumference = 2 * Math.PI * radius;
-        const dash = hasPlanned ? (circumference * progress / 100) : 0;
-
-        chart.innerHTML = `
-          <svg class="budget-donut-svg" viewBox="0 0 140 140" role="img" aria-label="${escapeHtml(centerSub)}">
-            <circle cx="70" cy="70" r="${radius}" fill="none" stroke="rgba(225,29,72,0.16)" stroke-width="18"></circle>
-            <circle cx="70" cy="70" r="${radius}" fill="none" stroke="#e11d48" stroke-width="18" stroke-linecap="butt"
-              stroke-dasharray="${dash} ${circumference}" transform="rotate(-90 70 70)" class="budget-donut-progress"></circle>
-            ${over ? '<circle cx="70" cy="70" r="62" fill="none" stroke="#be123c" stroke-width="3"></circle>' : ''}
-          </svg>
-          <div class="budget-total-center">
-            <strong>${centerStrong}</strong>
-            <span>${centerSub}</span>
-          </div>`;
-
-        if (status) {
-          if (!hasPlanned) {
-            status.innerText = spent > 0 ? `${money(spent)} gastos • sem orçamento` : 'Nenhum orçamento definido';
-            status.className = 'text-[10px] font-semibold text-gray-500 text-center';
-          } else if (over) {
-            status.innerText = `${money(overAmount)} acima do planejado`;
-            status.className = 'text-[10px] font-semibold text-rose-700 text-center';
-          } else {
-            status.innerText = `${money(planned - spent)} restantes`;
-            status.className = 'text-[10px] font-semibold text-emerald-700 text-center';
-          }
-        }
+      if (fillEl) {
+        fillEl.style.width = `${progress}%`;
+        fillEl.classList.toggle('is-over', over);
+      }
+      if (status) {
+        if (!hasPlanned) status.textContent = 'Sem orçamento definido';
+        else status.textContent = `${Math.round(rawProgress)}% utilizado`;
       }
 
       const rows = categoryData.filter(c => (Number(c.planned) || 0) > 0 || (Number(c.suggested) || 0) > 0 || (Number(c.spent) || 0) > 0);
-      bars.innerHTML = rows.length ? `
-        <div class="flex items-center justify-center gap-4 pb-2 text-[9px] text-gray-500">
-          <span class="inline-flex items-center gap-1"><span class="legend-swatch legend-light"></span>Planejado</span>
-          <span class="inline-flex items-center gap-1"><span class="legend-swatch legend-dark"></span>Gasto</span>
-          <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-sky-200"></span>Sugerido</span>
-        </div>
-      ` + rows.map(c => {
+      bars.innerHTML = rows.length ? rows.map(c => {
         const catPlanned = Math.max(0, Number(c.planned) || 0);
         const catSpent = Math.max(0, Number(c.spent) || 0);
         const catSuggested = Math.max(0, Number(c.suggested) || 0);
@@ -4060,24 +4025,23 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         const pct = hasCatPlanned ? Math.min((catSpent / catPlanned) * 100, 100) : 0;
         const over = hasCatPlanned && catSpent > catPlanned;
         const diff = catPlanned - catSpent;
-        const bg = rgba(c.color, 0.16);
+        const bg = rgba(c.color, 0.13);
         const fill = c.color;
         let detail;
-        if (!hasCatPlanned) detail = `${money(catSpent)} gastos • sem orçamento`;
-        else if (over) detail = `${money(catSpent)} gastos • ${money(Math.abs(diff))} acima`;
-        else detail = `${money(catSpent)} gastos • ${money(diff)} restantes`;
-        const detailClass = !hasCatPlanned ? 'text-gray-400' : over ? 'text-rose-700' : 'text-emerald-700';
-        const barStyle = hasCatPlanned ? `background:${bg}; --bar-fill:${fill};` : 'background:repeating-linear-gradient(90deg,#e5e7eb 0 6px,transparent 6px 10px); --bar-fill:#9ca3af;';
+        if (!hasCatPlanned) detail = catSpent > 0 ? `${money(catSpent)} gastos` : 'Sem orçamento definido';
+        else if (over) detail = `${money(Math.abs(diff))} acima do planejado`;
+        else detail = `${money(diff)} restantes`;
+        const detailClass = !hasCatPlanned ? 'text-[#9A9092]' : over ? 'text-[#9A3349]' : 'text-[#6E7567]';
+        const barStyle = hasCatPlanned ? `background:${bg}; --bar-fill:${fill};` : 'background:#F0E9E8; --bar-fill:#AFA5A7;';
         return `<div class="finance-category-row">
           <div class="flex items-center justify-between gap-2">
-            <span class="font-bold text-[11px] text-gray-700">${c.label}</span>
-            <span class="text-[10px] font-semibold text-gray-500">${hasCatPlanned ? `${money(catSpent)} / ${money(catPlanned)}` : money(catSpent)}</span>
+            <span class="font-semibold text-[12px] text-[#4A4143]">${c.label}</span>
+            <span class="text-[11px] font-semibold text-[#6F6668]">${hasCatPlanned ? `${money(catSpent)} / ${money(catPlanned)}` : money(catSpent)}</span>
           </div>
           <div class="finance-bar" style="${barStyle}"><div class="finance-bar-fill" style="width:${pct}%;"></div>${over ? '<div class="finance-bar-over"></div>' : ''}</div>
-          <div class="text-[9px] ${detailClass} mt-1">${detail}</div>
-          ${catSuggested > 0 ? `<div class="text-[9px] text-sky-700 mt-0.5">+ ${money(catSuggested)} em sugestões</div>` : ''}
+          <div class="text-[10px] ${detailClass} mt-1">${detail}${catSuggested > 0 ? ` · + ${money(catSuggested)} em sugestões` : ''}</div>
         </div>`;
-      }).join('') : '<p class="text-[11px] text-gray-400 text-center py-2">Nenhum orçamento ou gasto registrado.</p>';
+      }).join('') : '<p class="text-[12px] text-[#9A9092] text-center py-5">Nenhum orçamento ou gasto registrado.</p>';
     }
 
     function formatTimelineDate(dateIso) {
@@ -4153,7 +4117,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const timeline = Core.buildOperationalPurchaseTimeline(plan, appState.items, localTodayIso());
       if (noteEl) {
         const refLabel = timeline.referenceDateSource === 'birthDate' ? 'data de nascimento' : 'DPP';
-        noteEl.textContent = `Estimativa do que ainda falta comprar, usando ${refLabel}, fase de uso e antecedência recomendada. Compras já registradas reduzem o valor futuro estimado.`;
+        noteEl.textContent = `O que ainda falta comprar, considerando ${refLabel} e as compras já registradas.`;
       }
       const order = ['buy_now', 'next_phase', 'planned_later', 'when_needed'];
       bucketsEl.innerHTML = order.map(key => {
@@ -4319,10 +4283,27 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       document.getElementById('resumoSugerido').innerText = money(suggestedTotal);
       document.getElementById('resumoOrcamentoTotalGeral').innerText = money(totalBudget);
       document.getElementById('resumoGastoReal').innerText = money(spent);
-      document.getElementById('resumoPecasCompradas').innerText = `${purchasedPieces} ${purchasedPieces === 1 ? 'unidade de compra paga' : 'unidades de compra pagas'}`;
-      document.getElementById('resumoQtdAquisicoes').innerText = `${acquisitionCount} ${acquisitionCount === 1 ? 'aquisição' : 'aquisições'}`;
-      document.getElementById('resumoOrcamentoTotal').innerText = plannedTotal > 0 ? `${money(spent)} de ${money(plannedTotal)} planejados` : 'sem orçamento planejado';
-      document.getElementById('resumoOrcamentoDetalhe').innerText = `${estimatedItemCount} planejados com estimativa • ${suggestedItemCount} sugestões com estimativa`;
+      const remainingLabel = document.getElementById('resumoRestanteLabel');
+      const remainingValue = document.getElementById('resumoRestante');
+      if (remainingValue) {
+        if (plannedTotal <= 0) {
+          remainingValue.innerText = '—';
+          remainingValue.classList.remove('is-over');
+          if (remainingLabel) remainingLabel.innerText = 'Restante';
+        } else if (remaining >= 0) {
+          remainingValue.innerText = money(remaining);
+          remainingValue.classList.remove('is-over');
+          if (remainingLabel) remainingLabel.innerText = 'Restante';
+        } else {
+          remainingValue.innerText = money(Math.abs(remaining));
+          remainingValue.classList.add('is-over');
+          if (remainingLabel) remainingLabel.innerText = 'Acima do planejado';
+        }
+      }
+      document.getElementById('resumoPecasCompradas')?.replaceChildren(document.createTextNode(`${purchasedPieces} ${purchasedPieces === 1 ? 'unidade de compra paga' : 'unidades de compra pagas'}`));
+      document.getElementById('resumoQtdAquisicoes')?.replaceChildren(document.createTextNode(`${acquisitionCount} ${acquisitionCount === 1 ? 'aquisição' : 'aquisições'}`));
+      document.getElementById('resumoOrcamentoTotal')?.replaceChildren(document.createTextNode(plannedTotal > 0 ? `${money(spent)} de ${money(plannedTotal)} planejados` : 'sem orçamento planejado'));
+      document.getElementById('resumoOrcamentoDetalhe')?.replaceChildren(document.createTextNode(`${estimatedItemCount} planejados com estimativa • ${suggestedItemCount} sugestões com estimativa`));
 
       const categoryFinanceData = getCategoryFinanceData();
       renderBudgetDonut(categoryFinanceData, plannedTotal, spent);
@@ -5820,6 +5801,36 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .cora-nav-item.is-active { color:var(--cora-wine); }
     .cora-nav-item.is-active .nav-label { opacity:1; transform:translateY(0); }
 
+
+    /* V4.9UI UI3.4 — Finanças */
+    .cora-finance-overview { padding:17px; border-radius:22px; background:linear-gradient(145deg,#FFFFFF 0%,#FFF9F7 100%); border:1px solid rgba(113,26,42,.065); box-shadow:0 5px 20px rgba(66,39,45,.035); }
+    .cora-finance-main-grid { display:grid; grid-template-columns:1.15fr 1fr 1fr; gap:8px; }
+    .cora-finance-metric { min-width:0; padding:11px 10px; border-radius:15px; background:#FAF7F5; }
+    .cora-finance-metric-primary { background:#FBE9E8; }
+    .cora-finance-metric span { display:block; font-size:9px; line-height:1.15; color:#887E80; font-weight:650; }
+    .cora-finance-metric strong { display:block; margin-top:5px; font-size:13px; line-height:1.15; color:#3A3133; letter-spacing:-.015em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .cora-finance-metric-primary strong { color:var(--cora-wine); }
+    #resumoRestante.is-over { color:#A43B50; }
+    .cora-finance-progress { height:6px; overflow:hidden; border-radius:999px; background:#EFE7E5; margin-top:13px; }
+    .cora-finance-progress span { display:block; height:100%; width:0; border-radius:999px; background:var(--cora-wine); transition:width .25s ease; }
+    .cora-finance-progress span.is-over { background:#B13C53; }
+    .cora-finance-secondary-row { margin-top:11px; display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:10px; color:#8A8082; }
+    .cora-finance-secondary-row strong { color:#5C5153; font-weight:650; }
+    .cora-finance-section { padding:16px; border-radius:21px; background:#fff; border:1px solid rgba(113,26,42,.055); box-shadow:0 4px 16px rgba(66,39,45,.03); }
+    .cora-finance-section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; color:#8A2E42; }
+    .cora-finance-section-head h3 { margin-top:2px; font-size:15px; line-height:1.15; font-weight:650; color:#3A3133; }
+    .cora-finance-section-kicker { display:block; font-size:9px; line-height:1; text-transform:uppercase; letter-spacing:.08em; color:#9A7E84; font-weight:700; }
+    .cora-finance-note { margin-top:6px; font-size:10px; line-height:1.4; color:#8A8082; }
+    #purchaseTimelineBuckets > div { border-radius:15px !important; padding:10px !important; }
+    .cora-finance-disclosure { border-top:1px solid #F0E8E7; padding-top:10px; }
+    .cora-finance-disclosure summary { list-style:none; display:flex; align-items:center; justify-content:space-between; gap:10px; color:#675D5F; font-size:11px; font-weight:650; cursor:pointer; }
+    .cora-finance-disclosure summary::-webkit-details-marker { display:none; }
+    .cora-finance-disclosure[open] summary svg { transform:rotate(180deg); }
+    .cora-finance-disclosure summary svg { transition:transform .18s ease; }
+    .cora-finance-acquisitions { padding-top:14px; padding-bottom:14px; }
+    #recurringExpenses > button { border-color:#E5EEEE !important; background:#F8FBFB !important; box-shadow:none !important; }
+    #listaDetalhadaCompras > div { background:#FAF8F7 !important; border-color:#F0E8E7 !important; border-radius:14px !important; }
+
 </style>
 </head>
 <body class="bg-[#FCF7F1] text-gray-800 font-sans pb-24 min-h-screen">
@@ -6014,78 +6025,93 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       </div>
     </div>
 
-    <!-- SEÇÃO: FINANCEIRO -->
+    <!-- UI3.4 — FINANÇAS: resumo primeiro, detalhes por progressão -->
     <div id="sectionResumo" class="hidden space-y-4">
-      <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-xs">
-        <div class="rounded-2xl border border-rose-100 bg-rose-50/30 p-3 space-y-3">
-          <div class="grid grid-cols-2 gap-2">
-            <div class="bg-white/80 border border-gray-100 rounded-xl p-2.5">
-              <span class="block text-[9px] text-gray-400 uppercase font-bold">Planejado</span>
-              <strong id="resumoPlanejado" class="block text-sm text-gray-900 mt-0.5">R$ 0,00</strong>
-            </div>
-            <div class="bg-sky-50/80 border border-sky-100 rounded-xl p-2.5">
-              <span class="block text-[9px] text-sky-600 uppercase font-bold">Sugerido</span>
-              <strong id="resumoSugerido" class="block text-sm text-sky-800 mt-0.5">R$ 0,00</strong>
-            </div>
-            <div class="bg-white/80 border border-gray-100 rounded-xl p-2.5">
-              <span class="block text-[9px] text-gray-400 uppercase font-bold">Orçamento total</span>
-              <strong id="resumoOrcamentoTotalGeral" class="block text-sm text-gray-900 mt-0.5">R$ 0,00</strong>
-            </div>
-            <div class="bg-emerald-50/80 border border-emerald-100 rounded-xl p-2.5">
-              <span class="block text-[9px] text-emerald-600 uppercase font-bold">Gasto</span>
-              <strong id="resumoGastoReal" class="block text-sm text-emerald-800 mt-0.5">R$ 0,00</strong>
-            </div>
+      <section class="cora-finance-overview" aria-label="Resumo financeiro">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div><span class="cora-eyebrow">Orçamento</span></div>
+          <span id="financeBudgetStatus" class="text-[11px] font-semibold text-[#766D70]"></span>
+        </div>
+
+        <div class="cora-finance-main-grid">
+          <div class="cora-finance-metric cora-finance-metric-primary">
+            <span>Planejado</span>
+            <strong id="resumoPlanejado">R$ 0,00</strong>
           </div>
-          <div class="flex items-center gap-4">
-            <div class="shrink-0"><div id="orcamentoDonut" class="donut-chart" aria-label="Progresso do gasto em relação ao orçamento planejado"></div></div>
-            <div class="min-w-0 flex-1">
-              <p id="resumoOrcamentoTotal" class="text-xs font-semibold text-gray-600">sem orçamento planejado</p>
-              <p id="orcamentoDonutStatus" class="text-[10px] font-semibold mt-2 text-gray-500"></p>
-            </div>
+          <div class="cora-finance-metric">
+            <span>Gasto</span>
+            <strong id="resumoGastoReal">R$ 0,00</strong>
           </div>
-          <div class="flex items-center justify-between gap-2 text-[9px] text-gray-400">
-            <span id="resumoOrcamentoDetalhe">0 itens com estimativa</span>
-            <span id="resumoQtdAquisicoes">0 aquisições</span>
-            <span id="resumoPecasCompradas">0 peças pagas</span>
+          <div class="cora-finance-metric">
+            <span id="resumoRestanteLabel">Restante</span>
+            <strong id="resumoRestante">R$ 0,00</strong>
           </div>
         </div>
 
-        <div class="mt-5">
-          <div class="flex items-center justify-between mb-1">
-            <h3 class="text-xs font-bold text-gray-700">Por categoria</h3>
-            <span class="text-[9px] text-gray-400">gasto / planejado</span>
-          </div>
-          <div id="orcamentoCategorias" class="divide-y divide-gray-100"></div>
+        <div class="cora-finance-progress" aria-hidden="true"><span id="financeBudgetProgressFill"></span></div>
+
+        <div class="cora-finance-secondary-row">
+          <span>Sugestões <strong id="resumoSugerido">R$ 0,00</strong></span>
+          <span>Com sugestões <strong id="resumoOrcamentoTotalGeral">R$ 0,00</strong></span>
         </div>
 
-        <div id="financePurchaseTimeline" class="mt-5 border-t border-gray-100 pt-4 scroll-mt-20">
-          <div class="flex items-center justify-between gap-2">
-            <h3 class="text-xs font-bold text-gray-700 flex items-center gap-1.5"><i data-lucide="calendar-days" class="w-4 h-4 text-rose-500"></i> Quando comprar</h3>
-            <span class="text-[9px] text-gray-400">restante estimado</span>
+        <div class="hidden" aria-hidden="true">
+          <span id="resumoOrcamentoTotal"></span>
+          <span id="resumoOrcamentoDetalhe"></span>
+          <span id="resumoQtdAquisicoes"></span>
+          <span id="resumoPecasCompradas"></span>
+          <span id="orcamentoDonutStatus"></span>
+        </div>
+      </section>
+
+      <section id="financePurchaseTimeline" class="cora-finance-section scroll-mt-20">
+        <div class="cora-finance-section-head">
+          <div>
+            <span class="cora-finance-section-kicker">Próximos gastos</span>
+            <h3>Quando comprar</h3>
           </div>
-          <p id="purchaseTimelineNote" class="text-[9px] text-gray-500 mt-1 leading-relaxed"></p>
-          <div id="purchaseTimelineBuckets" class="grid grid-cols-2 gap-2 mt-3"></div>
-          <div class="mt-4 flex items-center justify-between gap-2">
-            <h4 class="text-[10px] font-bold text-gray-700">Linha do tempo de desembolso</h4>
-            <span class="text-[9px] text-gray-400">0–12 meses</span>
-          </div>
+          <i data-lucide="calendar-days" class="w-[19px] h-[19px]"></i>
+        </div>
+        <p id="purchaseTimelineNote" class="cora-finance-note"></p>
+        <div id="purchaseTimelineBuckets" class="grid grid-cols-2 gap-2.5 mt-3"></div>
+        <details class="cora-finance-disclosure mt-3">
+          <summary><span>Linha do tempo de desembolso</span><i data-lucide="chevron-down" class="w-4 h-4"></i></summary>
           <div id="purchaseTimelineMonths" class="space-y-2 mt-2"></div>
-          <p class="text-[9px] text-gray-400 mt-2">A linha do tempo considera compras do enxoval e estoque inicial. Custos de consumo recorrente ficam separados.</p>
-        </div>
+        </details>
+      </section>
 
-        <div class="mt-5 border-t border-gray-100 pt-4">
-          <h3 class="text-xs font-bold text-gray-700 flex items-center gap-1.5"><i data-lucide="repeat-2" class="w-4 h-4 text-sky-600"></i> Consumo recorrente</h3>
-          <div id="recurringExpenses" class="space-y-2 mt-3"></div>
+      <section class="cora-finance-section">
+        <div class="cora-finance-section-head">
+          <div>
+            <span class="cora-finance-section-kicker">Distribuição</span>
+            <h3>Por categoria</h3>
+          </div>
+          <span class="text-[10px] text-[#9A9092]">gasto / planejado</span>
         </div>
+        <div id="orcamentoCategorias" class="divide-y divide-[#F0E8E7] mt-1"></div>
+      </section>
 
-        <div class="mt-5 border-t border-gray-100 pt-3">
-          <button id="toggleAquisiçõesBtn" type="button" onclick="toggleFinanceAcquisitions()" class="w-full flex items-center justify-between text-left py-1">
-            <span class="text-xs font-bold text-gray-700">Aquisições</span>
-            <span class="flex items-center gap-1 text-[10px] font-semibold text-gray-500"><span id="toggleAquisiçõesText">Ver lista</span><i id="toggleAquisiçõesIcon" data-lucide="chevron-down" class="w-4 h-4"></i></span>
-          </button>
-          <div id="listaDetalhadaCompras" class="space-y-2 max-h-96 overflow-y-auto pr-1 no-scrollbar hidden mt-2"></div>
+      <section class="cora-finance-section">
+        <div class="cora-finance-section-head">
+          <div>
+            <span class="cora-finance-section-kicker">Dia a dia</span>
+            <h3>Recorrentes</h3>
+          </div>
+          <i data-lucide="repeat-2" class="w-[19px] h-[19px]"></i>
         </div>
-      </div>
+        <div id="recurringExpenses" class="space-y-2.5 mt-2"></div>
+      </section>
+
+      <section class="cora-finance-section cora-finance-acquisitions">
+        <button id="toggleAquisiçõesBtn" type="button" onclick="toggleFinanceAcquisitions()" class="w-full flex items-center justify-between text-left">
+          <div>
+            <span class="cora-finance-section-kicker">Histórico</span>
+            <strong class="block text-[15px] font-semibold text-[#3A3133] mt-0.5">Aquisições</strong>
+          </div>
+          <span class="flex items-center gap-1 text-[11px] font-semibold text-[#7C7476]"><span id="toggleAquisiçõesText">Ver lista</span><i id="toggleAquisiçõesIcon" data-lucide="chevron-down" class="w-4 h-4"></i></span>
+        </button>
+        <div id="listaDetalhadaCompras" class="space-y-2 max-h-96 overflow-y-auto pr-1 no-scrollbar hidden mt-3"></div>
+      </section>
     </div>
 
   </main>
