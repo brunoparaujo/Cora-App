@@ -3994,27 +3994,79 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
 
-    function renderBudgetDonut(categoryData, totalPlanned, totalSpent) {
-      const bars = document.getElementById('orcamentoCategorias');
+    let financeIncludeOptionals = false;
+    let financeOverviewValues = { planned: 0, suggested: 0, spent: 0 };
+
+    function updateFinanceOverview() {
+      const planned = Math.max(0, Number(financeOverviewValues.planned) || 0);
+      const suggested = Math.max(0, Number(financeOverviewValues.suggested) || 0);
+      const spent = Math.max(0, Number(financeOverviewValues.spent) || 0);
+      const budget = planned + (financeIncludeOptionals ? suggested : 0);
+      const hasBudget = budget > 0;
+      const rawProgress = hasBudget ? (spent / budget) * 100 : 0;
+      const progress = Math.min(Math.max(rawProgress, 0), 100);
+      const remaining = budget - spent;
+      const over = hasBudget && remaining < 0;
+
+      const donut = document.getElementById('financeBudgetDonut');
+      if (donut) {
+        const ringColor = over ? '#B13C53' : '#711A2A';
+        donut.style.background = `conic-gradient(${ringColor} ${progress * 3.6}deg, #EFE7E5 0deg)`;
+        donut.classList.toggle('is-over', over);
+        donut.setAttribute('aria-label', hasBudget
+          ? `${Math.round(rawProgress)}% do orçamento ${financeIncludeOptionals ? 'com opcionais' : 'sem opcionais'} utilizado`
+          : `Sem orçamento ${financeIncludeOptionals ? 'com opcionais' : 'sem opcionais'} definido`);
+      }
+
       const status = document.getElementById('financeBudgetStatus');
-      const fillEl = document.getElementById('financeBudgetProgressFill');
+      const statusLabel = document.getElementById('financeBudgetStatusLabel');
+      if (status) status.textContent = hasBudget ? `${Math.round(rawProgress)}%` : '—';
+      if (statusLabel) statusLabel.textContent = hasBudget ? 'utilizado' : 'sem orçamento';
+
+      const budgetValue = document.getElementById('resumoPlanejado');
+      if (budgetValue) budgetValue.innerText = money(budget);
+      const spentValue = document.getElementById('resumoGastoReal');
+      if (spentValue) spentValue.innerText = money(spent);
+      const remainingLabel = document.getElementById('resumoRestanteLabel');
+      const remainingValue = document.getElementById('resumoRestante');
+      if (remainingValue) {
+        if (!hasBudget) {
+          remainingValue.innerText = '—';
+          remainingValue.classList.remove('is-over');
+          if (remainingLabel) remainingLabel.innerText = 'Restante';
+        } else if (!over) {
+          remainingValue.innerText = money(remaining);
+          remainingValue.classList.remove('is-over');
+          if (remainingLabel) remainingLabel.innerText = 'Restante';
+        } else {
+          remainingValue.innerText = money(Math.abs(remaining));
+          remainingValue.classList.add('is-over');
+          if (remainingLabel) remainingLabel.innerText = 'Acima';
+        }
+      }
+
+      const toggle = document.getElementById('financeOptionalsToggle');
+      if (toggle) {
+        toggle.setAttribute('aria-pressed', financeIncludeOptionals ? 'true' : 'false');
+        toggle.classList.toggle('is-active', financeIncludeOptionals);
+      }
+    }
+
+    function toggleFinanceOptionals() {
+      financeIncludeOptionals = !financeIncludeOptionals;
+      updateFinanceOverview();
+    }
+
+    function renderBudgetDonut(categoryData, totalPlanned, totalSuggested, totalSpent) {
+      const bars = document.getElementById('orcamentoCategorias');
       if (!bars) return;
 
-      const planned = Math.max(0, Number(totalPlanned) || 0);
-      const spent = Math.max(0, Number(totalSpent) || 0);
-      const hasPlanned = planned > 0;
-      const rawProgress = hasPlanned ? (spent / planned) * 100 : 0;
-      const progress = Math.min(Math.max(rawProgress, 0), 100);
-      const over = hasPlanned && spent > planned;
-
-      if (fillEl) {
-        fillEl.style.width = `${progress}%`;
-        fillEl.classList.toggle('is-over', over);
-      }
-      if (status) {
-        if (!hasPlanned) status.textContent = 'Sem orçamento definido';
-        else status.textContent = `${Math.round(rawProgress)}% utilizado`;
-      }
+      financeOverviewValues = {
+        planned: Math.max(0, Number(totalPlanned) || 0),
+        suggested: Math.max(0, Number(totalSuggested) || 0),
+        spent: Math.max(0, Number(totalSpent) || 0)
+      };
+      updateFinanceOverview();
 
       const rows = categoryData.filter(c => (Number(c.planned) || 0) > 0 || (Number(c.suggested) || 0) > 0 || (Number(c.spent) || 0) > 0);
       bars.innerHTML = rows.length ? rows.map(c => {
@@ -4279,34 +4331,15 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const statusClass = plannedTotal <= 0 ? 'text-gray-500' : remaining >= 0 ? 'text-emerald-700' : 'text-rose-700';
 
       const totalBudget = plannedTotal + suggestedTotal;
-      document.getElementById('resumoPlanejado').innerText = money(plannedTotal);
       document.getElementById('resumoSugerido').innerText = money(suggestedTotal);
       document.getElementById('resumoOrcamentoTotalGeral').innerText = money(totalBudget);
-      document.getElementById('resumoGastoReal').innerText = money(spent);
-      const remainingLabel = document.getElementById('resumoRestanteLabel');
-      const remainingValue = document.getElementById('resumoRestante');
-      if (remainingValue) {
-        if (plannedTotal <= 0) {
-          remainingValue.innerText = '—';
-          remainingValue.classList.remove('is-over');
-          if (remainingLabel) remainingLabel.innerText = 'Restante';
-        } else if (remaining >= 0) {
-          remainingValue.innerText = money(remaining);
-          remainingValue.classList.remove('is-over');
-          if (remainingLabel) remainingLabel.innerText = 'Restante';
-        } else {
-          remainingValue.innerText = money(Math.abs(remaining));
-          remainingValue.classList.add('is-over');
-          if (remainingLabel) remainingLabel.innerText = 'Acima do planejado';
-        }
-      }
       document.getElementById('resumoPecasCompradas')?.replaceChildren(document.createTextNode(`${purchasedPieces} ${purchasedPieces === 1 ? 'unidade de compra paga' : 'unidades de compra pagas'}`));
       document.getElementById('resumoQtdAquisicoes')?.replaceChildren(document.createTextNode(`${acquisitionCount} ${acquisitionCount === 1 ? 'aquisição' : 'aquisições'}`));
       document.getElementById('resumoOrcamentoTotal')?.replaceChildren(document.createTextNode(plannedTotal > 0 ? `${money(spent)} de ${money(plannedTotal)} planejados` : 'sem orçamento planejado'));
       document.getElementById('resumoOrcamentoDetalhe')?.replaceChildren(document.createTextNode(`${estimatedItemCount} planejados com estimativa • ${suggestedItemCount} sugestões com estimativa`));
 
       const categoryFinanceData = getCategoryFinanceData();
-      renderBudgetDonut(categoryFinanceData, plannedTotal, spent);
+      renderBudgetDonut(categoryFinanceData, plannedTotal, suggestedTotal, spent);
       renderPurchaseTimeline();
       renderRecurringExpenses();
 
@@ -5804,18 +5837,32 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
     /* V4.9UI UI3.4 — Finanças */
     .cora-finance-overview { padding:17px; border-radius:22px; background:linear-gradient(145deg,#FFFFFF 0%,#FFF9F7 100%); border:1px solid rgba(113,26,42,.065); box-shadow:0 5px 20px rgba(66,39,45,.035); }
-    .cora-finance-main-grid { display:grid; grid-template-columns:1.15fr 1fr 1fr; gap:8px; }
-    .cora-finance-metric { min-width:0; padding:11px 10px; border-radius:15px; background:#FAF7F5; }
-    .cora-finance-metric-primary { background:#FBE9E8; }
-    .cora-finance-metric span { display:block; font-size:9px; line-height:1.15; color:#887E80; font-weight:650; }
-    .cora-finance-metric strong { display:block; margin-top:5px; font-size:13px; line-height:1.15; color:#3A3133; letter-spacing:-.015em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .cora-finance-toggle { min-height:32px; display:inline-flex; align-items:center; gap:7px; padding:5px 9px 5px 6px; border-radius:999px; background:#F5EFED; color:#786D70; font-size:10px; line-height:1; font-weight:650; transition:.18s ease; }
+    .cora-finance-toggle .switch-track { width:28px; height:18px; padding:2px; border-radius:999px; background:#D9CFCD; transition:.18s ease; }
+    .cora-finance-toggle .switch-dot { display:block; width:14px; height:14px; border-radius:999px; background:#fff; box-shadow:0 1px 3px rgba(52,34,38,.18); transition:transform .18s ease; }
+    .cora-finance-toggle.is-active { background:#F9E7E7; color:var(--cora-wine); }
+    .cora-finance-toggle.is-active .switch-track { background:var(--cora-wine); }
+    .cora-finance-toggle.is-active .switch-dot { transform:translateX(10px); }
+    .cora-finance-overview-main { display:grid; grid-template-columns:112px minmax(0,1fr); gap:17px; align-items:center; }
+    .cora-finance-donut { width:112px; height:112px; border-radius:999px; position:relative; background:conic-gradient(var(--cora-wine) 0deg,#EFE7E5 0deg); transition:background .25s ease; }
+    .cora-finance-donut::after { content:''; position:absolute; inset:11px; border-radius:999px; background:#fff; box-shadow:inset 0 0 0 1px rgba(113,26,42,.035); }
+    .cora-finance-donut-center { position:absolute; inset:20px; z-index:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+    .cora-finance-donut-center strong { font-size:25px; line-height:1; letter-spacing:-.04em; color:var(--cora-wine); }
+    .cora-finance-donut.is-over .cora-finance-donut-center strong { color:#A43B50; }
+    .cora-finance-donut-center span { margin-top:4px; font-size:9px; line-height:1.1; color:#8A8082; font-weight:650; }
+    .cora-finance-metrics { min-width:0; display:grid; gap:0; }
+    .cora-finance-metric { min-width:0; padding:8px 0; display:flex; align-items:baseline; justify-content:space-between; gap:9px; border-bottom:1px solid #F1EAE8; }
+    .cora-finance-metric:last-child { border-bottom:0; }
+    .cora-finance-metric span { font-size:10px; line-height:1.15; color:#887E80; font-weight:650; }
+    .cora-finance-metric strong { min-width:0; font-size:13px; line-height:1.15; color:#3A3133; letter-spacing:-.015em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .cora-finance-metric-primary strong { color:var(--cora-wine); }
     #resumoRestante.is-over { color:#A43B50; }
-    .cora-finance-progress { height:6px; overflow:hidden; border-radius:999px; background:#EFE7E5; margin-top:13px; }
-    .cora-finance-progress span { display:block; height:100%; width:0; border-radius:999px; background:var(--cora-wine); transition:width .25s ease; }
-    .cora-finance-progress span.is-over { background:#B13C53; }
-    .cora-finance-secondary-row { margin-top:11px; display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:10px; color:#8A8082; }
-    .cora-finance-secondary-row strong { color:#5C5153; font-weight:650; }
+    @media (max-width:340px) {
+      .cora-finance-overview-main { grid-template-columns:96px minmax(0,1fr); gap:13px; }
+      .cora-finance-donut { width:96px; height:96px; }
+      .cora-finance-donut-center strong { font-size:22px; }
+      .cora-finance-metric strong { font-size:12px; }
+    }
     .cora-finance-section { padding:16px; border-radius:21px; background:#fff; border:1px solid rgba(113,26,42,.055); box-shadow:0 4px 16px rgba(66,39,45,.03); }
     .cora-finance-section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; color:#8A2E42; }
     .cora-finance-section-head h3 { margin-top:2px; font-size:15px; line-height:1.15; font-weight:650; color:#3A3133; }
@@ -6029,33 +6076,40 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     <div id="sectionResumo" class="hidden space-y-4">
       <section class="cora-finance-overview" aria-label="Resumo financeiro">
         <div class="flex items-center justify-between gap-3 mb-4">
-          <div><span class="cora-eyebrow">Orçamento</span></div>
-          <span id="financeBudgetStatus" class="text-[11px] font-semibold text-[#766D70]"></span>
+          <span class="cora-eyebrow">Orçamento</span>
+          <button id="financeOptionalsToggle" type="button" class="cora-finance-toggle" aria-pressed="false" onclick="toggleFinanceOptionals()">
+            <span class="switch-track" aria-hidden="true"><span class="switch-dot"></span></span>
+            <span>Incluir opcionais</span>
+          </button>
         </div>
 
-        <div class="cora-finance-main-grid">
-          <div class="cora-finance-metric cora-finance-metric-primary">
-            <span>Planejado</span>
-            <strong id="resumoPlanejado">R$ 0,00</strong>
+        <div class="cora-finance-overview-main">
+          <div id="financeBudgetDonut" class="cora-finance-donut" role="img" aria-label="Percentual do orçamento utilizado">
+            <div class="cora-finance-donut-center">
+              <strong id="financeBudgetStatus">—</strong>
+              <span id="financeBudgetStatusLabel">sem orçamento</span>
+            </div>
           </div>
-          <div class="cora-finance-metric">
-            <span>Gasto</span>
-            <strong id="resumoGastoReal">R$ 0,00</strong>
-          </div>
-          <div class="cora-finance-metric">
-            <span id="resumoRestanteLabel">Restante</span>
-            <strong id="resumoRestante">R$ 0,00</strong>
-          </div>
-        </div>
 
-        <div class="cora-finance-progress" aria-hidden="true"><span id="financeBudgetProgressFill"></span></div>
-
-        <div class="cora-finance-secondary-row">
-          <span>Sugestões <strong id="resumoSugerido">R$ 0,00</strong></span>
-          <span>Com sugestões <strong id="resumoOrcamentoTotalGeral">R$ 0,00</strong></span>
+          <div class="cora-finance-metrics">
+            <div class="cora-finance-metric cora-finance-metric-primary">
+              <span>Orçamento</span>
+              <strong id="resumoPlanejado">R$ 0,00</strong>
+            </div>
+            <div class="cora-finance-metric">
+              <span>Gasto</span>
+              <strong id="resumoGastoReal">R$ 0,00</strong>
+            </div>
+            <div class="cora-finance-metric">
+              <span id="resumoRestanteLabel">Restante</span>
+              <strong id="resumoRestante">R$ 0,00</strong>
+            </div>
+          </div>
         </div>
 
         <div class="hidden" aria-hidden="true">
+          <span id="resumoSugerido">R$ 0,00</span>
+          <span id="resumoOrcamentoTotalGeral">R$ 0,00</span>
           <span id="resumoOrcamentoTotal"></span>
           <span id="resumoOrcamentoDetalhe"></span>
           <span id="resumoQtdAquisicoes"></span>
