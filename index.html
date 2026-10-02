@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
-  <meta name="theme-color" content="#711A2A">
+  <meta name="theme-color" content="#be123c">
   <meta name="application-name" content="Cora">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Cora">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="description" content="Cora — organização da primeira infância da família.">
+  <meta name="description" content="Cora — organização privada da família para enxoval, maternidade e financeiro.">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -339,7 +339,7 @@
       items: [],
       maternidade: [],
       activeCategory: 'vestuario',
-      activeTab: 'inicio',
+      activeTab: 'enxoval',
       activeHistoryItemId: null,
       editingItemBase: null,
       editingAcquisitionBase: null,
@@ -2349,6 +2349,8 @@
         const babyName = data.profile?.babyName || data.profile?.name || 'Bebê';
         appState.childName = babyName;
         refreshChildSelectors();
+        const headerContext = document.getElementById('headerContext');
+        if (headerContext) headerContext.textContent = `Perfil: ${babyName}`;
         const tip = document.getElementById('categoryTipText');
         if (tip) tip.textContent = GENERIC_CATEGORY_TIPS[appState.activeCategory] || 'Organize as compras de forma inteligente.';
         renderAll();
@@ -3281,204 +3283,31 @@
       renderMaternidade();
       renderDiaperStockCard();
       renderResumoFinanceiro();
-      renderShellUI();
       if (!document.getElementById('modalAction').classList.contains('hidden')) lucide.createIcons();
       lucide.createIcons();
     }
 
-    function parseShellDate(value) {
-      if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return null;
-      const [year, month, day] = String(value).split('-').map(Number);
-      return new Date(year, month - 1, day, 12, 0, 0, 0);
-    }
-
-    function shellDayMonth(value) {
-      const date = parseShellDate(value);
-      if (!date) return '';
-      return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' })
-        .format(date)
-        .replace('.', '');
-    }
-
-    function shellChildPhase() {
-      const profile = appState.childData?.profile || {};
-      const lifeStage = profile.lifeStage || null;
-      const dueDate = profile.dueDate || profile.dpp || null;
-      const birthDate = profile.birthDate || null;
-      const now = new Date();
-      now.setHours(12, 0, 0, 0);
-
-      if (lifeStage === 'expecting' && dueDate) {
-        const due = parseShellDate(dueDate);
-        if (due) {
-          const daysToDue = Math.round((due - now) / 86400000);
-          const gestationalDays = Math.max(0, Math.min(294, 280 - daysToDue));
-          const week = Math.max(1, Math.min(42, Math.floor(gestationalDays / 7)));
-          return {
-            stage: 'Gestação',
-            value: `${week} ${week === 1 ? 'semana' : 'semanas'}`,
-            header: `${week} ${week === 1 ? 'semana' : 'semanas'}`,
-            meta: `DPP ${shellDayMonth(dueDate)}`,
-            lifeStage
-          };
-        }
-      }
-
-      if (lifeStage === 'born' && birthDate) {
-        const birth = parseShellDate(birthDate);
-        if (birth) {
-          let months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
-          if (now.getDate() < birth.getDate()) months -= 1;
-          months = Math.max(0, months);
-          if (months < 12) {
-            const value = months === 0 ? 'menos de 1 mês' : `${months} ${months === 1 ? 'mês' : 'meses'}`;
-            return {
-              stage: 'Idade',
-              value,
-              header: value,
-              meta: `Nascimento ${shellDayMonth(birthDate)}`,
-              lifeStage
-            };
-          }
-          let years = now.getFullYear() - birth.getFullYear();
-          const anniversary = new Date(now.getFullYear(), birth.getMonth(), birth.getDate(), 12);
-          if (now < anniversary) years -= 1;
-          years = Math.max(1, years);
-          return {
-            stage: 'Idade',
-            value: `${years} ${years === 1 ? 'ano' : 'anos'}`,
-            header: `${years} ${years === 1 ? 'ano' : 'anos'}`,
-            meta: `Nascimento ${shellDayMonth(birthDate)}`,
-            lifeStage
-          };
-        }
-      }
-
-      return {
-        stage: lifeStage === 'born' ? 'Primeira infância' : 'Gestação',
-        value: appState.childName || 'Cora',
-        header: lifeStage === 'born' ? 'Primeira infância' : 'Gestação',
-        meta: '',
-        lifeStage
-      };
-    }
-
-    function rootTabForView(view) {
-      if (view === 'resumo') return 'resumo';
-      if (view === 'ferramentas' || view === 'enxoval' || view === 'maternidade') return 'ferramentas';
-      return 'inicio';
-    }
-
-    function updateRootNavigation(rootTab) {
-      const navButtons = {
-        inicio: document.getElementById('navBtnInicio'),
-        ferramentas: document.getElementById('navBtnFerramentas'),
-        resumo: document.getElementById('navBtnResumo')
-      };
-      Object.entries(navButtons).forEach(([key, btn]) => {
-        if (!btn) return;
-        const active = key === rootTab;
-        btn.classList.toggle('is-active', active);
-        btn.setAttribute('aria-current', active ? 'page' : 'false');
-        const label = btn.querySelector('.nav-label');
-        if (label) label.setAttribute('aria-hidden', active ? 'false' : 'true');
-      });
-    }
-
-    function renderShellUI() {
-      const phase = shellChildPhase();
-      const babyName = appState.childName || appState.childData?.profile?.babyName || appState.childData?.profile?.name || 'Cora';
-      const headerName = document.getElementById('headerChildName');
-      if (headerName) headerName.textContent = babyName;
-
-      const stageLabel = document.getElementById('homeStageLabel');
-      const stageValue = document.getElementById('homeStageValue');
-      const stageMeta = document.getElementById('homeStageMeta');
-      if (stageLabel) stageLabel.textContent = phase.stage;
-      if (stageValue) stageValue.textContent = phase.value;
-      if (stageMeta) {
-        stageMeta.textContent = phase.meta;
-        stageMeta.classList.toggle('hidden', !phase.meta);
-      }
-
-      const progressText = document.getElementById('progressPercentText')?.textContent || '0%';
-      const progressCount = document.getElementById('progressItemsCount')?.textContent || '0 de 0 no enxoval';
-      const homeEnxovalValue = document.getElementById('homeEnxovalValue');
-      const homeEnxovalMeta = document.getElementById('homeEnxovalMeta');
-      const homeEnxovalBar = document.getElementById('homeEnxovalBar');
-      const toolEnxovalMeta = document.getElementById('toolEnxovalMeta');
-      if (homeEnxovalValue) homeEnxovalValue.textContent = progressText;
-      if (homeEnxovalMeta) homeEnxovalMeta.textContent = progressCount;
-      if (homeEnxovalBar) homeEnxovalBar.style.width = progressText;
-      if (toolEnxovalMeta) toolEnxovalMeta.textContent = `${progressText} concluído`;
-
-      const maternityTotal = appState.maternidade.length;
-      const maternityDone = appState.maternidade.filter(item => item.checked).length;
-      const maternityText = maternityTotal ? `${maternityDone} de ${maternityTotal} prontos` : 'Checklist da maternidade';
-      const homeMaternityMeta = document.getElementById('homeMaternityMeta');
-      const toolMaternityMeta = document.getElementById('toolMaternityMeta');
-      if (homeMaternityMeta) homeMaternityMeta.textContent = maternityText;
-      if (toolMaternityMeta) toolMaternityMeta.textContent = maternityText;
-
-      const diaperModel = diaperStockModel();
-      const diaperContext = diaperOperationalContext();
-      let diaperText = 'Estoque e consumo';
-      if (diaperModel) {
-        const current = diaperModel.currentSize || 'RN';
-        diaperText = diaperContext.lifeStage === 'expecting'
-          ? `${Number(diaperModel.totalStock || 0).toLocaleString('pt-BR')} fraldas no estoque`
-          : `${current} · ${Number(diaperModel.stockBySize?.[current] || 0).toLocaleString('pt-BR')} fraldas${diaperModel.autonomyDays == null ? '' : ` · ${compactNumber(diaperModel.autonomyDays)} dias`}`;
-      }
-      const homeDiaperMeta = document.getElementById('homeDiaperMeta');
-      const toolDiaperMeta = document.getElementById('toolDiaperMeta');
-      if (homeDiaperMeta) homeDiaperMeta.textContent = diaperText;
-      if (toolDiaperMeta) toolDiaperMeta.textContent = diaperText;
-
-      const homeMaternityCard = document.getElementById('homeMaternityCard');
-      const homeDiaperCard = document.getElementById('homeDiaperCard');
-      if (homeMaternityCard) homeMaternityCard.classList.toggle('hidden', phase.lifeStage === 'born');
-      if (homeDiaperCard) homeDiaperCard.classList.toggle('hidden', phase.lifeStage !== 'born');
-
-      const toolEnxoval = document.getElementById('toolEnxovalCard');
-      const toolDiaper = document.getElementById('toolDiaperCard');
-      const toolMaternity = document.getElementById('toolMaternityCard');
-      const toolsContainer = document.getElementById('sectionFerramentas');
-      const homePriorities = document.getElementById('homePriorities');
-      const homeEnxoval = homeEnxovalValue?.closest('button') || null;
-      const homeDiaper = homeDiaperCard;
-      if (toolsContainer) {
-        const orderedTools = phase.lifeStage === 'born'
-          ? [toolDiaper, toolEnxoval, toolMaternity]
-          : [toolEnxoval, toolMaternity, toolDiaper];
-        orderedTools.filter(Boolean).forEach(card => toolsContainer.appendChild(card));
-      }
-      if (homePriorities) {
-        const orderedHome = phase.lifeStage === 'born'
-          ? [homeDiaper, homeEnxoval]
-          : [homeEnxoval, homeMaternityCard];
-        orderedHome.filter(Boolean).forEach(card => homePriorities.appendChild(card));
-      }
-
-      updateRootNavigation(rootTabForView(appState.activeTab));
-    }
-
     function switchTab(tab) {
       appState.activeTab = tab;
-      const sections = {
-        inicio: document.getElementById('sectionInicio'),
-        ferramentas: document.getElementById('sectionFerramentas'),
-        enxoval: document.getElementById('sectionEnxoval'),
-        maternidade: document.getElementById('sectionMaternidade'),
-        resumo: document.getElementById('sectionResumo')
+      document.getElementById('sectionEnxoval').classList.toggle('hidden', tab !== 'enxoval');
+      document.getElementById('sectionMaternidade').classList.toggle('hidden', tab !== 'maternidade');
+      document.getElementById('sectionResumo').classList.toggle('hidden', tab !== 'resumo');
+
+      const navButtons = {
+        enxoval: document.getElementById('navBtnEnxoval'),
+        maternidade: document.getElementById('navBtnMaternidade'),
+        resumo: document.getElementById('navBtnResumo')
       };
-      Object.entries(sections).forEach(([key, section]) => {
-        if (section) section.classList.toggle('hidden', key !== tab);
+      Object.values(navButtons).forEach(btn => {
+        if (!btn) return;
+        btn.classList.remove('text-rose-600', 'font-bold');
+        btn.classList.add('text-gray-400');
       });
-      const fab = document.getElementById('globalFab');
-      if (fab) fab.classList.toggle('hidden', tab !== 'enxoval');
-      updateRootNavigation(rootTabForView(tab));
-      window.scrollTo({ top: 0, behavior: 'auto' });
-      lucide.createIcons();
+      const active = navButtons[tab];
+      if (active) {
+        active.classList.remove('text-gray-400');
+        active.classList.add('text-rose-600', 'font-bold');
+      }
     }
 
     function filterCategory(cat) {
@@ -5706,162 +5535,59 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .legend-dark { background: #374151; }
     .category-pair-swatch { display:flex; width:9px; height:16px; border-radius:4px; overflow:hidden; flex-direction:column; }
     .category-pair-swatch span { flex:1; }
-
-    /* V4.9UI UI3.2 — refinamento do shell */
-    :root {
-      --cora-wine: #711A2A;
-      --cora-wine-soft: #8A2E42;
-      --cora-blush: #FCD4D4;
-      --cora-cream: #FCF7F1;
-      --cora-ink: #302A2B;
-      --cora-muted: #7C7476;
-      --cora-line: #EEE4E3;
-    }
-    body { background: var(--cora-cream); }
-    .cora-shell-header { padding-top:max(8px, env(safe-area-inset-top)); background: rgba(252,247,241,.94); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid rgba(113,26,42,.05); }
-    .cora-header-action { width:36px; height:36px; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#6E6063; background:transparent; border:0; transition:.18s ease; }
-    .cora-header-action:active { transform:scale(.96); background:#F7ECEB; }
-    .cora-stage-card { position:relative; overflow:hidden; display:flex; align-items:center; justify-content:flex-start; padding:20px; border-radius:24px; background:linear-gradient(135deg,#FDEBEC 0%,#FFF8F5 72%); border:1px solid rgba(113,26,42,.08); }
-    .cora-stage-card::after { content:''; position:absolute; width:130px; height:130px; border-radius:999px; right:-56px; top:-64px; background:rgba(252,212,212,.45); }
-    .cora-eyebrow { font-size:10px; line-height:1; letter-spacing:.09em; text-transform:uppercase; font-weight:700; color:#9A6874; }
-    .cora-priority-card { width:100%; display:flex; align-items:center; gap:12px; padding:13px 14px; border-radius:18px; background:#fff; border:1px solid rgba(113,26,42,.055); box-shadow:0 4px 16px rgba(66,39,45,.035); transition:transform .16s ease, box-shadow .16s ease; }
-    .cora-priority-card:active { transform:scale(.988); box-shadow:0 2px 8px rgba(66,39,45,.03); }
-    .cora-card-icon { width:40px; height:40px; border-radius:14px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
-    .cora-diaper-glyph { width:1em; height:1em; display:block; }
-    .cora-diaper-glyph path { vector-effect:non-scaling-stroke; }
-    .cora-tool-card { width:100%; min-height:86px; display:flex; align-items:center; gap:14px; padding:14px; border-radius:21px; background:#fff; border:1px solid rgba(113,26,42,.06); box-shadow:0 5px 18px rgba(66,39,45,.035); transition:transform .16s ease; }
-    .cora-tool-card:active { transform:scale(.988); }
-    .cora-tool-illustration { width:58px; height:58px; border-radius:19px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
-    .cora-module-heading { display:flex; align-items:center; gap:10px; padding:2px 0 2px; }
-    .cora-back-button { width:38px; height:38px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:#fff; color:#5B5052; border:1px solid #EEE4E3; }
-    .cora-bottom-nav { background:rgba(255,255,255,.95); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border-top:1px solid rgba(113,26,42,.08); box-shadow:0 -8px 28px rgba(71,43,49,.045); }
-    .cora-bottom-nav-inner { padding-bottom:max(8px, env(safe-area-inset-bottom)); }
-    .cora-nav-item { min-height:47px; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:2px; color:#AAA1A3; transition:color .18s ease, transform .18s ease; }
-    .cora-nav-item:active { transform:scale(.96); }
-    .cora-nav-item .nav-label { height:13px; line-height:13px; font-size:10px; font-weight:650; opacity:0; transform:translateY(-2px); transition:opacity .15s ease, transform .15s ease; pointer-events:none; }
-    .cora-nav-item.is-active { color:var(--cora-wine); }
-    .cora-nav-item.is-active .nav-label { opacity:1; transform:translateY(0); }
-
 </style>
 </head>
-<body class="bg-[#FCF7F1] text-gray-800 font-sans pb-24 min-h-screen">
+<body class="bg-[#FBF8F6] text-gray-800 font-sans pb-24 min-h-screen">
 
   <div id="appShell" class="hidden">
 
   <!-- TOP HEADER -->
-  <header class="cora-shell-header sticky top-0 z-40 px-4 pb-2.5">
-    <div class="max-w-md mx-auto flex items-center justify-between gap-3">
-      <div class="flex items-center gap-2.5 min-w-0" aria-label="Perfil ativo">
-        <img src="/apple-touch-icon.png" alt="" class="w-9 h-9 rounded-[13px] shadow-sm shrink-0">
-        <h1 id="headerChildName" class="text-[16px] font-semibold text-[#302A2B] leading-tight truncate">Cora</h1>
+  <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-rose-100 px-4 py-3 shadow-sm">
+    <div class="max-w-md mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <div class="w-9 h-9 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 font-bold text-lg">
+          👶
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-gray-900 leading-tight">Cora</h1>
+          <p id="headerContext" class="text-xs text-rose-600 font-medium">DPP: 21/Fev • Niterói, RJ</p>
+        </div>
       </div>
-      <button onclick="openSettingsModal()" aria-label="Perfil e configurações" class="cora-header-action">
-        <i data-lucide="user-round" class="w-[18px] h-[18px]"></i>
-      </button>
+      <div class="flex items-center space-x-2">
+        <button onclick="openSettingsModal()" aria-label="Configurações" class="p-2 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+          <i data-lucide="sliders-horizontal" class="w-5 h-5"></i>
+        </button>
+      </div>
     </div>
   </header>
-  <main class="max-w-md mx-auto px-4 pt-4 pb-4">
 
-    <!-- UI3.2 — INÍCIO CONTEXTUAL -->
-    <section id="sectionInicio" class="space-y-5">
-      <div class="cora-stage-card">
-        <div class="min-w-0">
-          <span id="homeStageLabel" class="cora-eyebrow">Gestação</span>
-          <strong id="homeStageValue" class="block text-[30px] leading-none tracking-[-0.035em] text-[#4B252F] mt-1.5">—</strong>
-          <p id="homeStageMeta" class="text-[12px] font-medium text-[#916E77] mt-2">—</p>
+  <main class="max-w-md mx-auto px-4 pt-4 space-y-4">
+
+    <!-- DASHBOARD PROGRESS CARD -->
+    <div class="bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-100 rounded-2xl p-4 shadow-xs">
+      <div class="flex justify-between items-center mb-2">
+        <div>
+          <span id="progressPercentText" class="text-2xl font-extrabold text-rose-600">0%</span>
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider ml-1">concluído</span>
+        </div>
+        <div class="text-right">
+          <p id="progressItemsCount" class="text-xs font-bold text-gray-700">0 de 0 peças</p>
+          <p id="financeTotalSpent" class="text-xs text-rose-700 font-semibold">Gasto: R$ 0,00</p>
         </div>
       </div>
-
-      <div>
-        <div class="flex items-center justify-between mb-2.5 px-0.5">
-          <h2 class="text-[14px] font-semibold text-[#4A4143]">Para agora</h2>
-        </div>
-        <div id="homePriorities" class="space-y-2.5">
-          <button type="button" onclick="switchTab('enxoval')" class="cora-priority-card group">
-            <span class="cora-card-icon bg-[#FCE4E5] text-[#8A2E42]"><i data-lucide="list-checks" class="w-5 h-5"></i></span>
-            <span class="min-w-0 flex-1 text-left">
-              <span class="block text-[14px] font-semibold text-[#302A2B]">Enxoval</span>
-              <span id="homeEnxovalMeta" class="block text-[11px] text-[#7C7476] mt-0.5 truncate">0 de 0 no enxoval</span>
-              <span class="block h-1.5 rounded-full bg-[#F1E6E5] overflow-hidden mt-2"><span id="homeEnxovalBar" class="block h-full rounded-full bg-[#9A4054] transition-all" style="width:0%"></span></span>
-            </span>
-            <span id="homeEnxovalValue" class="text-[16px] font-semibold text-[#7A2439] shrink-0">0%</span>
-          </button>
-
-          <button id="homeMaternityCard" type="button" onclick="switchTab('maternidade')" class="cora-priority-card group">
-            <span class="cora-card-icon bg-[#EFE7F7] text-[#765493]"><i data-lucide="backpack" class="w-5 h-5"></i></span>
-            <span class="min-w-0 flex-1 text-left">
-              <span class="block text-[14px] font-semibold text-[#302A2B]">Maternidade</span>
-              <span id="homeMaternityMeta" class="block text-[11px] text-[#7C7476] mt-0.5 truncate">Checklist da maternidade</span>
-            </span>
-          </button>
-
-          <button id="homeDiaperCard" type="button" onclick="openDiaperStock()" class="cora-priority-card group">
-            <span class="cora-card-icon bg-[#E4F0F1] text-[#47777B]" aria-hidden="true"><svg class="cora-diaper-glyph w-5 h-5" viewBox="0 0 24 24" fill="none"><path d="M4.5 6.5 9 8.4h6l4.5-1.9v6.7c0 4.6-3.3 7.8-7.5 7.8s-7.5-3.2-7.5-7.8V6.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 8.4c0 2.5-1.4 4.5-4.3 5.2M15 8.4c0 2.5 1.4 4.5 4.3 5.2M8.4 17c2.2-1.2 5-1.2 7.2 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
-            <span class="min-w-0 flex-1 text-left">
-              <span class="block text-[14px] font-semibold text-[#302A2B]">Fraldas</span>
-              <span id="homeDiaperMeta" class="block text-[11px] text-[#7C7476] mt-0.5 truncate">Estoque e consumo</span>
-            </span>
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- UI3.2 — FERRAMENTAS -->
-    <section id="sectionFerramentas" class="hidden space-y-3">
-      <button id="toolEnxovalCard" type="button" onclick="switchTab('enxoval')" class="cora-tool-card">
-        <span class="cora-tool-illustration bg-[#FCE4E5] text-[#8A2E42]"><i data-lucide="list-checks" class="w-7 h-7"></i></span>
-        <span class="min-w-0 flex-1 text-left">
-          <strong class="block text-[16px] font-semibold text-[#302A2B]">Enxoval</strong>
-          <span id="toolEnxovalMeta" class="block text-[12px] text-[#7C7476] mt-1">Planejamento do enxoval</span>
-        </span>
-        <i data-lucide="chevron-right" class="w-[18px] h-[18px] text-[#B6A9AC] shrink-0"></i>
-      </button>
-
-      <button id="toolDiaperCard" type="button" onclick="openDiaperStock()" class="cora-tool-card">
-        <span class="cora-tool-illustration bg-[#E4F0F1] text-[#47777B]" aria-hidden="true"><svg class="cora-diaper-glyph w-7 h-7" viewBox="0 0 24 24" fill="none"><path d="M4.5 6.5 9 8.4h6l4.5-1.9v6.7c0 4.6-3.3 7.8-7.5 7.8s-7.5-3.2-7.5-7.8V6.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 8.4c0 2.5-1.4 4.5-4.3 5.2M15 8.4c0 2.5 1.4 4.5 4.3 5.2M8.4 17c2.2-1.2 5-1.2 7.2 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
-        <span class="min-w-0 flex-1 text-left">
-          <strong class="block text-[16px] font-semibold text-[#302A2B]">Fraldas</strong>
-          <span id="toolDiaperMeta" class="block text-[12px] text-[#7C7476] mt-1">Estoque e consumo</span>
-        </span>
-        <i data-lucide="chevron-right" class="w-[18px] h-[18px] text-[#B6A9AC] shrink-0"></i>
-      </button>
-
-      <button id="toolMaternityCard" type="button" onclick="switchTab('maternidade')" class="cora-tool-card">
-        <span class="cora-tool-illustration bg-[#EFE7F7] text-[#765493]"><i data-lucide="backpack" class="w-7 h-7"></i></span>
-        <span class="min-w-0 flex-1 text-left">
-          <strong class="block text-[16px] font-semibold text-[#302A2B]">Maternidade</strong>
-          <span id="toolMaternityMeta" class="block text-[12px] text-[#7C7476] mt-1">Checklist da maternidade</span>
-        </span>
-        <i data-lucide="chevron-right" class="w-[18px] h-[18px] text-[#B6A9AC] shrink-0"></i>
-      </button>
-    </section>
-
-    <!-- SEÇÃO INTERNA: ENXOVAL -->
-    <div id="sectionEnxoval" class="hidden space-y-4">
-      <div class="cora-module-heading">
-        <button type="button" onclick="switchTab('ferramentas')" class="cora-back-button" aria-label="Voltar para Ferramentas"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
-        <div><h2 class="text-[21px] font-semibold tracking-[-0.02em] text-[#302A2B]">Enxoval</h2></div>
+      
+      <div class="w-full bg-rose-200/60 rounded-full h-2.5 overflow-hidden mb-3">
+        <div id="progressBar" class="bg-rose-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
       </div>
 
-      <!-- DASHBOARD DO ENXOVAL -->
-      <div class="bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-100 rounded-2xl p-4 shadow-xs">
-        <div class="flex justify-between items-center mb-2">
-          <div>
-            <span id="progressPercentText" class="text-2xl font-extrabold text-rose-600">0%</span>
-            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider ml-1">concluído</span>
-          </div>
-          <div class="text-right">
-            <p id="progressItemsCount" class="text-xs font-bold text-gray-700">0 de 0 peças</p>
-            <p id="financeTotalSpent" class="text-xs text-rose-700 font-semibold">Gasto: R$ 0,00</p>
-          </div>
-        </div>
-        <div class="w-full bg-rose-200/60 rounded-full h-2.5 overflow-hidden mb-3">
-          <div id="progressBar" class="bg-rose-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
-        </div>
-        <div id="coraSeasonWidget" class="bg-white/80 rounded-xl p-3 border border-rose-100 text-xs">
-          <div class="text-gray-500 text-center py-2">O planejamento V4.8 aparecerá aqui após o onboarding.</div>
-        </div>
+      <!-- WIDGET CLIMA V4.8 -->
+      <div id="coraSeasonWidget" class="bg-white/80 rounded-xl p-3 border border-rose-100 text-xs">
+        <div class="text-gray-500 text-center py-2">O planejamento V4.8 aparecerá aqui após o onboarding.</div>
       </div>
+    </div>
+
+    <!-- SEÇÃO: ENXOVAL PRINCIPAL -->
+    <div id="sectionEnxoval" class="space-y-4">
       
       <!-- CATEGORIAS -->
       <div class="grid grid-cols-3 gap-2">
@@ -5937,10 +5663,6 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
     <!-- SEÇÃO: MALA DA MATERNIDADE -->
     <div id="sectionMaternidade" class="hidden space-y-4">
-      <div class="cora-module-heading">
-        <button type="button" onclick="switchTab('ferramentas')" class="cora-back-button" aria-label="Voltar para Ferramentas"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
-        <div><h2 class="text-[21px] font-semibold tracking-[-0.02em] text-[#302A2B]">Maternidade</h2></div>
-      </div>
       <div class="bg-white rounded-2xl border border-rose-100 p-4 shadow-xs">
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-bold text-gray-900 flex items-center gap-2">
@@ -5960,6 +5682,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     <!-- SEÇÃO: FINANCEIRO -->
     <div id="sectionResumo" class="hidden space-y-4">
       <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-xs">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold text-gray-900 flex items-center gap-2"><i data-lucide="wallet" class="w-5 h-5 text-emerald-600"></i> Financeiro</h2>
+        </div>
+
         <div class="rounded-2xl border border-rose-100 bg-rose-50/30 p-3 space-y-3">
           <div class="grid grid-cols-2 gap-2">
             <div class="bg-white/80 border border-gray-100 rounded-xl p-2.5">
@@ -6034,27 +5760,28 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
   </main>
 
   <!-- BOTÃO FLUTUANTE DE ADICIONAR ITEM -->
-  <button id="globalFab" onclick="openActionModal()" class="hidden fixed bottom-20 right-4 bg-rose-600 text-white rounded-full p-4 shadow-lg hover:bg-rose-700 active:scale-95 transition flex items-center justify-center z-30">
+  <button onclick="openActionModal()" class="fixed bottom-20 right-4 bg-rose-600 text-white rounded-full p-4 shadow-lg hover:bg-rose-700 active:scale-95 transition flex items-center justify-center z-30">
     <i data-lucide="plus" class="w-6 h-6"></i>
   </button>
 
-  <!-- UI3.2 — NAVEGAÇÃO GLOBAL -->
-  <nav class="cora-bottom-nav fixed bottom-0 left-0 right-0 z-40" aria-label="Navegação principal">
-    <div class="cora-bottom-nav-inner max-w-md mx-auto grid grid-cols-3 items-end px-5 pt-2">
-      <button type="button" onclick="switchTab('inicio')" id="navBtnInicio" class="cora-nav-item is-active" aria-label="Início" aria-current="page">
-        <i data-lucide="house" class="w-[21px] h-[21px]"></i>
-        <span class="nav-label" aria-hidden="false">Início</span>
+  <!-- BARRA DE NAVEGAÇÃO INFERIOR: SOMENTE NAVEGAÇÃO -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 z-40 py-2 px-6">
+    <div class="max-w-md mx-auto grid grid-cols-3 items-center text-center">
+      <button onclick="switchTab('enxoval')" id="navBtnEnxoval" class="nav-item text-rose-600 flex flex-col items-center justify-center py-1 transition">
+        <i data-lucide="list-checks" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold mt-1">Enxoval</span>
       </button>
-      <button type="button" onclick="switchTab('ferramentas')" id="navBtnFerramentas" class="cora-nav-item" aria-label="Ferramentas" aria-current="false">
-        <i data-lucide="layout-grid" class="w-[21px] h-[21px]"></i>
-        <span class="nav-label" aria-hidden="true">Ferramentas</span>
+      <button onclick="switchTab('maternidade')" id="navBtnMaternidade" class="nav-item text-gray-400 flex flex-col items-center justify-center py-1 transition hover:text-gray-600">
+        <i data-lucide="backpack" class="w-5 h-5"></i>
+        <span class="text-[10px] font-medium mt-1">Maternidade</span>
       </button>
-      <button type="button" onclick="switchTab('resumo')" id="navBtnResumo" class="cora-nav-item" aria-label="Finanças" aria-current="false">
-        <i data-lucide="wallet" class="w-[21px] h-[21px]"></i>
-        <span class="nav-label" aria-hidden="true">Finanças</span>
+      <button onclick="switchTab('resumo')" id="navBtnResumo" class="nav-item text-gray-400 flex flex-col items-center justify-center py-1 transition hover:text-gray-600">
+        <i data-lucide="wallet" class="w-5 h-5"></i>
+        <span class="text-[10px] font-medium mt-1">Financeiro</span>
       </button>
     </div>
   </nav>
+
   <!-- MODAL: ESCOLHA DA AÇÃO -->
   <div id="modalAction" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md p-5 space-y-4 shadow-xl">
