@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
-  <meta name="theme-color" content="#711A2A">
+  <meta name="theme-color" content="#FFF9FB">
   <meta name="application-name" content="Cora">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -3503,6 +3503,37 @@
         stageMeta.classList.toggle('hidden', !phase.meta);
       }
 
+      const homeStageProgress = document.getElementById('homeStageProgress');
+      const homeStageProgressTrack = document.getElementById('homeStageProgressTrack');
+      let stageProgress = null;
+      if (phase.lifeStage === 'expecting' && Number.isFinite(Number(phase.week))) {
+        stageProgress = Math.max(0, Math.min(100, (Number(phase.week) / 40) * 100));
+      } else if (phase.lifeStage === 'born' && Number.isFinite(Number(phase.months))) {
+        stageProgress = Math.max(0, Math.min(100, (Number(phase.months) / 12) * 100));
+      }
+      if (homeStageProgress) homeStageProgress.style.width = stageProgress == null ? '0%' : `${stageProgress}%`;
+      if (homeStageProgressTrack) homeStageProgressTrack.classList.toggle('is-muted', stageProgress == null);
+
+      const momentTitle = document.getElementById('homeMomentTitle');
+      const momentText = document.getElementById('homeMomentText');
+      if (momentTitle && momentText) {
+        if (phase.lifeStage === 'expecting') {
+          const week = Number(phase.week || 0);
+          momentTitle.textContent = week ? `Semana ${week}` : 'Preparando a chegada';
+          momentText.textContent = week >= 36
+            ? 'Revise o essencial e deixe a maternidade fácil de acessar.'
+            : week >= 28
+              ? 'Boa fase para fechar o essencial e acompanhar a mala da maternidade.'
+              : 'Acompanhe o que já está planejado e avance no seu ritmo.';
+        } else if (phase.lifeStage === 'born') {
+          momentTitle.textContent = Number.isFinite(Number(phase.months)) ? `${phase.value} de vida` : 'Primeira infância';
+          momentText.textContent = 'Estoque, rotina e planejamento se ajustam ao que vocês realmente usam.';
+        } else {
+          momentTitle.textContent = 'Tudo em um só lugar';
+          momentText.textContent = 'Planejamento, compras e rotina organizados de forma simples.';
+        }
+      }
+
       const progressText = document.getElementById('progressPercentText')?.textContent || '0%';
       const progressCount = document.getElementById('progressItemsCount')?.textContent || '0 de 0 no enxoval';
       const toolEnxovalMeta = document.getElementById('toolEnxovalMeta');
@@ -3525,6 +3556,41 @@
       }
       const toolDiaperMeta = document.getElementById('toolDiaperMeta');
       if (toolDiaperMeta) toolDiaperMeta.textContent = diaperText;
+
+      const homeQuickEnxovalValue = document.getElementById('homeQuickEnxovalValue');
+      const homeQuickEnxovalMeta = document.getElementById('homeQuickEnxovalMeta');
+      if (homeQuickEnxovalValue) homeQuickEnxovalValue.textContent = progressText;
+      if (homeQuickEnxovalMeta) homeQuickEnxovalMeta.textContent = progressCount;
+
+      const homeQuickMaternityValue = document.getElementById('homeQuickMaternityValue');
+      const homeQuickMaternityMeta = document.getElementById('homeQuickMaternityMeta');
+      if (homeQuickMaternityValue) homeQuickMaternityValue.textContent = maternityTotal ? `${maternityDone}/${maternityTotal}` : '—';
+      if (homeQuickMaternityMeta) homeQuickMaternityMeta.textContent = maternityTotal ? 'itens prontos' : 'checklist';
+
+      const homeQuickDiaperValue = document.getElementById('homeQuickDiaperValue');
+      const homeQuickDiaperMeta = document.getElementById('homeQuickDiaperMeta');
+      if (homeQuickDiaperValue && homeQuickDiaperMeta) {
+        if (diaperModel) {
+          const current = diaperModel.currentSize || 'RN';
+          homeQuickDiaperValue.textContent = diaperContext.lifeStage === 'expecting'
+            ? Number(diaperModel.totalStock || 0).toLocaleString('pt-BR')
+            : `${current} · ${Number(diaperModel.stockBySize?.[current] || 0).toLocaleString('pt-BR')}`;
+          homeQuickDiaperMeta.textContent = diaperContext.lifeStage === 'expecting'
+            ? 'no estoque'
+            : (diaperModel.autonomyDays == null ? 'no estoque' : `${compactNumber(diaperModel.autonomyDays)} dias`);
+        } else {
+          homeQuickDiaperValue.textContent = '—';
+          homeQuickDiaperMeta.textContent = 'estoque';
+        }
+      }
+
+      const financeRows = getCategoryFinanceData();
+      const homePlanned = financeRows.reduce((sum, row) => sum + (Number(row.planned) || 0), 0);
+      const homeSpent = financeRows.reduce((sum, row) => sum + (Number(row.spent) || 0), 0);
+      const homeQuickFinanceValue = document.getElementById('homeQuickFinanceValue');
+      const homeQuickFinanceMeta = document.getElementById('homeQuickFinanceMeta');
+      if (homeQuickFinanceValue) homeQuickFinanceValue.textContent = money(homeSpent);
+      if (homeQuickFinanceMeta) homeQuickFinanceMeta.textContent = homePlanned > 0 ? `de ${money(homePlanned)}` : 'gasto real';
 
       const toolEnxoval = document.getElementById('toolEnxovalCard');
       const toolDiaper = document.getElementById('toolDiaperCard');
@@ -3957,12 +4023,12 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     }
 
     const CATEGORY_META = {
-      vestuario: { label: 'Vestuário', color: '#ef476f' },
-      quarto: { label: 'Quarto', color: '#f4b942' },
-      higiene: { label: 'Higiene', color: '#4f86c6' },
-      alimentacao: { label: 'Alimentação', color: '#50bfa3' },
-      passeio: { label: 'Passeio', color: '#8e6bbd' },
-      mamae: { label: 'Mamãe', color: '#e07a5f' }
+      vestuario:   { label: 'Vestuário',   color: '#D5A84B', soft: '#FFF8D9' },
+      quarto:      { label: 'Quarto',      color: '#79B587', soft: '#E6F7E8' },
+      higiene:     { label: 'Higiene',     color: '#65B7B5', soft: '#DDF7F7' },
+      alimentacao: { label: 'Alimentação', color: '#D5906F', soft: '#FFE9DC' },
+      passeio:     { label: 'Passeio',     color: '#9B82C7', soft: '#F1E9FF' },
+      mamae:       { label: 'Mamãe',       color: '#7E9DC9', soft: '#E5F0FF' }
     };
 
     function getItemPlannedBudget(item) {
@@ -4029,8 +4095,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
       const donut = document.getElementById('financeBudgetDonut');
       if (donut) {
-        const ringColor = over ? '#B13C53' : '#711A2A';
-        donut.style.background = `conic-gradient(${ringColor} ${progress * 3.6}deg, #EFE7E5 0deg)`;
+        const ringColor = over ? '#D66D7F' : '#E97892';
+        donut.style.background = `conic-gradient(${ringColor} ${progress * 3.6}deg, #F4E9ED 0deg)`;
         donut.classList.toggle('is-over', over);
         donut.setAttribute('aria-label', hasBudget
           ? `${Math.round(rawProgress)}% do orçamento ${financeIncludeOptionals ? 'com opcionais' : 'sem opcionais'} utilizado`
@@ -4096,7 +4162,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         const pct = hasCatPlanned ? Math.min((catSpent / catPlanned) * 100, 100) : 0;
         const over = hasCatPlanned && catSpent > catPlanned;
         const diff = catPlanned - catSpent;
-        const bg = rgba(c.color, 0.13);
+        const bg = c.soft || rgba(c.color, 0.13);
         const fill = c.color;
         let detail;
         if (!hasCatPlanned) detail = catSpent > 0 ? `${money(catSpent)} gastos` : 'Sem orçamento definido';
@@ -4106,7 +4172,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         const barStyle = hasCatPlanned ? `background:${bg}; --bar-fill:${fill};` : 'background:#F0E9E8; --bar-fill:#AFA5A7;';
         return `<div class="finance-category-row">
           <div class="flex items-center justify-between gap-2">
-            <span class="font-semibold text-[12px] text-[#4A4143]">${c.label}</span>
+            <span class="finance-category-label font-semibold text-[12px] text-[#4A4143]"><i class="finance-category-swatch" style="background:${c.soft || bg};border-color:${c.color}"></i>${c.label}</span>
             <span class="text-[11px] font-semibold text-[#6F6668]">${hasCatPlanned ? `${money(catSpent)} / ${money(catPlanned)}` : money(catSpent)}</span>
           </div>
           <div class="finance-bar" style="${barStyle}"><div class="finance-bar-fill" style="width:${pct}%;"></div>${over ? '<div class="finance-bar-over"></div>' : ''}</div>
@@ -5841,8 +5907,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
     /* V4.9UI UI3.3 — shell + Início contextual */
     :root {
-      --cora-wine: #711A2A;
-      --cora-wine-soft: #8A2E42;
+      --cora-wine: #E97892;
+      --cora-wine-soft: #D86C86;
       --cora-blush: #FCD4D4;
       --cora-cream: #FCF7F1;
       --cora-ink: #302A2B;
@@ -5862,7 +5928,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .cora-context-card:active { transform:scale(.988); }
     .cora-context-icon { width:38px; height:38px; border-radius:13px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
     .cora-context-rose { background:#FFF5F4; border-color:#F6DEDE; }
-    .cora-context-rose .cora-context-icon { background:#FCE4E5; color:#8A2E42; }
+    .cora-context-rose .cora-context-icon { background:#FCE4E5; color:#D86C86; }
     .cora-context-lavender { background:#FAF6FD; border-color:#ECE1F5; }
     .cora-context-lavender .cora-context-icon { background:#EFE7F7; color:#765493; }
     .cora-context-blue { background:#F4F9F9; border-color:#DFEEEE; }
@@ -5891,7 +5957,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .cora-enxoval-progress-track { height:7px; border-radius:999px; overflow:hidden; background:#F0E6E4; }
     .cora-enxoval-progress-fill { height:100%; border-radius:999px; background:var(--cora-wine); transition:width .35s ease; }
     .cora-category-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }
-    .cat-card { --category-color:#711A2A; --category-soft:#FFF7F6; min-width:0; min-height:105px; padding:11px 7px 10px; border-radius:19px; background:#fff; border:1px solid rgba(113,26,42,.055); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; transition:transform .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease; }
+    .cat-card { --category-color:#E97892; --category-soft:#FFF7F6; min-width:0; min-height:105px; padding:11px 7px 10px; border-radius:19px; background:#fff; border:1px solid rgba(113,26,42,.055); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; transition:transform .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease; }
     .cat-card:active { transform:scale(.975); }
     .cat-card.is-selected { border-color:var(--category-color); background:var(--category-soft); box-shadow:0 0 0 1px color-mix(in srgb,var(--category-color) 14%, transparent),0 4px 14px rgba(66,39,45,.035); }
     .category-donut { width:52px; height:52px; padding:3px; margin-bottom:6px; }
@@ -5918,7 +5984,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .cora-item-badge.is-pending { background:#F2ECF7; color:#72558A; }
     .cora-item-badge.is-complete { background:#EAF6EF; color:#39775A; }
     .cora-item-reference { margin-top:5px; display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:9px; line-height:1.35; color:#8A8082; }
-    .cora-item-reference button { color:#8A2E42; font-weight:700; }
+    .cora-item-reference button { color:#D86C86; font-weight:700; }
     .cora-item-decision { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 11px; border-radius:14px; background:#FAF8F7; border:1px solid #EEE8E6; }
     .cora-item-decision.is-optional { background:#F4F9FA; border-color:#E0EEF1; }
     .cora-item-decision.is-pending { background:#F8F5FA; border-color:#ECE4F0; }
@@ -5926,7 +5992,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .cora-item-decision span { display:block; margin-top:2px; color:#8A8082; font-size:9px; line-height:1.35; }
     .cora-item-decision-actions { flex:0 0 auto; display:flex; align-items:center; gap:5px; }
     .cora-item-decision-actions button, .cora-item-compact-action { min-height:31px; padding:0 10px; border-radius:10px; background:#fff; border:1px solid #E6DEDC; color:#695F61; font-size:9px; font-weight:750; white-space:nowrap; }
-    .cora-item-decision-actions button.is-primary { background:#711A2A; border-color:#711A2A; color:#fff; }
+    .cora-item-decision-actions button.is-primary { background:#E97892; border-color:#E97892; color:#fff; }
     .cora-acquisition-row { width:100%; min-height:43px; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border-radius:13px; background:#F7FBF9; border:1px solid #E2EFE8; text-align:left; }
     .cora-acquisition-row strong { display:block; color:#3F4843; font-size:10px; line-height:1.2; }
     .cora-acquisition-row small { display:block; margin-top:2px; color:#88908B; font-size:9px; line-height:1.2; }
@@ -5936,7 +6002,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .cora-acquisition-empty button { min-height:30px; padding:0 11px; border-radius:9px; background:#EEF7F3; color:#267251; font-size:9px; font-weight:750; }
     .cora-routine-option { min-height:48px; display:flex; align-items:center; gap:11px; padding:10px 12px; border-radius:14px; border:1px solid #ECE5E3; background:#fff; cursor:pointer; }
     .cora-routine-option:has(input:checked) { border-color:#B86C7B; background:#FFF5F6; box-shadow:0 0 0 1px rgba(113,26,42,.08); }
-    .cora-routine-option input { accent-color:#711A2A; }
+    .cora-routine-option input { accent-color:#E97892; }
     .cora-routine-option strong { display:block; font-size:12px; color:#40383A; }
     .cora-routine-option small { display:block; margin-top:1px; font-size:9px; color:#8A8082; }
 
@@ -5969,7 +6035,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       .cora-finance-metric strong { font-size:12px; }
     }
     .cora-finance-section { padding:16px; border-radius:21px; background:#fff; border:1px solid rgba(113,26,42,.055); box-shadow:0 4px 16px rgba(66,39,45,.03); }
-    .cora-finance-section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; color:#8A2E42; }
+    .cora-finance-section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; color:#D86C86; }
     .cora-finance-section-head h3 { margin-top:2px; font-size:15px; line-height:1.15; font-weight:650; color:#3A3133; }
     .cora-finance-section-kicker { display:block; font-size:9px; line-height:1; text-transform:uppercase; letter-spacing:.08em; color:#9A7E84; font-weight:700; }
     .cora-finance-note { margin-top:6px; font-size:10px; line-height:1.4; color:#8A8082; }
@@ -5983,9 +6049,159 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     #recurringExpenses > button { border-color:#E5EEEE !important; background:#F8FBFB !important; box-shadow:none !important; }
     #listaDetalhadaCompras > div { background:#FAF8F7 !important; border-color:#F0E8E7 !important; border-radius:14px !important; }
 
+
+    /* V4.9UI UI3.5B — identidade pastel + Home funcional */
+    :root {
+      --cora-wine:#E97892;
+      --cora-wine-soft:#F29AB0;
+      --cora-primary:#E97892;
+      --cora-primary-strong:#D96C86;
+      --cora-pink:#FFE4EA;
+      --cora-lavender:#EDE4FF;
+      --cora-blue:#E3F2FF;
+      --cora-bg:#FFF9FB;
+      --cora-surface:#FFFCFD;
+      --cora-ink:#43383B;
+      --cora-muted:#887D81;
+      --cora-line:#F1E6E9;
+      --cora-success:#71AE91;
+    }
+    html { background:var(--cora-bg); }
+    body { background:var(--cora-bg) !important; color:var(--cora-ink); }
+    .cora-shell-header { background:rgba(255,249,251,.95); border-color:#F3E7EA; box-shadow:0 3px 16px rgba(111,76,87,.035); }
+    .cora-header-action { background:#FFF1F5; color:#C86A82; }
+    .cora-header-action:active { background:#FFE4EA; }
+    .cora-eyebrow,.cora-home-kicker { color:#C36B81; }
+    .cora-back-button { border-color:#F0E4E7; color:#7A6D71; box-shadow:0 2px 10px rgba(88,61,69,.035); }
+
+    .cora-home-hero { min-height:174px; position:relative; overflow:hidden; display:grid; grid-template-columns:minmax(0,1fr) 128px; align-items:center; gap:8px; padding:20px 16px 18px 20px; border-radius:28px; background:linear-gradient(135deg,#FFF0F4 0%,#FFF8FA 58%,#F5EEFF 100%); border:1px solid #F5E1E7; box-shadow:0 8px 28px rgba(119,79,91,.055); }
+    .cora-home-hero::before { content:''; position:absolute; width:115px; height:115px; border-radius:999px; left:-50px; bottom:-72px; background:#FFE4EA; opacity:.58; }
+    .cora-home-hero-copy { position:relative; z-index:1; min-width:0; }
+    .cora-home-stage-value { display:block; margin-top:7px; font-size:31px; line-height:1; letter-spacing:-.04em; color:#55464A; font-weight:720; }
+    .cora-home-stage-meta { margin-top:8px; font-size:12px; color:#8D747B; font-weight:560; }
+    .cora-home-progress { height:7px; margin-top:16px; border-radius:999px; overflow:hidden; background:rgba(221,199,207,.48); }
+    .cora-home-progress span { display:block; width:0; height:100%; border-radius:999px; background:linear-gradient(90deg,#F3A1B4,#E97892); transition:width .3s ease; }
+    .cora-home-progress.is-muted span { opacity:.35; }
+    .cora-home-baby-art { position:relative; z-index:1; width:128px; height:128px; filter:drop-shadow(0 8px 14px rgba(128,87,98,.10)); }
+    .cora-home-baby-art svg { width:100%; height:100%; display:block; }
+
+    .cora-home-moment { display:flex; align-items:center; gap:12px; padding:15px; border-radius:21px; background:#FFFDFD; border:1px solid #F3E8EA; box-shadow:0 4px 18px rgba(91,65,72,.035); }
+    .cora-home-moment-icon { width:42px; height:42px; border-radius:15px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; background:#FFF0F3; color:#E17892; }
+    .cora-home-moment-icon svg { width:20px; height:20px; }
+    .cora-home-moment strong { display:block; margin-top:3px; font-size:14px; color:#4B4043; }
+    .cora-home-moment p { margin-top:3px; font-size:10.5px; line-height:1.45; color:#887D81; }
+
+    .cora-home-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 2px 10px; }
+    .cora-home-section-head h2 { font-size:14px; font-weight:700; color:#4B4144; }
+    .cora-home-section-head button { display:inline-flex; align-items:center; gap:2px; color:#C96E84; font-size:10px; font-weight:700; }
+    .cora-home-section-head button svg { width:14px; height:14px; }
+
+    .cora-context-card { background:#fff; border-color:#F1E7E9; box-shadow:0 4px 16px rgba(83,59,66,.025); }
+    .cora-context-rose { background:#FFF5F7; border-color:#F9E1E7; }
+    .cora-context-rose .cora-context-icon { background:#FFE4EA; color:#D86E87; }
+    .cora-context-lavender { background:#FAF7FF; border-color:#EDE4FF; }
+    .cora-context-lavender .cora-context-icon { background:#EDE4FF; color:#8F76BC; }
+    .cora-context-blue { background:#F6FBFF; border-color:#E3F2FF; }
+    .cora-context-blue .cora-context-icon { background:#E3F2FF; color:#6E9FC5; }
+    .cora-context-empty { padding:13px 14px; display:flex; align-items:center; gap:10px; text-align:left; background:#FFFDFD; border:1px dashed #ECDDE1; }
+    .cora-context-empty-icon { width:36px; height:36px; border-radius:13px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; background:#EEF8F2; color:#6A9B80; }
+    .cora-context-empty strong { display:block; font-size:11px; color:#554A4D; }
+    .cora-context-empty small { display:block; margin-top:2px; font-size:9px; color:#91868A; }
+
+    .cora-home-overview-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+    .cora-home-overview-card { min-width:0; min-height:100px; padding:12px; border-radius:20px; display:flex; gap:10px; align-items:center; text-align:left; border:1px solid transparent; transition:transform .16s ease; }
+    .cora-home-overview-card:active { transform:scale(.985); }
+    .cora-home-overview-card.is-enxoval { background:#FFF3F6; border-color:#FFE4EA; }
+    .cora-home-overview-card.is-maternidade { background:#F9F6FF; border-color:#EDE4FF; }
+    .cora-home-overview-card.is-fraldas { background:#F5FAFF; border-color:#E3F2FF; }
+    .cora-home-overview-card.is-financas { background:#FFF8F0; border-color:#F9E8D5; }
+    .cora-home-overview-icon { width:39px; height:39px; border-radius:14px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; background:rgba(255,255,255,.74); }
+    .cora-home-overview-icon svg { width:20px; height:20px; }
+    .is-enxoval .cora-home-overview-icon { color:#D96C86; }
+    .is-maternidade .cora-home-overview-icon { color:#9278C2; }
+    .is-fraldas .cora-home-overview-icon { color:#6C9FC7; }
+    .is-financas .cora-home-overview-icon { color:#D69362; }
+    .cora-home-overview-card strong { display:block; font-size:10px; color:#62565A; }
+    .cora-home-overview-card b { display:block; margin-top:3px; font-size:14px; line-height:1.1; color:#43383B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .cora-home-overview-card small { display:block; margin-top:3px; font-size:8.5px; line-height:1.25; color:#94898D; }
+
+    .cora-tools-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; align-items:stretch; }
+    .cora-tool-tile { min-width:0; min-height:164px; padding:12px 8px 11px; border-radius:23px; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; text-align:center; border:1px solid transparent; transition:transform .16s ease; }
+    .cora-tool-tile:active { transform:scale(.98); }
+    .cora-tool-tile.is-enxoval { background:#FFF3F6; border-color:#FFE4EA; }
+    .cora-tool-tile.is-fraldas { background:#F4FAFF; border-color:#E3F2FF; }
+    .cora-tool-tile.is-maternidade { background:#F8F5FF; border-color:#EDE4FF; }
+    .cora-tool-art { width:82px; height:76px; display:flex; align-items:center; justify-content:center; }
+    .cora-tool-art svg { width:78px; height:68px; display:block; filter:drop-shadow(0 5px 8px rgba(94,68,76,.08)); }
+    .cora-tool-tile strong { margin-top:4px; font-size:13px; color:#4A3E42; }
+    .cora-tool-tile small { margin-top:4px; font-size:8.5px; line-height:1.25; color:#8B8084; }
+
+    .cora-enxoval-overview { background:linear-gradient(145deg,#FFFDFE,#FFF7F9); border-color:#F5E5EA; box-shadow:0 6px 22px rgba(100,70,80,.035); }
+    .cora-enxoval-progress-track { background:#F3E7EB; }
+    .cora-enxoval-progress-fill { background:linear-gradient(90deg,#F3A1B4,#E97892); }
+    .cat-card { background:#fff; border-color:#F1E8EA; min-height:112px; }
+    .cat-card.is-selected { border-color:var(--category-color); background:color-mix(in srgb,var(--category-soft) 45%,#fff); box-shadow:0 0 0 1px color-mix(in srgb,var(--category-color) 18%,transparent),0 5px 18px rgba(84,61,67,.035); }
+    .category-donut { width:58px; height:58px; padding:3px; margin-bottom:6px; }
+    .category-donut-icon { width:52px; height:52px; border-radius:18px; background:var(--category-soft) !important; color:var(--category-color); display:flex; align-items:center; justify-content:center; }
+    .category-donut-icon svg { width:42px; height:42px; }
+    .cora-enxoval-search,.cora-enxoval-select { border-color:#F0E4E7; background:#FFFDFD; }
+    .cora-item-card { border-color:#F0E6E8; box-shadow:0 4px 16px rgba(82,59,65,.025); }
+    .cora-item-decision-actions button.is-primary { background:var(--cora-primary); border-color:var(--cora-primary); }
+    .cora-item-reference button { color:var(--cora-primary-strong); }
+    .cora-routine-option:has(input:checked) { border-color:#F0A1B3; background:#FFF5F7; box-shadow:0 0 0 1px rgba(233,120,146,.09); }
+    .cora-routine-option input { accent-color:var(--cora-primary); }
+
+    #coraSeasonWidget { background:#FFFDFD !important; border-color:#F1E6E9 !important; }
+    .cora-climate-title { color:#655A5D; font-weight:650; margin-bottom:8px; }
+    .cora-climate-title i { color:#E97892; }
+    .cora-climate-tile { padding:7px 3px; border-radius:13px; background:#FAF7F8; border:1px solid #F2E9EB; text-align:center; }
+    .cora-climate-tile .cora-climate-icon { color:#A9A0A3; }
+
+    .cora-finance-overview { background:linear-gradient(145deg,#FFFDFE,#FFF8FA); border-color:#F3E5E8; box-shadow:0 5px 20px rgba(86,61,68,.03); }
+    .cora-finance-toggle { background:#FFF0F4; color:#A56777; }
+    .cora-finance-toggle .switch-track { background:#E8D8DD; }
+    .cora-finance-toggle.is-active { background:#FFE4EA; color:#CF657F; }
+    .cora-finance-toggle.is-active .switch-track { background:#E97892; }
+    .cora-finance-donut::after { background:#FFFDFD; box-shadow:inset 0 0 0 1px #F2E7EA; }
+    .cora-finance-donut-center strong,.cora-finance-metric-primary strong { color:#D86C86; }
+    .cora-finance-section { border-color:#F1E7E9; box-shadow:0 4px 16px rgba(83,59,66,.025); }
+    .cora-finance-section-head { color:#D16D84; }
+    .finance-category-label { display:inline-flex; align-items:center; gap:7px; }
+    .finance-category-swatch { width:11px; height:11px; border-radius:4px; border:1px solid transparent; display:inline-block; }
+
+    #sectionMaternidade > .bg-white { border-color:#EDE4FF !important; background:#FFFCFF !important; box-shadow:0 5px 18px rgba(92,72,118,.035); }
+    #maternidadeProgress { background:#EDE4FF !important; color:#7F68AB !important; }
+    #modalDiaperStock > div { background:#FCFEFF; }
+    #modalDiaperStock > div > div:first-child { background:#F3FAFF; border-color:#E3F2FF !important; }
+    #globalFab { background:var(--cora-primary) !important; box-shadow:0 8px 22px rgba(233,120,146,.30); }
+
+    .cora-bottom-nav { background:rgba(255,253,254,.96); border-color:#F1E5E8; box-shadow:0 -8px 28px rgba(84,60,67,.04); }
+    .cora-nav-item { color:#B3A9AC; }
+    .cora-nav-item.is-active { color:#D56882; }
+    .cora-nav-item.is-active > svg { padding:4px; box-sizing:content-box; border-radius:11px; background:#FFE4EA; }
+
+    .bg-rose-600 { background-color:#E97892 !important; }
+    .hover\:bg-rose-700:hover { background-color:#D96C86 !important; }
+    .text-rose-700,.text-rose-600,.text-rose-500 { color:#D86C86 !important; }
+    .bg-rose-50 { background-color:#FFF5F7 !important; }
+    .bg-rose-100 { background-color:#FFE4EA !important; }
+    .border-rose-100,.border-rose-200 { border-color:#F7DDE4 !important; }
+    .focus\:ring-rose-400:focus { --tw-ring-color:#F0A5B6 !important; }
+    .bg-emerald-600 { background-color:#71AE91 !important; }
+    .text-emerald-700,.text-emerald-600 { color:#568F74 !important; }
+    .bg-emerald-50 { background-color:#F2FAF6 !important; }
+    .border-emerald-100,.border-emerald-200 { border-color:#DCEFE4 !important; }
+
+    @media (max-width:355px) {
+      .cora-home-hero { grid-template-columns:minmax(0,1fr) 108px; }
+      .cora-home-baby-art { width:108px; height:108px; }
+      .cora-tool-art { width:70px; }
+      .cora-tool-tile { min-height:154px; }
+    }
+
 </style>
 </head>
-<body class="bg-[#FCF7F1] text-gray-800 font-sans pb-24 min-h-screen">
+<body class="bg-[#FFF9FB] text-[#43383B] font-sans pb-24 min-h-screen">
 
   <div id="appShell" class="hidden">
 
@@ -6003,56 +6219,104 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
   </header>
   <main class="max-w-md mx-auto px-4 pt-4 pb-4">
 
-    <!-- UI3.3 — INÍCIO CONTEXTUAL: contexto e atenção, não catálogo de módulos -->
-    <section id="sectionInicio" class="space-y-5">
-      <div class="cora-stage-card">
-        <div class="min-w-0">
-          <span id="homeStageLabel" class="cora-eyebrow">Gestação</span>
-          <strong id="homeStageValue" class="block text-[30px] leading-none tracking-[-0.035em] text-[#4B252F] mt-1.5">—</strong>
-          <p id="homeStageMeta" class="text-[12px] font-medium text-[#916E77] mt-2">—</p>
+    <!-- UI3.5B — INÍCIO: momento + prioridades + visão rápida -->
+    <section id="sectionInicio" class="space-y-4">
+      <section class="cora-home-hero">
+        <div class="cora-home-hero-copy">
+          <span id="homeStageLabel" class="cora-home-kicker">Gestação</span>
+          <strong id="homeStageValue" class="cora-home-stage-value">—</strong>
+          <p id="homeStageMeta" class="cora-home-stage-meta">—</p>
+          <div id="homeStageProgressTrack" class="cora-home-progress"><span id="homeStageProgress"></span></div>
         </div>
-      </div>
+        <div class="cora-home-baby-art" aria-hidden="true">
+          <svg viewBox="0 0 120 120" fill="none">
+            <circle cx="60" cy="60" r="54" fill="#FFE4EA"/>
+            <path d="M33 70c3-24 18-39 38-39 13 0 25 7 31 19-8-3-15-2-21 3-7 6-10 15-8 27-17 7-29 4-40-10Z" fill="#F8B6C7"/>
+            <circle cx="66" cy="54" r="18" fill="#FFE5D9"/>
+            <path d="M54 51c3-8 9-13 18-13 5 0 10 2 13 6-5-1-9 0-12 3-4 3-6 8-6 14-6 0-11-3-13-10Z" fill="#C88C75"/>
+            <path d="M60 55c1.5 1.4 3 1.4 4.5 0M72 55c1.5 1.4 3 1.4 4.5 0" stroke="#73565D" stroke-width="2" stroke-linecap="round"/>
+            <path d="M66 63c2 2 5 2 7 0" stroke="#E9899E" stroke-width="2" stroke-linecap="round"/>
+            <path d="M38 77c12-10 27-12 42-5 9 4 15 11 18 20-18 14-44 16-64 2 0-6 1-12 4-17Z" fill="#EDE4FF"/>
+            <path d="M82 21c2-5 8-5 10 0 3-4 9-1 8 4-1 5-7 8-12 12-5-4-11-7-12-12-1-5 5-8 8-4Z" fill="#EF7996"/>
+          </svg>
+        </div>
+      </section>
 
-      <div>
-        <div class="flex items-center justify-between mb-2.5 px-0.5">
-          <h2 class="text-[14px] font-semibold text-[#4A4143]">Agora</h2>
+      <section class="cora-home-moment">
+        <div class="cora-home-moment-icon" aria-hidden="true"><i data-lucide="sparkles"></i></div>
+        <div class="min-w-0">
+          <span class="cora-home-kicker">Seu momento</span>
+          <strong id="homeMomentTitle">Organizando com calma</strong>
+          <p id="homeMomentText">O Cora reúne o que merece atenção nesta fase.</p>
+        </div>
+      </section>
+
+      <section>
+        <div class="cora-home-section-head">
+          <h2>Para agora</h2>
         </div>
         <div id="homeContextList" class="space-y-2.5"></div>
         <div id="homeContextEmpty" class="cora-context-empty hidden">
-          <span class="inline-flex w-9 h-9 rounded-[13px] items-center justify-center bg-[#F8E9E8] text-[#8A2E42] mb-2"><i data-lucide="sparkles" class="w-[17px] h-[17px]"></i></span>
-          <strong class="block text-[13px] font-semibold text-[#4A4143]">Tudo em ordem por aqui</strong>
-          <span class="block text-[11px] text-[#8A8082] mt-1">Nada pede atenção neste momento.</span>
+          <span class="cora-context-empty-icon"><i data-lucide="check" class="w-[17px] h-[17px]"></i></span>
+          <span>
+            <strong>Sem pendências agora</strong>
+            <small>Você pode acompanhar o panorama abaixo.</small>
+          </span>
         </div>
-      </div>
+      </section>
+
+      <section>
+        <div class="cora-home-section-head">
+          <h2>Visão rápida</h2>
+          <button type="button" onclick="switchTab('ferramentas', { resetTools: true })">Ferramentas <i data-lucide="chevron-right"></i></button>
+        </div>
+        <div class="cora-home-overview-grid">
+          <button type="button" onclick="switchTab('enxoval')" class="cora-home-overview-card is-enxoval">
+            <span class="cora-home-overview-icon"><i data-lucide="list-checks"></i></span>
+            <span><strong>Enxoval</strong><b id="homeQuickEnxovalValue">—</b><small id="homeQuickEnxovalMeta">—</small></span>
+          </button>
+          <button type="button" onclick="switchTab('maternidade')" class="cora-home-overview-card is-maternidade">
+            <span class="cora-home-overview-icon"><i data-lucide="backpack"></i></span>
+            <span><strong>Maternidade</strong><b id="homeQuickMaternityValue">—</b><small id="homeQuickMaternityMeta">—</small></span>
+          </button>
+          <button type="button" onclick="openDiaperStock()" class="cora-home-overview-card is-fraldas">
+            <span class="cora-home-overview-icon">
+              <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 8.5 12 11h8l6-2.5V18c0 5.8-4.3 10-10 10S6 23.8 6 18V8.5Z" fill="currentColor" opacity=".18"/><path d="M6 8.5 12 11h8l6-2.5V18c0 5.8-4.3 10-10 10S6 23.8 6 18V8.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 11c-.1 3.2-2 5.8-5.7 6.7M20 11c.1 3.2 2 5.8 5.7 6.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </span>
+            <span><strong>Fraldas</strong><b id="homeQuickDiaperValue">—</b><small id="homeQuickDiaperMeta">—</small></span>
+          </button>
+          <button type="button" onclick="switchTab('resumo')" class="cora-home-overview-card is-financas">
+            <span class="cora-home-overview-icon"><i data-lucide="chart-no-axes-column-increasing"></i></span>
+            <span><strong>Finanças</strong><b id="homeQuickFinanceValue">—</b><small id="homeQuickFinanceMeta">—</small></span>
+          </button>
+        </div>
+      </section>
     </section>
 
-    <!-- UI3.3 — FERRAMENTAS: catálogo estável -->
-    <section id="sectionFerramentas" class="hidden space-y-3">
-      <button id="toolEnxovalCard" type="button" onclick="switchTab('enxoval')" class="cora-tool-card">
-        <span class="cora-tool-illustration bg-[#FCE4E5] text-[#8A2E42]"><i data-lucide="list-checks" class="w-7 h-7"></i></span>
-        <span class="min-w-0 flex-1 text-left">
-          <strong class="block text-[16px] font-semibold text-[#302A2B]">Enxoval</strong>
-          <span id="toolEnxovalMeta" class="block text-[12px] text-[#7C7476] mt-1">Planejamento do enxoval</span>
+    <!-- UI3.5B — FERRAMENTAS: catálogo estável --> catálogo estável -->
+    <section id="sectionFerramentas" class="hidden cora-tools-grid">
+      <button id="toolEnxovalCard" type="button" onclick="switchTab('enxoval')" class="cora-tool-tile is-enxoval">
+        <span class="cora-tool-art" aria-hidden="true">
+          <svg viewBox="0 0 80 70" fill="none"><rect x="15" y="29" width="32" height="26" rx="7" fill="#F8AFC0"/><path d="M20 31c5-9 17-12 25-5l-5 9-7-3-6 4-7-5Z" fill="#FFF"/><rect x="43" y="18" width="25" height="38" rx="5" fill="#FFF8FB" stroke="#D76F88" stroke-width="2"/><path d="m49 29 3 3 5-6M49 39l3 3 5-6M49 49l3 3 5-6" stroke="#79A6D2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="57" r="8" fill="#FFF" stroke="#D89A69" stroke-width="2"/><circle cx="14" cy="52" r="3" fill="#FFF"/><circle cx="22" cy="52" r="3" fill="#FFF"/></svg>
         </span>
-        <i data-lucide="chevron-right" class="w-[18px] h-[18px] text-[#B6A9AC] shrink-0"></i>
+        <strong>Enxoval</strong>
+        <small id="toolEnxovalMeta">Planejamento do enxoval</small>
       </button>
 
-      <button id="toolDiaperCard" type="button" onclick="openDiaperStock()" class="cora-tool-card">
-        <span class="cora-tool-illustration bg-[#E4F0F1] text-[#47777B]" aria-hidden="true"><svg class="cora-diaper-glyph w-8 h-8" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 8.5 12 11h8l6-2.5V18c0 5.8-4.3 10-10 10S6 23.8 6 18V8.5Z" fill="currentColor" opacity=".17"/><path d="M6 8.5 12 11h8l6-2.5V18c0 5.8-4.3 10-10 10S6 23.8 6 18V8.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 11c-.1 3.2-2 5.8-5.7 6.7M20 11c.1 3.2 2 5.8 5.7 6.7M11.5 23.2c2.8-1.5 6.2-1.5 9 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
-        <span class="min-w-0 flex-1 text-left">
-          <strong class="block text-[16px] font-semibold text-[#302A2B]">Fraldas</strong>
-          <span id="toolDiaperMeta" class="block text-[12px] text-[#7C7476] mt-1">Estoque e consumo</span>
+      <button id="toolDiaperCard" type="button" onclick="openDiaperStock()" class="cora-tool-tile is-fraldas">
+        <span class="cora-tool-art" aria-hidden="true">
+          <svg viewBox="0 0 80 70" fill="none"><path d="M12 17c10 8 18 10 28 10s18-2 28-10v22c0 17-12 27-28 27S12 56 12 39V17Z" fill="#F8FCFF" stroke="#6EA7D3" stroke-width="3"/><path d="M13 23c8 7 16 10 27 10 12 0 20-3 27-10" stroke="#A8D1EF" stroke-width="3" stroke-dasharray="4 4"/><path d="M21 38h12v12H21zM47 38h12v12H47z" fill="#BFE0F7"/><path d="M38 42c1.8-4 7-4 8.5 0 2.4-3 7.5-1 7 3-.5 4-5.5 7-11.2 11-5.8-4-10.8-7-11.3-11-.5-4 4.6-6 7-3Z" fill="#F49AB0"/></svg>
         </span>
-        <i data-lucide="chevron-right" class="w-[18px] h-[18px] text-[#B6A9AC] shrink-0"></i>
+        <strong>Fraldas</strong>
+        <small id="toolDiaperMeta">Estoque e consumo</small>
       </button>
 
-      <button id="toolMaternityCard" type="button" onclick="switchTab('maternidade')" class="cora-tool-card">
-        <span class="cora-tool-illustration bg-[#EFE7F7] text-[#765493]"><i data-lucide="backpack" class="w-7 h-7"></i></span>
-        <span class="min-w-0 flex-1 text-left">
-          <strong class="block text-[16px] font-semibold text-[#302A2B]">Maternidade</strong>
-          <span id="toolMaternityMeta" class="block text-[12px] text-[#7C7476] mt-1">Checklist da maternidade</span>
+      <button id="toolMaternityCard" type="button" onclick="switchTab('maternidade')" class="cora-tool-tile is-maternidade">
+        <span class="cora-tool-art" aria-hidden="true">
+          <svg viewBox="0 0 80 70" fill="none"><path d="M24 22c0-9 7-15 16-15s16 6 16 15" stroke="#9D82CE" stroke-width="4" stroke-linecap="round"/><rect x="11" y="20" width="58" height="43" rx="11" fill="#CBBBF0" stroke="#8F74BF" stroke-width="3"/><path d="M11 38h58" stroke="#8F74BF" stroke-width="3"/><rect x="32" y="34" width="16" height="12" rx="4" fill="#FFE7B7" stroke="#B88954" stroke-width="2"/><path d="M23 53h34" stroke="#FFF" stroke-width="3" stroke-linecap="round"/></svg>
         </span>
-        <i data-lucide="chevron-right" class="w-[18px] h-[18px] text-[#B6A9AC] shrink-0"></i>
+        <strong>Maternidade</strong>
+        <small id="toolMaternityMeta">Checklist da maternidade</small>
       </button>
     </section>
 
@@ -6067,7 +6331,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       <div class="cora-enxoval-overview">
         <div class="flex justify-between items-center mb-2">
           <div>
-            <span id="progressPercentText" class="text-[26px] font-semibold tracking-[-0.04em] text-[#711A2A]">0%</span>
+            <span id="progressPercentText" class="text-[26px] font-semibold tracking-[-0.04em] text-[#E97892]">0%</span>
             <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider ml-1">concluído</span>
           </div>
           <div class="text-right">
@@ -6083,29 +6347,29 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       
       <!-- CATEGORIAS -->
       <div class="cora-category-grid" role="group" aria-label="Categorias do enxoval">
-        <button type="button" data-category="vestuario" aria-pressed="true" onclick="filterCategory('vestuario')" class="cat-card" style="--category-color:#C84D6B;--category-soft:#FFF5F7">
-          <div id="catDonutVestuario" class="category-donut" data-color="#C84D6B"><div class="category-donut-icon" style="--category-color:#C84D6B"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M11 6.2c1.3 1.8 3 2.7 5 2.7s3.8-.9 5-2.7l5 2.8-2.6 5-2.1-1.1V26H10.7V12.9L8.6 14 6 9l5-2.8Z" fill="currentColor" opacity=".18"/><path d="M11 6.2c1.3 1.8 3 2.7 5 2.7s3.8-.9 5-2.7l5 2.8-2.6 5-2.1-1.1V26H10.7V12.9L8.6 14 6 9l5-2.8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M13.2 23.5h5.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div></div>
-          <span class="text-[12px] font-semibold text-[#3B3436]">Vestuário</span><span id="catBadgeVestuario" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
+        <button type="button" data-category="vestuario" aria-pressed="true" onclick="filterCategory('vestuario')" class="cat-card" style="--category-color:#D5A84B;--category-soft:#FFF8D9">
+          <div id="catDonutVestuario" class="category-donut" data-color="#D5A84B"><div class="category-donut-icon"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M22 12c3 4 6 6 10 6s7-2 10-6l12 7-6 11-6-3v25H22V27l-6 3-6-11 12-7Z" fill="#FFF" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M27 36c2-5 8-5 10 0 3-4 9-1 8 4-1 5-7 8-13 12-6-4-12-7-13-12-1-5 5-8 8-4Z" fill="#F49AB0"/></svg></div></div>
+          <span class="text-[12px] font-semibold text-[#4A4043]">Vestuário</span><span id="catBadgeVestuario" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
-        <button type="button" data-category="quarto" aria-pressed="false" onclick="filterCategory('quarto')" class="cat-card" style="--category-color:#C98B2E;--category-soft:#FFFAEF">
-          <div id="catDonutQuarto" class="category-donut" data-color="#C98B2E"><div class="category-donut-icon" style="--category-color:#C98B2E"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="5" y="12" width="22" height="10" rx="3.5" fill="currentColor" opacity=".16"/><path d="M6 24V11M26 24V14M6 19h20M10 11h8a4 4 0 0 1 4 4v4H10v-8Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11V8h6.3c1.8 0 3.4 1.2 3.8 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div></div>
-          <span class="text-[12px] font-semibold text-[#3B3436]">Quarto</span><span id="catBadgeQuarto" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
+        <button type="button" data-category="quarto" aria-pressed="false" onclick="filterCategory('quarto')" class="cat-card" style="--category-color:#79B587;--category-soft:#E6F7E8">
+          <div id="catDonutQuarto" class="category-donut" data-color="#79B587"><div class="category-donut-icon"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M10 31h44v19H10z" fill="#FFF" stroke="currentColor" stroke-width="3"/><path d="M14 50v6M50 50v6M18 31V20h25c7 0 11 4 11 11" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M40 9v10M32 14h16" stroke="#D5A84B" stroke-width="2.5" stroke-linecap="round"/><circle cx="34" cy="20" r="3" fill="#79B587"/><path d="m45 17 2 4 5 .5-3.5 3 1 5-4.5-2.5-4.5 2.5 1-5-3.5-3 5-.5 2-4Z" fill="#8DAAD4"/></svg></div></div>
+          <span class="text-[12px] font-semibold text-[#4A4043]">Quarto</span><span id="catBadgeQuarto" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
-        <button type="button" data-category="higiene" aria-pressed="false" onclick="filterCategory('higiene')" class="cat-card" style="--category-color:#4F83A7;--category-soft:#F3F9FC">
-          <div id="catDonutHigiene" class="category-donut" data-color="#4F83A7"><div class="category-donut-icon" style="--category-color:#4F83A7"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M5 15h22v3a8 8 0 0 1-8 8h-6a8 8 0 0 1-8-8v-3Z" fill="currentColor" opacity=".16"/><path d="M5 15h22v3a8 8 0 0 1-8 8h-6a8 8 0 0 1-8-8v-3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 15v-4.2A3.8 3.8 0 0 1 12.8 7H14M9 26v2M23 26v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="22" cy="8" r="2" fill="currentColor" opacity=".35"/><circle cx="26" cy="5" r="1.2" fill="currentColor" opacity=".24"/></svg></div></div>
-          <span class="text-[12px] font-semibold text-[#3B3436]">Higiene</span><span id="catBadgeHigiene" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
+        <button type="button" data-category="higiene" aria-pressed="false" onclick="filterCategory('higiene')" class="cat-card" style="--category-color:#65B7B5;--category-soft:#DDF7F7">
+          <div id="catDonutHigiene" class="category-donut" data-color="#65B7B5"><div class="category-donut-icon"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M9 33h46v7c0 11-9 19-20 19h-6C18 59 9 51 9 40v-7Z" fill="#FFF" stroke="currentColor" stroke-width="3"/><path d="M17 33V22c0-7 5-12 12-12h2" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M39 28c4-5 12-3 13 2-5 4-10 4-13-2Z" fill="#F4C75D"/><circle cx="47" cy="26" r="2" fill="#4F7F9D"/><circle cx="46" cy="14" r="4" fill="#FFF" stroke="#9EDADA" stroke-width="2"/><circle cx="55" cy="20" r="3" fill="#FFF" stroke="#9EDADA" stroke-width="2"/></svg></div></div>
+          <span class="text-[12px] font-semibold text-[#4A4043]">Higiene</span><span id="catBadgeHigiene" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
-        <button type="button" data-category="alimentacao" aria-pressed="false" onclick="filterCategory('alimentacao')" class="cat-card" style="--category-color:#4B9B83;--category-soft:#F2FAF7">
-          <div id="catDonutAlimentacao" class="category-donut" data-color="#4B9B83"><div class="category-donut-icon" style="--category-color:#4B9B83"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M12 7h8l-1.3 4 3.3 4v9a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4v-9l3.3-4L12 7Z" fill="currentColor" opacity=".16"/><path d="M12 7h8M13.3 7 12 11l-2 3.5V24a4 4 0 0 0 4 4h4a4 4 0 0 0 4-4v-9.5L20 11l-1.3-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 18h12M13 4h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div></div>
-          <span class="text-[12px] font-semibold text-[#3B3436]">Alimentação</span><span id="catBadgeAlimentacao" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
+        <button type="button" data-category="alimentacao" aria-pressed="false" onclick="filterCategory('alimentacao')" class="cat-card" style="--category-color:#D5906F;--category-soft:#FFE9DC">
+          <div id="catDonutAlimentacao" class="category-donut" data-color="#D5906F"><div class="category-donut-icon"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M24 8h16l-3 9 6 9v24c0 6-5 10-11 10s-11-4-11-10V26l6-9-3-9Z" fill="#FFF" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 35h22" stroke="currentColor" stroke-width="3"/><path d="M27 43c2-5 8-5 10 0 3-4 9-1 8 4-1 5-7 8-13 12-6-4-12-7-13-12-1-5 5-8 8-4Z" fill="#F49AB0"/><path d="M26 4h12" stroke="#C98467" stroke-width="3" stroke-linecap="round"/></svg></div></div>
+          <span class="text-[12px] font-semibold text-[#4A4043]">Alimentação</span><span id="catBadgeAlimentacao" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
-        <button type="button" data-category="passeio" aria-pressed="false" onclick="filterCategory('passeio')" class="cat-card" style="--category-color:#8066A4;--category-soft:#F8F5FC">
-          <div id="catDonutPasseio" class="category-donut" data-color="#8066A4"><div class="category-donut-icon" style="--category-color:#8066A4"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M10 10h11a6 6 0 0 1 6 6v2H12a4 4 0 0 1-4-4v-4h2Z" fill="currentColor" opacity=".16"/><path d="M8 10h13a6 6 0 0 1 6 6v2H12a4 4 0 0 1-4-4v-4ZM9 10 7 6H4M13 18l-2 5h12l-2-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="26" r="2" fill="currentColor"/><circle cx="22" cy="26" r="2" fill="currentColor"/></svg></div></div>
-          <span class="text-[12px] font-semibold text-[#3B3436]">Passeio</span><span id="catBadgePasseio" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
+        <button type="button" data-category="passeio" aria-pressed="false" onclick="filterCategory('passeio')" class="cat-card" style="--category-color:#9B82C7;--category-soft:#F1E9FF">
+          <div id="catDonutPasseio" class="category-donut" data-color="#9B82C7"><div class="category-donut-icon"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M17 18h25c9 0 15 6 15 15v4H26c-8 0-13-5-13-13v-6h4Z" fill="#F8D6E1" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 18 14 9H8M27 37l-4 10h26l-4-10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="25" cy="54" r="5" fill="#FFF" stroke="#756F80" stroke-width="3"/><circle cx="47" cy="54" r="5" fill="#FFF" stroke="#756F80" stroke-width="3"/></svg></div></div>
+          <span class="text-[12px] font-semibold text-[#4A4043]">Passeio</span><span id="catBadgePasseio" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
-        <button type="button" data-category="mamae" aria-pressed="false" onclick="filterCategory('mamae')" class="cat-card" style="--category-color:#B96869;--category-soft:#FFF6F5">
-          <div id="catDonutMamae" class="category-donut" data-color="#B96869"><div class="category-donut-icon" style="--category-color:#B96869"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="13" cy="7" r="3" fill="currentColor" opacity=".22"/><circle cx="20.5" cy="17" r="3.2" fill="currentColor" opacity=".32"/><path d="M10 11c-2.4 3-3 7.2-1.4 10.5 1.7 3.5 5.3 5.5 9.1 5M13 11c4 .6 6.8 2.8 7.7 6.2.9 3.5-.7 6.8-3.8 8.6M16 18c1.8 2.1 4.1 3.1 6.8 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div></div>
-          <span class="text-[12px] font-semibold text-[#3B3436]">Mamãe</span><span id="catBadgeMamae" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
+        <button type="button" data-category="mamae" aria-pressed="false" onclick="filterCategory('mamae')" class="cat-card" style="--category-color:#7E9DC9;--category-soft:#E5F0FF">
+          <div id="catDonutMamae" class="category-donut" data-color="#7E9DC9"><div class="category-donut-icon"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><circle cx="29" cy="15" r="8" fill="#F2B69D"/><path d="M17 32c4-8 12-11 20-8 8 3 13 10 13 21 0 8-5 14-13 14H24C14 59 9 52 10 43c1-5 3-8 7-11Z" fill="#F7C7D5" stroke="currentColor" stroke-width="3"/><circle cx="39" cy="41" r="8" fill="#FFE1D4"/><path d="M25 43c5 7 12 9 20 5" stroke="#FFF" stroke-width="3" stroke-linecap="round"/><path d="M22 11c2-8 13-12 19-5 3 3 3 8 1 12-4-5-11-7-20-7Z" fill="#9B695E"/></svg></div></div>
+          <span class="text-[12px] font-semibold text-[#4A4043]">Mamãe</span><span id="catBadgeMamae" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
       </div>
 
@@ -6827,7 +7091,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         <label class="cora-routine-option"><input type="radio" name="routineFeedingMode" value="mixed"><span><strong>Misto</strong></span></label>
         <label class="cora-routine-option"><input type="radio" name="routineFeedingMode" value="formula"><span><strong>Fórmula</strong></span></label>
       </div>
-      <button type="button" onclick="saveRoutineDecision()" class="mt-4 w-full h-11 rounded-xl bg-[#711A2A] text-white text-sm font-semibold">Aplicar</button>
+      <button type="button" onclick="saveRoutineDecision()" class="mt-4 w-full h-11 rounded-xl bg-[#E97892] text-white text-sm font-semibold">Aplicar</button>
     </div>
   </div>
 
