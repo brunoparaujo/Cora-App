@@ -344,6 +344,7 @@
       activeHistoryItemId: null,
       editingItemBase: null,
       editingAcquisitionBase: null,
+      editingMaternityBase: null,
       connected: false,
       authReady: false,
       user: null,
@@ -2332,6 +2333,65 @@
       });
     }
 
+    async function createMaternityItemInFirebase({ title, cat }) {
+      const id = newStableId('maternity', childPath('maternity'));
+      const now = Date.now();
+      const item = {
+        id,
+        cat: cat === 'mamãe' ? 'mamãe' : 'bebê',
+        title: String(title || '').trim(),
+        checked: false,
+        revision: 1,
+        createdAt: now,
+        updatedAt: now
+      };
+      await db.ref(childPath(`maternity/${id}`)).set(item);
+      return item;
+    }
+
+    async function updateMaternityItemInFirebase(id, draft, expected) {
+      const ref = db.ref(childPath(`maternity/${id}`));
+      let abortReason = null;
+      const result = await ref.transaction(currentRaw => {
+        abortReason = null;
+        if (!currentRaw) {
+          abortReason = 'Este item não existe mais.';
+          return;
+        }
+        const current = normalizeMaternityItem(currentRaw, id);
+        if (expected && Number(current.revision || 0) !== Number(expected.revision || 0)) {
+          abortReason = 'Este item foi alterado em outro aparelho. A edição foi cancelada para preservar a versão mais nova.';
+          return;
+        }
+        const now = Date.now();
+        current.title = String(draft.title || '').trim();
+        current.cat = draft.cat === 'mamãe' ? 'mamãe' : 'bebê';
+        current.revision = Math.max(0, Number(current.revision) || 0) + 1;
+        current.createdAt = current.createdAt || now;
+        current.updatedAt = now;
+        return current;
+      });
+      if (!result.committed && abortReason) throw createConcurrencyError(abortReason);
+      return result;
+    }
+
+    async function deleteMaternityItemInFirebase(id, expected) {
+      const ref = db.ref(childPath(`maternity/${id}`));
+      let abortReason = null;
+      const result = await ref.transaction(currentRaw => {
+        abortReason = null;
+        if (!currentRaw) return null;
+        const current = normalizeMaternityItem(currentRaw, id);
+        if (expected && Number(current.revision || 0) !== Number(expected.revision || 0)) {
+          abortReason = 'Este item foi alterado em outro aparelho. A exclusão foi cancelada para preservar a versão mais nova.';
+          return;
+        }
+        return null;
+      });
+      if (!result.committed && abortReason) throw createConcurrencyError(abortReason);
+      return result;
+    }
+
     function stopRealtimeSync() {
       if (realtimeChildRef) realtimeChildRef.off();
       if (realtimeConnectionRef) realtimeConnectionRef.off();
@@ -3990,83 +4050,47 @@
       };
     }
 
-    function maternityTimingCopy(phase, checked, total) {
-      if (total > 0 && checked === total) {
-        return {
-          title: 'Mala pronta',
-          text: phase.lifeStage === 'born'
-            ? 'Checklist concluído e preservado como referência.'
-            : 'Tudo marcado. Agora é só manter a mala fácil de pegar.'
-        };
-      }
-      if (phase.lifeStage === 'expecting') {
-        const week = Number(phase.week || 0);
-        if (week >= 37) return { title: 'Reta final', text: 'Vale deixar tudo pronto e fácil de pegar.' };
-        if (week >= 34) return { title: 'Hora de fechar a mala', text: 'A 34ª–36ª semana é uma boa janela para deixar tudo pronto.' };
-        if (week >= 28) return { title: 'Boa hora para começar', text: 'Separe aos poucos o que falta, sem precisar resolver tudo de uma vez.' };
-        return { title: 'Preparando com calma', text: 'Você pode adiantar o essencial aos poucos e revisar mais perto da chegada.' };
-      }
-      if (phase.lifeStage === 'born') {
-        return { title: 'Checklist da maternidade', text: 'A lista fica aqui como histórico do que foi preparado.' };
-      }
-      return { title: 'Preparando a mala', text: 'Marque os itens conforme forem ficando prontos.' };
-    }
-
     function renderMaternidade() {
       const container = document.getElementById('maternidadeChecklistContainer');
       if (!container) return;
 
-      const items = [...appState.maternidade];
+      const items = [...appState.maternidade]
+        .sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'pt-BR', { sensitivity: 'base' }));
       const total = items.length;
       const checked = items.filter(item => item.checked).length;
-      const remaining = Math.max(0, total - checked);
       const percent = total > 0 ? Math.round((checked / total) * 100) : 0;
-      const phase = shellChildPhase();
-      const timing = maternityTimingCopy(phase, checked, total);
 
-      const progress = document.getElementById('maternidadeProgress');
       const percentEl = document.getElementById('maternidadePercent');
       const progressBar = document.getElementById('maternidadeProgressBar');
       const progressTrack = progressBar?.parentElement;
-      const heroTitle = document.getElementById('maternidadeHeroTitle');
-      const timingText = document.getElementById('maternidadeTimingText');
-      const remainingEl = document.getElementById('maternidadeRemaining');
-
-      if (progress) progress.textContent = `${checked}/${total}`;
       if (percentEl) percentEl.textContent = `${percent}%`;
       if (progressBar) progressBar.style.width = `${percent}%`;
       if (progressTrack) progressTrack.setAttribute('aria-valuenow', String(percent));
-      if (heroTitle) heroTitle.textContent = timing.title;
-      if (timingText) timingText.textContent = timing.text;
-      if (remainingEl) remainingEl.textContent = remaining === 0 ? 'Tudo pronto' : `${remaining} ${remaining === 1 ? 'pendência' : 'pendências'}`;
 
       const groups = ['bebê', 'mamãe'].map(cat => {
         const meta = maternityGroupMeta(cat);
         const groupItems = items.filter(item => (item.cat === 'mamãe' ? 'mamãe' : 'bebê') === cat);
         const groupChecked = groupItems.filter(item => item.checked).length;
-        return { ...meta, items: groupItems, checked: groupChecked, total: groupItems.length };
+        const groupPercent = groupItems.length ? Math.round((groupChecked / groupItems.length) * 100) : 0;
+        return { ...meta, items: groupItems, percent: groupPercent, total: groupItems.length };
       }).filter(group => group.total > 0);
 
       const summary = document.getElementById('maternidadeGroupSummary');
       if (summary) {
-        summary.innerHTML = groups.map(group => {
-          const groupPercent = group.total ? Math.round((group.checked / group.total) * 100) : 0;
-          return `<div class="cora-maternity-summary-card ${group.className}">
+        summary.innerHTML = groups.map(group => `
+          <div class="cora-maternity-summary-card ${group.className}">
             <span class="cora-maternity-summary-icon"><i data-lucide="${group.icon}"></i></span>
-            <span class="min-w-0">
-              <strong>${group.shortLabel}</strong>
-              <small>${group.checked}/${group.total} prontos</small>
-            </span>
-            <b>${groupPercent}%</b>
-          </div>`;
-        }).join('');
+            <span class="min-w-0"><strong>${group.shortLabel}</strong></span>
+            <b>${group.percent}%</b>
+          </div>`
+        ).join('');
       }
 
       if (!items.length) {
         container.innerHTML = `<div class="cora-maternity-empty">
           <span><i data-lucide="backpack"></i></span>
-          <strong>Nenhum item na lista</strong>
-          <small>O checklist aparecerá aqui quando houver itens cadastrados.</small>
+          <strong>Nenhum item</strong>
+          <button type="button" onclick="openMaternityItemModal()">Adicionar primeiro item</button>
         </div>`;
         lucide.createIcons();
         return;
@@ -4076,23 +4100,20 @@
         <section class="cora-maternity-group ${group.className}">
           <div class="cora-maternity-group-head">
             <span class="cora-maternity-group-icon"><i data-lucide="${group.icon}"></i></span>
-            <div class="min-w-0">
-              <h4>${group.label}</h4>
-              <p>${group.checked} de ${group.total} prontos</p>
-            </div>
+            <div class="min-w-0"><h4>${group.label}</h4></div>
+            <b class="cora-maternity-group-percent">${group.percent}%</b>
           </div>
           <div class="cora-maternity-items">
             ${group.items.map(item => `
-              <label class="cora-maternity-item ${item.checked ? 'is-checked' : ''}">
-                <input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggleMaternidade('${item.id}')" class="sr-only">
-                <span class="cora-maternity-check" aria-hidden="true">
-                  <i data-lucide="check"></i>
-                </span>
-                <span class="cora-maternity-item-copy">
-                  <strong>${escapeHtml(item.title)}</strong>
-                  <small>${item.checked ? 'Pronto' : 'Ainda falta'}</small>
-                </span>
-              </label>`).join('')}
+              <div class="cora-maternity-item ${item.checked ? 'is-checked' : ''}">
+                <button type="button" onclick="toggleMaternidade('${item.id}')" class="cora-maternity-toggle" aria-label="${item.checked ? 'Marcar como pendente' : 'Marcar como pronto'}">
+                  <span class="cora-maternity-check" aria-hidden="true"><i data-lucide="check"></i></span>
+                  <span class="cora-maternity-item-copy"><strong>${escapeHtml(item.title)}</strong></span>
+                </button>
+                <button type="button" onclick="openMaternityItemModal('${item.id}')" class="cora-maternity-edit" aria-label="Editar ${escapeHtml(item.title)}">
+                  <i data-lucide="edit-3"></i>
+                </button>
+              </div>`).join('')}
           </div>
         </section>
       `).join('');
@@ -4113,6 +4134,74 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         } else {
           alert('Não foi possível atualizar este item da maternidade. Tente novamente.');
         }
+      }
+    }
+
+    function openMaternityItemModal(id = '') {
+      const item = id ? appState.maternidade.find(entry => entry.id === id) : null;
+      appState.editingMaternityBase = item ? cloneData(item) : null;
+
+      document.getElementById('maternityItemId').value = item?.id || '';
+      document.getElementById('maternityItemTitle').value = item?.title || '';
+      document.getElementById('maternityItemCategory').value = item?.cat === 'mamãe' ? 'mamãe' : 'bebê';
+      document.getElementById('maternityItemModalTitle').textContent = item ? 'Editar item' : 'Adicionar item';
+      document.getElementById('deleteMaternityItemButton').classList.toggle('hidden', !item);
+
+      const modal = document.getElementById('modalMaternityItem');
+      modal.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+      lucide.createIcons();
+      setTimeout(() => document.getElementById('maternityItemTitle')?.focus(), 60);
+    }
+
+    async function saveMaternityItem(event) {
+      event?.preventDefault();
+      const id = document.getElementById('maternityItemId').value;
+      const title = String(document.getElementById('maternityItemTitle').value || '').trim();
+      const cat = document.getElementById('maternityItemCategory').value === 'mamãe' ? 'mamãe' : 'bebê';
+      if (!title) return document.getElementById('maternityItemTitle')?.focus();
+
+      try {
+        if (id) {
+          const expected = appState.editingMaternityBase ? cloneData(appState.editingMaternityBase) : null;
+          await runWriteOnce(
+            `maternity-edit:${id}`,
+            'maternityItemSubmitButton',
+            () => updateMaternityItemInFirebase(id, { title, cat }, expected),
+            'Salvando...'
+          );
+        } else {
+          await runWriteOnce(
+            'maternity-add',
+            'maternityItemSubmitButton',
+            () => createMaternityItemInFirebase({ title, cat }),
+            'Salvando...'
+          );
+        }
+        closeModal('modalMaternityItem');
+      } catch (error) {
+        console.error('Erro ao salvar item da maternidade:', error);
+        if (isConcurrencyError(error)) alert(error.message);
+        else alert('Não foi possível salvar o item. Tente novamente.');
+      }
+    }
+
+    async function deleteMaternityItemFromModal() {
+      const base = appState.editingMaternityBase;
+      if (!base?.id) return;
+      if (!confirm(`Excluir “${base.title}” da lista da maternidade?`)) return;
+      try {
+        await runWriteOnce(
+          `maternity-delete:${base.id}`,
+          'deleteMaternityItemButton',
+          () => deleteMaternityItemInFirebase(base.id, cloneData(base)),
+          'Excluindo...'
+        );
+        closeModal('modalMaternityItem');
+      } catch (error) {
+        console.error('Erro ao excluir item da maternidade:', error);
+        if (isConcurrencyError(error)) alert(error.message);
+        else alert('Não foi possível excluir o item. Tente novamente.');
       }
     }
 
@@ -5145,6 +5234,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       if (el) el.classList.add('hidden');
       if (id === 'modalItem') appState.editingItemBase = null;
       if (id === 'modalAcquisition') appState.editingAcquisitionBase = null;
+      if (id === 'modalMaternityItem') appState.editingMaternityBase = null;
       requestAnimationFrame(() => {
         const visibleOverlay = [...document.querySelectorAll('.fixed.inset-0, .fixed.inset-x-0')].some(node => !node.classList.contains('hidden'));
         if (!visibleOverlay) document.body.classList.remove('modal-open');
@@ -6461,12 +6551,6 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       font-weight:700;
       color:#4B414F;
     }
-    .cora-maternity-hero p {
-      margin-top:4px;
-      font-size:10px;
-      line-height:1.4;
-      color:#817786;
-    }
     .cora-maternity-progress-value { text-align:right; min-width:46px; }
     .cora-maternity-progress-value strong {
       display:block;
@@ -6474,13 +6558,6 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       line-height:1;
       letter-spacing:-.035em;
       color:#896CB5;
-    }
-    .cora-maternity-progress-value span {
-      display:block;
-      margin-top:4px;
-      font-size:9px;
-      font-weight:700;
-      color:#A397A9;
     }
     .cora-maternity-progress-track {
       height:7px;
@@ -6533,12 +6610,6 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       font-size:10.5px;
       color:#554C56;
     }
-    .cora-maternity-summary-card small {
-      display:block;
-      margin-top:2px;
-      font-size:8.5px;
-      color:#918794;
-    }
     .cora-maternity-summary-card b {
       font-size:11px;
       color:#74677A;
@@ -6565,15 +6636,19 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       font-weight:700;
       color:#443B46;
     }
-    .cora-maternity-remaining {
-      flex:0 0 auto;
+    .cora-maternity-add {
+      min-height:34px;
+      display:inline-flex;
+      align-items:center;
+      gap:5px;
+      padding:0 10px;
+      border-radius:11px;
+      background:#F2ECFA;
+      color:#8066AA;
       font-size:9.5px;
-      font-weight:700;
-      color:#8B7B93;
-      background:#F5F0FA;
-      padding:5px 8px;
-      border-radius:999px;
+      font-weight:750;
     }
+    .cora-maternity-add svg { width:15px; height:15px; }
 
     .cora-maternity-group {
       overflow:hidden;
@@ -6610,10 +6685,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       font-weight:700;
       color:#53494F;
     }
-    .cora-maternity-group-head p {
-      margin-top:2px;
-      font-size:8.5px;
-      color:#948A90;
+    .cora-maternity-group-percent {
+      margin-left:auto;
+      font-size:10px;
+      color:#877A8D;
     }
 
     .cora-maternity-items { padding:3px 10px 8px; }
@@ -6621,13 +6696,21 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       min-height:51px;
       display:flex;
       align-items:center;
-      gap:10px;
-      padding:9px 3px;
-      cursor:pointer;
+      gap:6px;
+      padding:3px 0;
       border-top:1px solid #F3EEF1;
       -webkit-tap-highlight-color:transparent;
     }
     .cora-maternity-item:first-child { border-top:0; }
+    .cora-maternity-toggle {
+      min-width:0;
+      flex:1;
+      min-height:45px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      text-align:left;
+    }
     .cora-maternity-check {
       width:23px;
       height:23px;
@@ -6656,18 +6739,21 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       color:#50464C;
       transition:.16s ease;
     }
-    .cora-maternity-item-copy small {
-      display:block;
-      margin-top:2px;
-      font-size:8.5px;
-      color:#9A9096;
-    }
     .cora-maternity-item.is-checked .cora-maternity-item-copy strong {
       color:#948A91;
     }
-    .cora-maternity-item.is-checked .cora-maternity-item-copy small {
-      color:#7F6D91;
+    .cora-maternity-edit {
+      width:34px;
+      height:34px;
+      flex:0 0 34px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:11px;
+      color:#AAA0AD;
     }
+    .cora-maternity-edit:active { background:#F5F0F8; color:#8066AA; }
+    .cora-maternity-edit svg { width:15px; height:15px; }
     .cora-maternity-empty {
       padding:28px 14px;
       text-align:center;
@@ -6686,7 +6772,15 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     }
     .cora-maternity-empty svg { width:21px; height:21px; }
     .cora-maternity-empty strong { display:block; font-size:11px; color:#625668; }
-    .cora-maternity-empty small { display:block; margin-top:3px; font-size:9px; }
+    .cora-maternity-empty button {
+      margin-top:10px;
+      padding:7px 10px;
+      border-radius:10px;
+      background:#F1EBF8;
+      color:#8066AA;
+      font-size:9.5px;
+      font-weight:750;
+    }
 
     @media (max-width:355px) {
       .cora-maternity-hero-main { grid-template-columns:54px minmax(0,1fr) auto; gap:9px; }
@@ -6905,19 +6999,17 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         <div><h2 class="text-[21px] font-semibold tracking-[-0.02em] text-[#302A2B]">Maternidade</h2></div>
       </div>
 
-      <section class="cora-maternity-hero" aria-labelledby="maternidadeHeroTitle">
+      <section class="cora-maternity-hero" aria-label="Progresso da mala da maternidade">
         <div class="cora-maternity-hero-main">
           <div class="cora-maternity-art" aria-hidden="true">
             <img src="/icons/02_Maternidade.png" alt="">
           </div>
           <div class="min-w-0">
             <span class="cora-maternity-kicker">Mala da maternidade</span>
-            <h3 id="maternidadeHeroTitle">Preparando com calma</h3>
-            <p id="maternidadeTimingText">Organize o essencial no seu ritmo.</p>
+            <h3>Checklist</h3>
           </div>
           <div class="cora-maternity-progress-value" aria-live="polite">
             <strong id="maternidadePercent">0%</strong>
-            <span id="maternidadeProgress">0/0</span>
           </div>
         </div>
         <div class="cora-maternity-progress-track" role="progressbar" aria-label="Progresso da mala da maternidade" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
@@ -6933,7 +7025,9 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
             <span class="cora-maternity-kicker">Checklist</span>
             <h3>O que levar</h3>
           </div>
-          <span id="maternidadeRemaining" class="cora-maternity-remaining">—</span>
+          <button type="button" onclick="openMaternityItemModal()" class="cora-maternity-add" aria-label="Adicionar item à maternidade">
+            <i data-lucide="plus"></i><span>Adicionar</span>
+          </button>
         </div>
         <div id="maternidadeChecklistContainer" class="space-y-3">
           <!-- Renderizado via JS -->
@@ -7061,6 +7155,47 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       </button>
     </div>
   </nav>
+  <!-- UI3.6A — MODAL: ITEM DA MATERNIDADE -->
+  <div id="modalMaternityItem" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-[70] hidden flex items-end sm:items-center justify-center p-0 sm:p-4" onclick="if(event.target===this) closeModal('modalMaternityItem')">
+    <div class="bg-white rounded-t-[26px] sm:rounded-[24px] w-full max-w-md p-5 pb-7 shadow-2xl">
+      <div class="flex items-center justify-between gap-3 mb-5">
+        <div>
+          <span class="cora-maternity-kicker">Maternidade</span>
+          <h3 id="maternityItemModalTitle" class="text-[18px] font-semibold text-[#40363F] mt-1">Adicionar item</h3>
+        </div>
+        <button type="button" onclick="closeModal('modalMaternityItem')" class="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400" aria-label="Fechar">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="maternityItemForm" onsubmit="saveMaternityItem(event)" class="space-y-4">
+        <input type="hidden" id="maternityItemId">
+
+        <div>
+          <label for="maternityItemTitle" class="block text-xs font-semibold text-gray-700 mb-1">Item</label>
+          <input type="text" id="maternityItemTitle" maxlength="120" required autocomplete="off" placeholder="Ex.: Carregador de celular" class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-violet-200">
+        </div>
+
+        <div>
+          <label for="maternityItemCategory" class="block text-xs font-semibold text-gray-700 mb-1">Grupo</label>
+          <select id="maternityItemCategory" class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-violet-200">
+            <option value="bebê">Bebê</option>
+            <option value="mamãe">Mamãe e documentos</option>
+          </select>
+        </div>
+
+        <button type="button" id="deleteMaternityItemButton" onclick="deleteMaternityItemFromModal()" class="hidden w-full py-2.5 text-xs font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl">
+          Excluir item
+        </button>
+
+        <div class="pt-1 flex gap-2">
+          <button type="button" onclick="closeModal('modalMaternityItem')" class="w-1/2 py-2.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl">Cancelar</button>
+          <button type="submit" id="maternityItemSubmitButton" class="w-1/2 py-2.5 text-xs font-bold text-white bg-violet-500 rounded-xl shadow-sm disabled:pointer-events-none">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL: ESCOLHA DA AÇÃO -->
   <div id="modalAction" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md p-5 space-y-4 shadow-xl">
