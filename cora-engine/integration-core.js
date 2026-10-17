@@ -131,6 +131,17 @@
     const extraByVariant=Object.fromEntries(keys.map(k=>[k,Math.max(0,ownedByVariant[k]-targets[k])]));
     return {size,targets,ownedByVariant,missingByVariant,extraByVariant,targetTotal,credited,actual,unclassified};
   }
+  function applyOperationalUserOverrides(generated,existing){
+    const overrides=existing?.userOverrides;
+    if(!overrides||typeof overrides!=="object")return generated;
+    const out={...generated,userOverrides:clone(overrides)};
+    for(const key of ["name","category","priority","notes","sizeMode","unitEstimate"]){
+      if(Object.prototype.hasOwnProperty.call(overrides,key))out[key]=clone(overrides[key]);
+    }
+    if(overrides.sizes&&typeof overrides.sizes==="object")out.sizes=clone(overrides.sizes);
+    out.essential=out.priority==="essential";
+    return out;
+  }
   function planItemToOperational(planItem,financeItem,planId,existing=null,now=Date.now(),dispositionOverride=null){
     const target=planItem.target||{};
     const disposition=dispositionOverride||planItem.inclusionSnapshot?.disposition||"planned";
@@ -144,7 +155,7 @@
     const selectedVariant = target.variant?.selectedVariant || financeItem?.pricing?.variant;
     const name = carSeat ? (selectedVariant === "com_isofix" ? "Bebê conforto com ISOFIX" : "Bebê conforto") : (planItem.identitySnapshot?.name||planItem.itemId);
     const countsTowardPlan=disposition==="planned";
-    return {
+    const generated={
       id:planItem.itemId,
       name,
       category:categoryToLegacy(planItem.identitySnapshot?.category),
@@ -171,6 +182,7 @@
       countsTowardPlan,
       ...(planItem.itemId==="fraldas_descartaveis" && existing?.diaperInventory ? {diaperInventory:clone(existing.diaperInventory)} : {})
     };
+    return applyOperationalUserOverrides(generated,existing);
   }
   function planVariantToOperational(planItem,financeItem,planId,variantKey,existingChild=null,migratedAcquisitions={},now=Date.now()){
     const parentId=planItem.itemId;
@@ -209,7 +221,7 @@
   function catalogItemToDeferredOperational(item,evaluation,planId,existing=null,now=Date.now()){
     const acquisitions=clone(existing?.acquisitions||{});
     const quantity=isNum(item?.defaultQuantity)&&Number(item.defaultQuantity)>0?Number(item.defaultQuantity):null;
-    return {
+    const generated={
       id:item.id,
       name:item.name||item.id,
       category:categoryToLegacy(item.category),
@@ -249,6 +261,7 @@
       conditionState:evaluation?.conditionState||"unresolved",
       countsTowardPlan:false
     };
+    return applyOperationalUserOverrides(generated,existing);
   }
   function hasAcquisitions(item){return item?.acquisitions&&Object.keys(item.acquisitions).length>0;}
   function zeroTargets(item){const x=clone(item);x.sizes=x.sizes||{};for(const k of SIZE_KEYS)x.sizes[k]={target:0};x.countsTowardPlan=false;return x;}

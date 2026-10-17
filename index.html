@@ -445,6 +445,11 @@
         variant: typeof acq.variant === 'string' && acq.variant.trim() ? acq.variant.trim() : null,
         quantity: Math.max(1, Number(acq.quantity) || 1),
         unitPrice: acq.type === 'gift' ? 0 : Math.max(0, Number(acq.unitPrice) || 0),
+        totalPriceBRL: acq.type === 'gift' ? 0 : (
+          acq.totalPriceBRL !== undefined && acq.totalPriceBRL !== null && acq.totalPriceBRL !== ''
+            ? Math.max(0, Number(acq.totalPriceBRL) || 0)
+            : null
+        ),
         type: acq.type === 'gift' ? 'gift' : 'purchase',
         brand: acq.brand || '',
         notes: acq.notes || '',
@@ -530,7 +535,7 @@
       'recommendationSnapshot', 'retainedPurchaseHistory', 'quantityUnit',
       'planDisposition', 'planReason', 'conditionState', 'countsTowardPlan',
       'operationalVariantKey', 'sourceFamilyId', 'sourceFamilyName', 'legacyUnclassifiedVariant',
-      'pricingKey', 'referenceTier', 'diaperInventory'
+      'pricingKey', 'referenceTier', 'diaperInventory', 'userOverrides'
     ]);
 
     function itemPriority(item) {
@@ -548,12 +553,17 @@
 
     function itemPriorityBadge(item) {
       const priority = itemPriority(item);
-      const disposition = itemPlanDisposition(item);
       if (priority === 'essential') {
         return '<span class="cora-item-badge is-essential">Essencial</span>';
       }
-      if (priority === 'optional' && disposition === 'planned') {
-        return '<span class="cora-item-badge">Opcional</span>';
+      if (priority === 'recommended') {
+        return '<span class="cora-item-badge is-recommended">Vale a pena ter</span>';
+      }
+      if (priority === 'optional') {
+        return '<span class="cora-item-badge is-optional">Opcional</span>';
+      }
+      if (priority === 'conditional' && itemPlanDisposition(item) === 'planned') {
+        return '<span class="cora-item-badge is-pending">Depende da rotina</span>';
       }
       return '';
     }
@@ -566,9 +576,6 @@
 
     function itemDispositionBadge(item) {
       const disposition = itemPlanDisposition(item);
-      if (disposition === 'suggested') {
-        return '<span class="cora-item-badge is-optional">Opcional</span>';
-      }
       if (disposition === 'deferred') {
         return '<span class="cora-item-badge is-pending">A decidir</span>';
       }
@@ -1449,10 +1456,18 @@
       }, 0);
     }
 
+    function acquisitionPaidTotal(acq) {
+      if (!acq || acq.type !== 'purchase') return 0;
+      if (acq.totalPriceBRL !== null && acq.totalPriceBRL !== undefined && acq.totalPriceBRL !== '') {
+        return Math.max(0, Number(acq.totalPriceBRL) || 0);
+      }
+      return Math.max(0, Number(acq.quantity) || 0) * Math.max(0, Number(acq.unitPrice) || 0);
+    }
+
     function getPurchaseTotal(item) {
       return getAcquisitions(item)
         .filter(acq => acq.type === 'purchase')
-        .reduce((sum, acq) => sum + ((Number(acq.quantity) || 0) * (Number(acq.unitPrice) || 0)), 0);
+        .reduce((sum, acq) => sum + acquisitionPaidTotal(acq), 0);
     }
 
     function getPurchasedPieces(item) {
@@ -1990,6 +2005,7 @@
         sizeMode: normalized.sizeMode,
         unitEstimate: normalized.unitEstimate,
         sizes: normalized.sizes,
+        userOverrides: normalized.userOverrides || null,
         acquisitions: Object.fromEntries(
           Object.entries(normalized.acquisitions || {}).map(([id, acq]) => [id, acquisitionComparable(acq)])
         )
@@ -2004,6 +2020,7 @@
         variant: normalized.variant || null,
         quantity: normalized.quantity,
         unitPrice: normalized.unitPrice,
+        totalPriceBRL: normalized.totalPriceBRL,
         type: normalized.type,
         brand: normalized.brand,
         notes: normalized.notes,
@@ -2043,6 +2060,9 @@
         ['unitEstimate', 'valor estimado']
       ];
 
+      const trackUserOverride = latest.source === 'v4.8-generated';
+      const overrides = trackUserOverride ? { ...(latest.userOverrides || {}) } : null;
+
       fields.forEach(([field, label]) => {
         const userChanged = !sameValue(requested[field], base[field]);
         if (!userChanged) return;
@@ -2052,9 +2072,11 @@
           return;
         }
         latest[field] = requested[field];
+        if (overrides) overrides[field] = cloneData(requested[field]);
         changed = true;
       });
 
+      let sizeChanged = false;
       SIZE_KEYS.forEach(size => {
         const baseTarget = Number(base.sizes?.[size]?.target || 0);
         const requestedTarget = Number(requested.sizes?.[size]?.target || 0);
@@ -2065,8 +2087,11 @@
           return;
         }
         latest.sizes[size] = { target: requestedTarget };
+        sizeChanged = true;
         changed = true;
       });
+      if (overrides && sizeChanged) overrides.sizes = cloneData(latest.sizes);
+      if (overrides && Object.keys(overrides).length) latest.userOverrides = overrides;
 
       // Aquisições vêm sempre do estado mais recente do servidor. Editar um item
       // nunca carrega de volta uma cópia antiga das aquisições.
@@ -2086,7 +2111,8 @@
         ['size', 'tamanho'],
         ['variant', 'variação'],
         ['quantity', 'quantidade'],
-        ['unitPrice', 'preço'],
+        ['unitPrice', 'preço unitário'],
+        ['totalPriceBRL', 'preço total'],
         ['brand', 'marca/modelo'],
         ['notes', 'observação'],
         ['unitsPerPackage', 'fraldas por pacote'],
@@ -3732,6 +3758,22 @@
       return true;
     }
 
+    function itemDisplaySortRank(item) {
+      const disposition = itemPlanDisposition(item);
+      const priority = itemPriority(item);
+      if (priority === 'essential') return 0;
+      if (priority === 'recommended') return 1;
+      if (priority === 'optional' || disposition === 'suggested') return 2;
+      if (priority === 'conditional' || disposition === 'deferred') return 3;
+      return 4;
+    }
+
+    function compareItemsForDisplay(a, b) {
+      const rank = itemDisplaySortRank(a) - itemDisplaySortRank(b);
+      if (rank) return rank;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR', { sensitivity: 'base' });
+    }
+
     function renderItems() {
       const container = document.getElementById('itemsContainer');
       const searchTerm = (document.getElementById('searchInput').value || '').toLowerCase().trim();
@@ -3750,7 +3792,9 @@
           getSearchableBrands(item).includes(searchTerm)
         );
       }
-      filtered = filtered.filter(item => itemMatchesStatus(item, statusFilter));
+      filtered = filtered
+        .filter(item => itemMatchesStatus(item, statusFilter))
+        .sort(compareItemsForDisplay);
 
       if (!filtered.length) {
         container.innerHTML = `
@@ -4023,12 +4067,12 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     }
 
     const CATEGORY_META = {
-      vestuario:   { label: 'Vestuário',   color: '#D5A84B', soft: '#FFF8D9' },
-      quarto:      { label: 'Quarto',      color: '#79B587', soft: '#E6F7E8' },
-      higiene:     { label: 'Higiene',     color: '#65B7B5', soft: '#DDF7F7' },
-      alimentacao: { label: 'Alimentação', color: '#D5906F', soft: '#FFE9DC' },
-      passeio:     { label: 'Passeio',     color: '#9B82C7', soft: '#F1E9FF' },
-      mamae:       { label: 'Mamãe',       color: '#7E9DC9', soft: '#E5F0FF' }
+      vestuario:   { label: 'Vestuário',   color: '#D5A84B', soft: '#FFF8D9', icon: '/icons/04_Vestuario.png' },
+      quarto:      { label: 'Quarto',      color: '#79B587', soft: '#E6F7E8', icon: '/icons/05_Quarto.png' },
+      higiene:     { label: 'Higiene',     color: '#65B7B5', soft: '#DDF7F7', icon: '/icons/06_Higiene.png' },
+      alimentacao: { label: 'Alimentação', color: '#D5906F', soft: '#FFE9DC', icon: '/icons/07_Alimentacao.png' },
+      passeio:     { label: 'Passeio',     color: '#9B82C7', soft: '#F1E9FF', icon: '/icons/08_Passeio.png' },
+      mamae:       { label: 'Mamãe',       color: '#7E9DC9', soft: '#E5F0FF', icon: '/icons/09_Mamae.png' }
     };
 
     function getItemPlannedBudget(item) {
@@ -4172,7 +4216,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         const barStyle = hasCatPlanned ? `background:${bg}; --bar-fill:${fill};` : 'background:#F0E9E8; --bar-fill:#AFA5A7;';
         return `<div class="finance-category-row">
           <div class="flex items-center justify-between gap-2">
-            <span class="finance-category-label font-semibold text-[12px] text-[#4A4143]"><i class="finance-category-swatch" style="background:${c.soft || bg};border-color:${c.color}"></i>${c.label}</span>
+            <span class="finance-category-label font-semibold text-[12px] text-[#4A4143]"><img src="${c.icon}" alt="" class="finance-category-icon">${c.label}</span>
             <span class="text-[11px] font-semibold text-[#6F6668]">${hasCatPlanned ? `${money(catSpent)} / ${money(catPlanned)}` : money(catSpent)}</span>
           </div>
           <div class="finance-bar" style="${barStyle}"><div class="finance-bar-fill" style="width:${pct}%;"></div>${over ? '<div class="finance-bar-over"></div>' : ''}</div>
@@ -4540,6 +4584,36 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       lucide.createIcons();
     }
 
+    let acquisitionPriceBasis = 'unit';
+
+    function numericInputValue(id) {
+      const raw = String(document.getElementById(id)?.value ?? '').trim().replace(',', '.');
+      const value = Number(raw);
+      return Number.isFinite(value) ? Math.max(0, value) : 0;
+    }
+
+    function syncAcquisitionPriceFields(source = 'auto') {
+      const qty = Math.max(1, Number(document.getElementById('acquisitionQuantity')?.value) || 1);
+      const unitInput = document.getElementById('acquisitionUnitPrice');
+      const totalInput = document.getElementById('acquisitionTotalPrice');
+      if (!unitInput || !totalInput) return { unitPrice: 0, totalPrice: 0 };
+
+      if (source === 'unit') acquisitionPriceBasis = 'unit';
+      if (source === 'total') acquisitionPriceBasis = 'total';
+
+      let unitPrice = numericInputValue('acquisitionUnitPrice');
+      let totalPrice = numericInputValue('acquisitionTotalPrice');
+
+      if (acquisitionPriceBasis === 'total') {
+        unitPrice = qty > 0 ? totalPrice / qty : 0;
+        unitInput.value = totalPrice > 0 ? unitPrice.toFixed(2) : '';
+      } else {
+        totalPrice = qty * unitPrice;
+        totalInput.value = unitPrice > 0 ? totalPrice.toFixed(2) : '';
+      }
+      return { unitPrice, totalPrice };
+    }
+
     function openAcquisitionModalForItem(itemId, presetSize = '', presetVariant = '') {
       const item = appState.items.find(i => i.id === itemId);
       if (!item) return;
@@ -4566,12 +4640,15 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       document.getElementById('acquisitionQuantity').value = 1;
       const diaperUnitsField = document.getElementById('acquisitionUnitsPerPackage');
       if (diaperUnitsField) diaperUnitsField.value = '';
+      acquisitionPriceBasis = 'unit';
       document.getElementById('acquisitionUnitPrice').value = '';
+      document.getElementById('acquisitionTotalPrice').value = '';
       document.getElementById('acquisitionBrand').value = '';
       document.getElementById('acquisitionNotes').value = '';
       toggleAcquisitionType();
       updateAcquisitionPreview();
       document.getElementById('modalAcquisition').classList.remove('hidden');
+      document.body.classList.add('modal-open');
       lucide.createIcons();
     }
 
@@ -4579,25 +4656,31 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const isGift = document.getElementById('acquisitionType').value === 'gift';
       const box = document.getElementById('acquisitionPriceBox');
       box.classList.toggle('hidden', isGift);
-      if (isGift) document.getElementById('acquisitionUnitPrice').value = '0';
+      if (isGift) {
+        document.getElementById('acquisitionUnitPrice').value = '0';
+        document.getElementById('acquisitionTotalPrice').value = '0';
+      }
       updateAcquisitionPreview();
     }
 
-    function updateAcquisitionPreview() {
+    function updateAcquisitionPreview(source = 'auto') {
       const qty = Number(document.getElementById('acquisitionQuantity').value) || 0;
-      const price = Number(document.getElementById('acquisitionUnitPrice').value) || 0;
+      const prices = syncAcquisitionPriceFields(source);
       const item = appState.items.find(i => i.id === document.getElementById('acquisitionItemId')?.value);
       const diaperPurchase = isDisposableDiaperItem(item);
       const legacyDiaper = diaperPurchase && appState.editingAcquisitionBase && !Number(appState.editingAcquisitionBase.unitsPerPackage || 0);
       const unitsPerPackage = diaperPurchase && !legacyDiaper ? Math.max(0, Number(document.getElementById('acquisitionUnitsPerPackage')?.value) || 0) : 0;
       document.getElementById('acquisitionTotalPreview').innerText = diaperPurchase && !legacyDiaper
-        ? `Total: ${money(qty * price)} • ${Math.round(qty * unitsPerPackage)} fraldas`
-        : `Total desta aquisição: ${money(qty * price)}`;
+        ? `Total: ${money(prices.totalPrice)} • ${Math.round(qty * unitsPerPackage)} fraldas`
+        : `Total desta aquisição: ${money(prices.totalPrice)}`;
     }
 
     document.addEventListener('input', e => {
-      if (e.target && ['acquisitionQuantity','acquisitionUnitPrice','acquisitionUnitsPerPackage'].includes(e.target.id)) {
-        updateAcquisitionPreview();
+      if (!e.target) return;
+      if (e.target.id === 'acquisitionUnitPrice') return updateAcquisitionPreview('unit');
+      if (e.target.id === 'acquisitionTotalPrice') return updateAcquisitionPreview('total');
+      if (['acquisitionQuantity','acquisitionUnitsPerPackage'].includes(e.target.id)) {
+        updateAcquisitionPreview('quantity');
       }
     });
 
@@ -4625,7 +4708,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
       acquisitions.sort((a, b) => String(b.id).localeCompare(String(a.id)));
       container.innerHTML = acquisitions.map(acq => {
-        const total = acq.type === 'purchase' ? acq.quantity * acq.unitPrice : 0;
+        const total = acquisitionPaidTotal(acq);
         return `
           <div class="p-3 rounded-xl border border-gray-100 bg-gray-50">
             <div class="flex justify-between items-start gap-2">
@@ -4684,7 +4767,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       const diaperUnitsField = document.getElementById('acquisitionUnitsPerPackage');
       if (diaperUnitsField) diaperUnitsField.value = diaperPurchase && !legacyDiaper ? (Number(acq.unitsPerPackage) || '') : '';
       document.getElementById('acquisitionBrand').value = acq.brand || '';
+      const exactTotal = acquisitionPaidTotal(acq);
+      acquisitionPriceBasis = acq.totalPriceBRL !== null && acq.totalPriceBRL !== undefined ? 'total' : 'unit';
       document.getElementById('acquisitionUnitPrice').value = acq.unitPrice || 0;
+      document.getElementById('acquisitionTotalPrice').value = exactTotal || 0;
       document.getElementById('acquisitionNotes').value = acq.notes || '';
       toggleAcquisitionType();
       updateAcquisitionPreview();
@@ -4709,7 +4795,9 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
       const type = document.getElementById('acquisitionType').value === 'gift' ? 'gift' : 'purchase';
       const quantity = Math.max(1, parseInt(document.getElementById('acquisitionQuantity').value, 10) || 1);
-      const unitPrice = type === 'gift' ? 0 : Math.max(0, parseFloat(document.getElementById('acquisitionUnitPrice').value) || 0);
+      const priceState = syncAcquisitionPriceFields('save');
+      const totalPriceBRL = type === 'gift' ? 0 : Math.max(0, priceState.totalPrice || 0);
+      const unitPrice = type === 'gift' ? 0 : (quantity > 0 ? totalPriceBRL / quantity : 0);
       const variant = item?.operationalVariantKey || (itemVariantKeys(item).length ? (document.getElementById('acquisitionVariant').value || '') : '');
       if (!item?.operationalVariantKey && itemVariantKeys(item).length && !variant) {
         alert('Escolha a variação desta peça antes de salvar.');
@@ -4730,6 +4818,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         variant,
         quantity,
         unitPrice,
+        totalPriceBRL,
         brand: document.getElementById('acquisitionBrand').value.trim(),
         notes: document.getElementById('acquisitionNotes').value.trim(),
         unitsPerPackage,
@@ -4938,6 +5027,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       if (el) el.classList.add('hidden');
       if (id === 'modalItem') appState.editingItemBase = null;
       if (id === 'modalAcquisition') appState.editingAcquisitionBase = null;
+      requestAnimationFrame(() => {
+        const visibleOverlay = [...document.querySelectorAll('.fixed.inset-0, .fixed.inset-x-0')].some(node => !node.classList.contains('hidden'));
+        if (!visibleOverlay) document.body.classList.remove('modal-open');
+      });
     }
 
     async function resetDatabaseToDefaults() {
@@ -5980,6 +6073,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .cora-item-card { padding:14px; }
     .cora-item-badge { display:inline-flex; align-items:center; min-height:19px; padding:2px 7px; border-radius:999px; background:#F4F0EF; color:#746A6C; font-size:9px; line-height:1; font-weight:700; }
     .cora-item-badge.is-essential { background:#FFF0D8; color:#9A681A; }
+    .cora-item-badge.is-recommended { background:#F3F0FB; color:#76609A; }
     .cora-item-badge.is-optional { background:#EEF7FA; color:#397489; }
     .cora-item-badge.is-pending { background:#F2ECF7; color:#72558A; }
     .cora-item-badge.is-complete { background:#EAF6EF; color:#39775A; }
@@ -6144,6 +6238,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .category-donut { width:58px; height:58px; padding:3px; margin-bottom:6px; }
     .category-donut-icon { width:52px; height:52px; border-radius:18px; background:var(--category-soft) !important; color:var(--category-color); display:flex; align-items:center; justify-content:center; }
     .category-donut-icon svg { width:42px; height:42px; }
+    .cora-module-icon-image { width:38px; height:38px; object-fit:cover; border-radius:12px; }
+    .cora-tool-icon-image { width:72px; height:72px; object-fit:cover; border-radius:20px; display:block; box-shadow:0 5px 12px rgba(83,59,66,.07); }
+    .cora-category-icon-image { width:46px; height:46px; object-fit:cover; border-radius:15px; display:block; }
+    .finance-category-icon { width:24px; height:24px; object-fit:cover; border-radius:8px; flex:0 0 auto; }
     .cora-enxoval-search,.cora-enxoval-select { border-color:#F0E4E7; background:#FFFDFD; }
     .cora-item-card { border-color:#F0E6E8; box-shadow:0 4px 16px rgba(82,59,65,.025); }
     .cora-item-decision-actions button.is-primary { background:var(--cora-primary); border-color:var(--cora-primary); }
@@ -6154,8 +6252,18 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     #coraSeasonWidget { background:#FFFDFD !important; border-color:#F1E6E9 !important; }
     .cora-climate-title { color:#655A5D; font-weight:650; margin-bottom:8px; }
     .cora-climate-title i { color:#E97892; }
-    .cora-climate-tile { padding:7px 3px; border-radius:13px; background:#FAF7F8; border:1px solid #F2E9EB; text-align:center; }
-    .cora-climate-tile .cora-climate-icon { color:#A9A0A3; }
+    .cora-climate-tile { padding:7px 3px; border-radius:13px; background:#FAF7F8; border:1px solid #F2E9EB; text-align:center; transition:.18s ease; }
+    .cora-climate-tile .cora-climate-icon { width:17px; height:17px; }
+    .cora-climate-tile[data-thermal="very_hot"] { background:#FFF0D8; border-color:#FFE1AB; }
+    .cora-climate-tile[data-thermal="very_hot"] .cora-climate-icon { color:#E59A2F; fill:#FFD778; }
+    .cora-climate-tile[data-thermal="hot"] { background:#FFF6DE; border-color:#F8E7BA; }
+    .cora-climate-tile[data-thermal="hot"] .cora-climate-icon { color:#E9A94A; fill:#FFE3A0; }
+    .cora-climate-tile[data-thermal="mild"] { background:#F7F8EE; border-color:#E9EBD8; }
+    .cora-climate-tile[data-thermal="mild"] .cora-climate-icon { color:#D6A04D; fill:#F8DA8B; }
+    .cora-climate-tile[data-thermal="cold"] { background:#EEF7FC; border-color:#DCECF6; }
+    .cora-climate-tile[data-thermal="cold"] .cora-climate-icon { color:#72A6C8; fill:#D9ECF7; }
+    .cora-climate-tile[data-thermal="very_cold"] { background:#F1F1FC; border-color:#E0E1F4; }
+    .cora-climate-tile[data-thermal="very_cold"] .cora-climate-icon { color:#8C96C7; fill:#E4E6FA; }
 
     .cora-finance-overview { background:linear-gradient(145deg,#FFFDFE,#FFF8FA); border-color:#F3E5E8; box-shadow:0 5px 20px rgba(86,61,68,.03); }
     .cora-finance-toggle { background:#FFF0F4; color:#A56777; }
@@ -6272,17 +6380,15 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         </div>
         <div class="cora-home-overview-grid">
           <button type="button" onclick="switchTab('enxoval')" class="cora-home-overview-card is-enxoval">
-            <span class="cora-home-overview-icon"><i data-lucide="list-checks"></i></span>
+            <span class="cora-home-overview-icon"><img src="/icons/01_Enxoval.png" alt="" class="cora-module-icon-image"></span>
             <span><strong>Enxoval</strong><b id="homeQuickEnxovalValue">—</b><small id="homeQuickEnxovalMeta">—</small></span>
           </button>
           <button type="button" onclick="switchTab('maternidade')" class="cora-home-overview-card is-maternidade">
-            <span class="cora-home-overview-icon"><i data-lucide="backpack"></i></span>
+            <span class="cora-home-overview-icon"><img src="/icons/02_Maternidade.png" alt="" class="cora-module-icon-image"></span>
             <span><strong>Maternidade</strong><b id="homeQuickMaternityValue">—</b><small id="homeQuickMaternityMeta">—</small></span>
           </button>
           <button type="button" onclick="openDiaperStock()" class="cora-home-overview-card is-fraldas">
-            <span class="cora-home-overview-icon">
-              <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 8.5 12 11h8l6-2.5V18c0 5.8-4.3 10-10 10S6 23.8 6 18V8.5Z" fill="currentColor" opacity=".18"/><path d="M6 8.5 12 11h8l6-2.5V18c0 5.8-4.3 10-10 10S6 23.8 6 18V8.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 11c-.1 3.2-2 5.8-5.7 6.7M20 11c.1 3.2 2 5.8 5.7 6.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            </span>
+            <span class="cora-home-overview-icon"><img src="/icons/03_Fraldas.png" alt="" class="cora-module-icon-image"></span>
             <span><strong>Fraldas</strong><b id="homeQuickDiaperValue">—</b><small id="homeQuickDiaperMeta">—</small></span>
           </button>
           <button type="button" onclick="switchTab('resumo')" class="cora-home-overview-card is-financas">
@@ -6296,25 +6402,19 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     <!-- UI3.5B — FERRAMENTAS: catálogo estável -->
     <section id="sectionFerramentas" class="hidden cora-tools-grid">
       <button id="toolEnxovalCard" type="button" onclick="switchTab('enxoval')" class="cora-tool-tile is-enxoval">
-        <span class="cora-tool-art" aria-hidden="true">
-          <svg viewBox="0 0 80 70" fill="none"><rect x="15" y="29" width="32" height="26" rx="7" fill="#F8AFC0"/><path d="M20 31c5-9 17-12 25-5l-5 9-7-3-6 4-7-5Z" fill="#FFF"/><rect x="43" y="18" width="25" height="38" rx="5" fill="#FFF8FB" stroke="#D76F88" stroke-width="2"/><path d="m49 29 3 3 5-6M49 39l3 3 5-6M49 49l3 3 5-6" stroke="#79A6D2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="57" r="8" fill="#FFF" stroke="#D89A69" stroke-width="2"/><circle cx="14" cy="52" r="3" fill="#FFF"/><circle cx="22" cy="52" r="3" fill="#FFF"/></svg>
-        </span>
+        <span class="cora-tool-art" aria-hidden="true"><img src="/icons/01_Enxoval.png" alt="" class="cora-tool-icon-image"></span>
         <strong>Enxoval</strong>
         <small id="toolEnxovalMeta">Planejamento do enxoval</small>
       </button>
 
       <button id="toolDiaperCard" type="button" onclick="openDiaperStock()" class="cora-tool-tile is-fraldas">
-        <span class="cora-tool-art" aria-hidden="true">
-          <svg viewBox="0 0 80 70" fill="none"><path d="M12 17c10 8 18 10 28 10s18-2 28-10v22c0 17-12 27-28 27S12 56 12 39V17Z" fill="#F8FCFF" stroke="#6EA7D3" stroke-width="3"/><path d="M13 23c8 7 16 10 27 10 12 0 20-3 27-10" stroke="#A8D1EF" stroke-width="3" stroke-dasharray="4 4"/><path d="M21 38h12v12H21zM47 38h12v12H47z" fill="#BFE0F7"/><path d="M38 42c1.8-4 7-4 8.5 0 2.4-3 7.5-1 7 3-.5 4-5.5 7-11.2 11-5.8-4-10.8-7-11.3-11-.5-4 4.6-6 7-3Z" fill="#F49AB0"/></svg>
-        </span>
+        <span class="cora-tool-art" aria-hidden="true"><img src="/icons/03_Fraldas.png" alt="" class="cora-tool-icon-image"></span>
         <strong>Fraldas</strong>
         <small id="toolDiaperMeta">Estoque e consumo</small>
       </button>
 
       <button id="toolMaternityCard" type="button" onclick="switchTab('maternidade')" class="cora-tool-tile is-maternidade">
-        <span class="cora-tool-art" aria-hidden="true">
-          <svg viewBox="0 0 80 70" fill="none"><path d="M24 22c0-9 7-15 16-15s16 6 16 15" stroke="#9D82CE" stroke-width="4" stroke-linecap="round"/><rect x="11" y="20" width="58" height="43" rx="11" fill="#CBBBF0" stroke="#8F74BF" stroke-width="3"/><path d="M11 38h58" stroke="#8F74BF" stroke-width="3"/><rect x="32" y="34" width="16" height="12" rx="4" fill="#FFE7B7" stroke="#B88954" stroke-width="2"/><path d="M23 53h34" stroke="#FFF" stroke-width="3" stroke-linecap="round"/></svg>
-        </span>
+        <span class="cora-tool-art" aria-hidden="true"><img src="/icons/02_Maternidade.png" alt="" class="cora-tool-icon-image"></span>
         <strong>Maternidade</strong>
         <small id="toolMaternityMeta">Checklist da maternidade</small>
       </button>
@@ -6348,27 +6448,27 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       <!-- CATEGORIAS -->
       <div class="cora-category-grid" role="group" aria-label="Categorias do enxoval">
         <button type="button" data-category="vestuario" aria-pressed="true" onclick="filterCategory('vestuario')" class="cat-card" style="--category-color:#D5A84B;--category-soft:#FFF8D9">
-          <div id="catDonutVestuario" class="category-donut" data-color="#D5A84B"><div class="category-donut-icon"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M22 12c3 4 6 6 10 6s7-2 10-6l12 7-6 11-6-3v25H22V27l-6 3-6-11 12-7Z" fill="#FFF" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M27 36c2-5 8-5 10 0 3-4 9-1 8 4-1 5-7 8-13 12-6-4-12-7-13-12-1-5 5-8 8-4Z" fill="#F49AB0"/></svg></div></div>
+          <div id="catDonutVestuario" class="category-donut" data-color="#D5A84B"><div class="category-donut-icon"><img src="/icons/04_Vestuario.png" alt="" class="cora-category-icon-image"></div></div>
           <span class="text-[12px] font-semibold text-[#4A4043]">Vestuário</span><span id="catBadgeVestuario" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
         <button type="button" data-category="quarto" aria-pressed="false" onclick="filterCategory('quarto')" class="cat-card" style="--category-color:#79B587;--category-soft:#E6F7E8">
-          <div id="catDonutQuarto" class="category-donut" data-color="#79B587"><div class="category-donut-icon"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M10 31h44v19H10z" fill="#FFF" stroke="currentColor" stroke-width="3"/><path d="M14 50v6M50 50v6M18 31V20h25c7 0 11 4 11 11" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M40 9v10M32 14h16" stroke="#D5A84B" stroke-width="2.5" stroke-linecap="round"/><circle cx="34" cy="20" r="3" fill="#79B587"/><path d="m45 17 2 4 5 .5-3.5 3 1 5-4.5-2.5-4.5 2.5 1-5-3.5-3 5-.5 2-4Z" fill="#8DAAD4"/></svg></div></div>
+          <div id="catDonutQuarto" class="category-donut" data-color="#79B587"><div class="category-donut-icon"><img src="/icons/05_Quarto.png" alt="" class="cora-category-icon-image"></div></div>
           <span class="text-[12px] font-semibold text-[#4A4043]">Quarto</span><span id="catBadgeQuarto" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
         <button type="button" data-category="higiene" aria-pressed="false" onclick="filterCategory('higiene')" class="cat-card" style="--category-color:#65B7B5;--category-soft:#DDF7F7">
-          <div id="catDonutHigiene" class="category-donut" data-color="#65B7B5"><div class="category-donut-icon"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M9 33h46v7c0 11-9 19-20 19h-6C18 59 9 51 9 40v-7Z" fill="#FFF" stroke="currentColor" stroke-width="3"/><path d="M17 33V22c0-7 5-12 12-12h2" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M39 28c4-5 12-3 13 2-5 4-10 4-13-2Z" fill="#F4C75D"/><circle cx="47" cy="26" r="2" fill="#4F7F9D"/><circle cx="46" cy="14" r="4" fill="#FFF" stroke="#9EDADA" stroke-width="2"/><circle cx="55" cy="20" r="3" fill="#FFF" stroke="#9EDADA" stroke-width="2"/></svg></div></div>
+          <div id="catDonutHigiene" class="category-donut" data-color="#65B7B5"><div class="category-donut-icon"><img src="/icons/06_Higiene.png" alt="" class="cora-category-icon-image"></div></div>
           <span class="text-[12px] font-semibold text-[#4A4043]">Higiene</span><span id="catBadgeHigiene" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
         <button type="button" data-category="alimentacao" aria-pressed="false" onclick="filterCategory('alimentacao')" class="cat-card" style="--category-color:#D5906F;--category-soft:#FFE9DC">
-          <div id="catDonutAlimentacao" class="category-donut" data-color="#D5906F"><div class="category-donut-icon"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M24 8h16l-3 9 6 9v24c0 6-5 10-11 10s-11-4-11-10V26l6-9-3-9Z" fill="#FFF" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 35h22" stroke="currentColor" stroke-width="3"/><path d="M27 43c2-5 8-5 10 0 3-4 9-1 8 4-1 5-7 8-13 12-6-4-12-7-13-12-1-5 5-8 8-4Z" fill="#F49AB0"/><path d="M26 4h12" stroke="#C98467" stroke-width="3" stroke-linecap="round"/></svg></div></div>
+          <div id="catDonutAlimentacao" class="category-donut" data-color="#D5906F"><div class="category-donut-icon"><img src="/icons/07_Alimentacao.png" alt="" class="cora-category-icon-image"></div></div>
           <span class="text-[12px] font-semibold text-[#4A4043]">Alimentação</span><span id="catBadgeAlimentacao" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
         <button type="button" data-category="passeio" aria-pressed="false" onclick="filterCategory('passeio')" class="cat-card" style="--category-color:#9B82C7;--category-soft:#F1E9FF">
-          <div id="catDonutPasseio" class="category-donut" data-color="#9B82C7"><div class="category-donut-icon"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M17 18h25c9 0 15 6 15 15v4H26c-8 0-13-5-13-13v-6h4Z" fill="#F8D6E1" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 18 14 9H8M27 37l-4 10h26l-4-10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="25" cy="54" r="5" fill="#FFF" stroke="#756F80" stroke-width="3"/><circle cx="47" cy="54" r="5" fill="#FFF" stroke="#756F80" stroke-width="3"/></svg></div></div>
+          <div id="catDonutPasseio" class="category-donut" data-color="#9B82C7"><div class="category-donut-icon"><img src="/icons/08_Passeio.png" alt="" class="cora-category-icon-image"></div></div>
           <span class="text-[12px] font-semibold text-[#4A4043]">Passeio</span><span id="catBadgePasseio" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
         <button type="button" data-category="mamae" aria-pressed="false" onclick="filterCategory('mamae')" class="cat-card" style="--category-color:#7E9DC9;--category-soft:#E5F0FF">
-          <div id="catDonutMamae" class="category-donut" data-color="#7E9DC9"><div class="category-donut-icon"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><circle cx="29" cy="15" r="8" fill="#F2B69D"/><path d="M17 32c4-8 12-11 20-8 8 3 13 10 13 21 0 8-5 14-13 14H24C14 59 9 52 10 43c1-5 3-8 7-11Z" fill="#F7C7D5" stroke="currentColor" stroke-width="3"/><circle cx="39" cy="41" r="8" fill="#FFE1D4"/><path d="M25 43c5 7 12 9 20 5" stroke="#FFF" stroke-width="3" stroke-linecap="round"/><path d="M22 11c2-8 13-12 19-5 3 3 3 8 1 12-4-5-11-7-20-7Z" fill="#9B695E"/></svg></div></div>
+          <div id="catDonutMamae" class="category-donut" data-color="#7E9DC9"><div class="category-donut-icon"><img src="/icons/09_Mamae.png" alt="" class="cora-category-icon-image"></div></div>
           <span class="text-[12px] font-semibold text-[#4A4043]">Mamãe</span><span id="catBadgeMamae" class="text-[10px] text-[#8A8082] mt-0.5">0/0</span>
         </button>
       </div>
@@ -6747,8 +6847,16 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         </div>
 
         <div id="acquisitionPriceBox">
-          <label id="acquisitionUnitPriceLabel" class="block text-xs font-semibold text-gray-700 mb-1">Preço unitário (R$)</label>
-          <input type="number" id="acquisitionUnitPrice" min="0" step="0.01" placeholder="0,00" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label id="acquisitionUnitPriceLabel" class="block text-xs font-semibold text-gray-700 mb-1">Preço unitário (R$)</label>
+              <input type="number" id="acquisitionUnitPrice" min="0" step="0.01" inputmode="decimal" placeholder="0,00" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1">Preço total (R$)</label>
+              <input type="number" id="acquisitionTotalPrice" min="0" step="0.01" inputmode="decimal" placeholder="0,00" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+            </div>
+          </div>
           <p id="acquisitionTotalPreview" class="text-[10px] text-gray-500 mt-1">Total desta aquisição: R$ 0,00</p>
         </div>
 
@@ -7110,8 +7218,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
   </div>
 
   <script src="/cora-engine/engine-browser.js"></script>
-  <script src="/cora-engine/integration-core.js?v=4.8f4.3a8"></script>
-  <script src="/cora-engine/integration-ui.js?v=4.9ui3.5a"></script>
+  <script src="/cora-engine/integration-core.js?v=4.9ui3.5c"></script>
+  <script src="/cora-engine/integration-ui.js?v=4.9ui3.5c"></script>
 
 </body>
 </html>
