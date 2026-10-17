@@ -3529,6 +3529,16 @@
         stageMeta.classList.toggle('hidden', !phase.meta);
       }
 
+      const homeGestationArt = document.getElementById('homeGestationArt');
+      const homeBabyStageArt = document.getElementById('homeBabyStageArt');
+      const homeMomentGestationIcon = document.getElementById('homeMomentGestationIcon');
+      const homeMomentFallbackIcon = document.getElementById('homeMomentFallbackIcon');
+      const isExpectingStage = phase.lifeStage === 'expecting';
+      if (homeGestationArt) homeGestationArt.classList.toggle('hidden', !isExpectingStage);
+      if (homeBabyStageArt) homeBabyStageArt.classList.toggle('hidden', isExpectingStage);
+      if (homeMomentGestationIcon) homeMomentGestationIcon.classList.toggle('hidden', !isExpectingStage);
+      if (homeMomentFallbackIcon) homeMomentFallbackIcon.classList.toggle('hidden', isExpectingStage);
+
       const homeStageProgress = document.getElementById('homeStageProgress');
       const homeStageProgressTrack = document.getElementById('homeStageProgressTrack');
       let stageProgress = null;
@@ -6178,10 +6188,13 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .cora-home-progress.is-muted span { opacity:.35; }
     .cora-home-baby-art { position:relative; z-index:1; width:128px; height:128px; filter:drop-shadow(0 8px 14px rgba(128,87,98,.10)); }
     .cora-home-baby-art svg { width:100%; height:100%; display:block; }
+    .cora-home-stage-image { width:128px; height:128px; object-fit:cover; border-radius:30px; display:block; }
+
 
     .cora-home-moment { display:flex; align-items:center; gap:12px; padding:15px; border-radius:21px; background:#FFFDFD; border:1px solid #F3E8EA; box-shadow:0 4px 18px rgba(91,65,72,.035); }
-    .cora-home-moment-icon { width:42px; height:42px; border-radius:15px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; background:#FFF0F3; color:#E17892; }
+    .cora-home-moment-icon { width:42px; height:42px; border-radius:15px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; background:#FFF0F3; color:#E17892; overflow:hidden; }
     .cora-home-moment-icon svg { width:20px; height:20px; }
+    .cora-home-moment-art { width:42px; height:42px; object-fit:cover; display:block; }
     .cora-home-moment strong { display:block; margin-top:3px; font-size:14px; color:#4B4043; }
     .cora-home-moment p { margin-top:3px; font-size:10.5px; line-height:1.45; color:#887D81; }
 
@@ -6261,6 +6274,12 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       border-radius:0;
     }
     .finance-category-icon { width:24px; height:24px; object-fit:cover; border-radius:8px; flex:0 0 auto; }
+    .cora-module-title-with-icon { display:flex; align-items:center; gap:8px; }
+    .cora-module-title-with-icon > img { width:32px; height:32px; object-fit:cover; border-radius:10px; }
+    .cora-inline-module-icon { width:28px; height:28px; object-fit:cover; border-radius:9px; flex:0 0 auto; }
+    .cora-finance-identity { display:inline-flex; align-items:center; gap:8px; }
+    .cora-finance-identity > img { width:30px; height:30px; object-fit:cover; border-radius:10px; }
+    .cora-nav-art { width:24px; height:24px; object-fit:cover; border-radius:8px; display:block; }
     .cora-enxoval-search,.cora-enxoval-select { border-color:#F0E4E7; background:#FFFDFD; }
     .cora-item-card { border-color:#F0E6E8; box-shadow:0 4px 16px rgba(82,59,65,.025); }
     .cora-item-decision-actions button.is-primary { background:var(--cora-primary); border-color:var(--cora-primary); }
@@ -6306,6 +6325,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .cora-nav-item { color:#B3A9AC; }
     .cora-nav-item.is-active { color:#D56882; }
     .cora-nav-item.is-active > svg { padding:4px; box-sizing:content-box; border-radius:11px; background:#FFE4EA; }
+    .cora-nav-item.is-active > .cora-nav-art { box-shadow:0 0 0 4px #FFE4EA; }
 
     .bg-rose-600 { background-color:#E97892 !important; }
     .hover\:bg-rose-700:hover { background-color:#D96C86 !important; }
@@ -6356,7 +6376,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           <div id="homeStageProgressTrack" class="cora-home-progress"><span id="homeStageProgress"></span></div>
         </div>
         <div class="cora-home-baby-art" aria-hidden="true">
-          <svg viewBox="0 0 120 120" fill="none">
+          <img id="homeGestationArt" src="/icons/11_Gestacao.webp" alt="" class="cora-home-stage-image">
+          <svg id="homeBabyStageArt" viewBox="0 0 120 120" fill="none" class="hidden">
             <circle cx="60" cy="60" r="54" fill="#FFE4EA"/>
             <path d="M33 70c3-24 18-39 38-39 13 0 25 7 31 19-8-3-15-2-21 3-7 6-10 15-8 27-17 7-29 4-40-10Z" fill="#F8B6C7"/>
             <circle cx="66" cy="54" r="18" fill="#FFE5D9"/>
@@ -6370,7 +6391,10 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       </section>
 
       <section class="cora-home-moment">
-        <div class="cora-home-moment-icon" aria-hidden="true"><i data-lucide="sparkles"></i></div>
+        <div class="cora-home-moment-icon" aria-hidden="true">
+          <img id="homeMomentGestationIcon" src="/icons/11_Gestacao.webp" alt="" class="cora-home-moment-art">
+          <i id="homeMomentFallbackIcon" data-lucide="sparkles" class="hidden"></i>
+        </div>
         <div class="min-w-0">
           <span class="cora-home-kicker">Seu momento</span>
           <strong id="homeMomentTitle">Organizando com calma</strong>
@@ -6411,7 +6435,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
             <span><strong>Fraldas</strong><b id="homeQuickDiaperValue">—</b><small id="homeQuickDiaperMeta">—</small></span>
           </button>
           <button type="button" onclick="switchTab('resumo')" class="cora-home-overview-card is-financas">
-            <span class="cora-home-overview-icon"><i data-lucide="chart-no-axes-column-increasing"></i></span>
+            <span class="cora-home-overview-icon"><img src="/icons/10_Financas.webp" alt="" class="cora-module-icon-image"></span>
             <span><strong>Finanças</strong><b id="homeQuickFinanceValue">—</b><small id="homeQuickFinanceMeta">—</small></span>
           </button>
         </div>
@@ -6443,7 +6467,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     <div id="sectionEnxoval" class="hidden space-y-4">
       <div class="cora-module-heading">
         <button type="button" onclick="switchTab('ferramentas', { resetTools: true })" class="cora-back-button" aria-label="Voltar para Ferramentas"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
-        <div><h2 class="text-[21px] font-semibold tracking-[-0.02em] text-[#302A2B]">Enxoval</h2></div>
+        <div class="cora-module-title-with-icon"><img src="/icons/01_Enxoval.png" alt=""><h2 class="text-[21px] font-semibold tracking-[-0.02em] text-[#302A2B]">Enxoval</h2></div>
       </div>
 
       <!-- DASHBOARD DO ENXOVAL -->
@@ -6522,7 +6546,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       <div class="bg-white rounded-2xl border border-rose-100 p-4 shadow-xs">
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-bold text-gray-900 flex items-center gap-2">
-            <i data-lucide="backpack" class="w-5 h-5 text-rose-500"></i> Checklist da Maternidade
+            <img src="/icons/02_Maternidade.png" alt="" class="cora-inline-module-icon"> Checklist da Maternidade
           </h2>
           <span id="maternidadeProgress" class="text-xs bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded-full">0/0</span>
         </div>
@@ -6539,7 +6563,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     <div id="sectionResumo" class="hidden space-y-4">
       <section class="cora-finance-overview" aria-label="Resumo financeiro">
         <div class="flex items-center justify-between gap-3 mb-4">
-          <span class="cora-eyebrow">Orçamento</span>
+          <span class="cora-finance-identity"><img src="/icons/10_Financas.webp" alt=""><span class="cora-eyebrow">Orçamento</span></span>
           <button id="financeOptionalsToggle" type="button" class="cora-finance-toggle" aria-pressed="false" onclick="toggleFinanceOptionals()">
             <span class="switch-track" aria-hidden="true"><span class="switch-dot"></span></span>
             <span>Incluir opcionais</span>
@@ -6650,7 +6674,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         <span class="nav-label" aria-hidden="true">Ferramentas</span>
       </button>
       <button type="button" onclick="switchTab('resumo')" id="navBtnResumo" class="cora-nav-item" aria-label="Finanças" aria-current="false">
-        <i data-lucide="wallet" class="w-[21px] h-[21px]"></i>
+        <img src="/icons/10_Financas.webp" alt="" class="cora-nav-art">
         <span class="nav-label" aria-hidden="true">Finanças</span>
       </button>
     </div>
@@ -6799,7 +6823,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
   <div id="modalDiaperStock" class="fixed inset-x-0 top-0 bg-black/50 backdrop-blur-xs z-[70] hidden flex items-end sm:items-center justify-center p-0 sm:p-4" style="height:100dvh;">
     <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col min-h-0" style="max-height:92%;">
       <div class="p-5 border-b border-gray-100 flex justify-between items-start gap-3">
-        <h3 class="font-bold text-gray-900 text-lg">Fraldas</h3>
+        <h3 class="font-bold text-gray-900 text-lg flex items-center gap-2"><img src="/icons/03_Fraldas.png" alt="" class="cora-inline-module-icon"> Fraldas</h3>
         <button onclick="closeModal('modalDiaperStock')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
       <div id="diaperStockBody" class="p-5 min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-3"></div>
