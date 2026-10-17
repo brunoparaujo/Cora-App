@@ -1272,9 +1272,10 @@
       if (!body) return;
       const model = diaperStockModel();
       if (!model) {
-        body.innerHTML = '<p class="text-xs text-gray-400 text-center py-6">O estoque de fraldas não está disponível neste planejamento.</p>';
+        body.innerHTML = '<div class="cora-diaper-empty">Estoque indisponível</div>';
         return;
       }
+
       const context = diaperOperationalContext();
       const born = context.lifeStage === 'born';
       const expecting = context.lifeStage === 'expecting';
@@ -1286,89 +1287,106 @@
       const stockCards = DIAPER_SIZE_KEYS.map(size => {
         const estimated = Number(model.stockBySize?.[size] || 0);
         const isCurrent = current === size && born;
-        return `<div id="diaperStockCard_${size}" class="rounded-2xl border ${isCurrent ? 'border-sky-300 bg-sky-50/80 shadow-sm' : 'border-gray-100 bg-gray-50/80'} overflow-hidden transition">
-          <button id="diaperStockView_${size}" type="button" onclick="editDiaperStockCard('${size}')" class="w-full min-h-[94px] p-3 text-center active:scale-[0.98] transition" aria-label="Editar estoque ${size}">
-            <div class="flex items-center justify-center gap-1.5">
-              <span class="text-[10px] font-bold ${isCurrent ? 'text-sky-700' : 'text-gray-500'}">${size}</span>
-              ${isCurrent ? '<span class="w-1.5 h-1.5 rounded-full bg-sky-500" aria-hidden="true"></span>' : ''}
+        return `<div id="diaperStockCard_${size}" class="cora-diaper-size-card ${isCurrent ? 'is-current' : ''}">
+          <button id="diaperStockView_${size}" type="button" onclick="editDiaperStockCard('${size}')" class="cora-diaper-size-view" aria-label="Editar estoque ${size}">
+            <div class="cora-diaper-size-label">
+              <span>${size}</span>
+              ${isCurrent ? '<i aria-hidden="true"></i>' : ''}
             </div>
-            <strong class="block text-base text-gray-900 mt-1">${estimated.toLocaleString('pt-BR')}</strong>
-            <span class="block text-[8px] text-gray-400 mt-0.5">fraldas</span>
+            <strong>${estimated.toLocaleString('pt-BR')}</strong>
+            <small>fraldas</small>
           </button>
-          <div id="diaperStockEdit_${size}" class="hidden min-h-[94px] p-2.5 relative">
-            <div class="flex items-center justify-center mb-2 pr-7"><span class="text-[10px] font-bold ${isCurrent ? 'text-sky-700' : 'text-gray-500'}">${size}</span></div>
-            <button id="diaperStockSave_${size}" type="button" onclick="saveDiaperStockCard('${size}')" class="absolute top-1.5 right-1.5 w-6 h-6 rounded-md bg-sky-600 text-white flex items-center justify-center shadow-sm active:scale-95 transition" aria-label="Salvar estoque ${size}"><i data-lucide="check" class="w-3 h-3"></i></button>
-            <input id="diaperStock_${size}" data-current="${estimated}" type="number" inputmode="numeric" min="0" step="1" value="${estimated}" aria-label="Estoque ${size}" onkeydown="if(event.key==='Enter'){event.preventDefault();saveDiaperStockCard('${size}')}else if(event.key==='Escape'){cancelDiaperStockCard('${size}')}" class="block w-full min-w-0 h-11 bg-white border border-gray-200 rounded-xl px-1 text-center text-[15px] font-bold leading-none text-gray-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-200">
+          <div id="diaperStockEdit_${size}" class="hidden cora-diaper-size-edit">
+            <div class="cora-diaper-size-edit-label"><span>${size}</span></div>
+            <button id="diaperStockSave_${size}" type="button" onclick="saveDiaperStockCard('${size}')" class="cora-diaper-size-save" aria-label="Salvar estoque ${size}"><i data-lucide="check"></i></button>
+            <input id="diaperStock_${size}" data-current="${estimated}" type="number" inputmode="numeric" min="0" step="1" value="${estimated}" aria-label="Estoque ${size}" onkeydown="if(event.key==='Enter'){event.preventDefault();saveDiaperStockCard('${size}')}else if(event.key==='Escape'){cancelDiaperStockCard('${size}')}" class="cora-diaper-size-input">
           </div>
         </div>`;
       }).join('');
 
       const historyRows = (model.sizeHistory || []).slice().reverse().map(row => `
-        <div class="flex items-center justify-between gap-3 py-2 border-t border-gray-100 first:border-t-0">
-          <div><strong class="text-[10px] text-gray-800">${escapeHtml(row.size)}</strong><span class="text-[9px] text-gray-500"> · desde ${escapeHtml(row.effectiveDate.split('-').reverse().join('/'))}</span></div>
-          <button onclick="deleteDiaperSizeHistoryDate('${escapeHtml(row.effectiveDate)}')" class="w-7 h-7 rounded-lg bg-red-50 text-red-500 flex items-center justify-center" aria-label="Remover mudança de tamanho"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+        <div class="cora-diaper-history-row">
+          <div><strong>${escapeHtml(row.size)}</strong><span>desde ${escapeHtml(row.effectiveDate.split('-').reverse().join('/'))}</span></div>
+          <button onclick="deleteDiaperSizeHistoryDate('${escapeHtml(row.effectiveDate)}')" aria-label="Remover mudança de tamanho"><i data-lucide="trash-2"></i></button>
         </div>`).join('');
 
       const hybridHtml = context.diaperingMode === 'hybrid' ? `
-        <div class="rounded-2xl border border-sky-100 bg-sky-50/50 p-3.5">
-          <label class="block text-[10px] font-bold text-gray-700">Uso de descartáveis</label>
-          <select onchange="changeHybridDisposableRatio(this.value)" class="mt-2 w-full p-2.5 text-xs bg-white border border-gray-200 rounded-lg">
+        <section class="cora-diaper-panel cora-diaper-hybrid">
+          <label>Uso de descartáveis</label>
+          <select onchange="changeHybridDisposableRatio(this.value)">
             <option value="" ${context.hybridDisposableRatio === null ? 'selected' : ''}>Definir depois</option>
             ${[[0.25,'25%'],[0.5,'50%'],[0.75,'75%']].map(([v,l]) => `<option value="${v}" ${Number(context.hybridDisposableRatio) === v ? 'selected' : ''}>${l}</option>`).join('')}
           </select>
-        </div>` : '';
+        </section>` : '';
 
       const currentSection = expecting ? `
-        <div class="rounded-2xl border border-sky-100 bg-sky-50/50 p-3.5">
-          <span class="block text-[9px] text-sky-700 uppercase tracking-wide font-bold">Tamanho inicial</span>
-          <div class="flex items-baseline gap-2 mt-0.5"><strong class="text-2xl text-gray-900">RN</strong><span class="text-[9px] text-gray-400">o consumo começa após o nascimento</span></div>
-        </div>` : `
-        <div class="rounded-2xl border border-gray-100 bg-white p-3.5">
+        <section class="cora-diaper-current is-expecting">
           <div>
-            <span class="block text-[9px] text-gray-400 uppercase tracking-wide font-bold">Em uso</span>
-            <div class="flex items-baseline gap-2 mt-0.5"><strong class="text-2xl text-gray-900">${escapeHtml(current)}</strong><span class="text-[9px] text-gray-400">desde ${escapeHtml((model.currentSizeSince || context.birthDate || localTodayIso()).split('-').reverse().join('/'))}</span></div>
+            <span class="cora-diaper-kicker">Tamanho inicial</span>
+            <strong>RN</strong>
           </div>
-          <div class="grid grid-cols-3 gap-2 mt-3">
-            <div class="rounded-xl bg-gray-50 p-2 text-center"><span class="block text-[8px] text-gray-400">Estoque</span><strong class="text-xs text-gray-800">${currentStock.toLocaleString('pt-BR')}</strong></div>
-            <div class="rounded-xl bg-gray-50 p-2 text-center"><span class="block text-[8px] text-gray-400">Uso/dia</span><strong class="text-xs text-gray-800">${rate == null ? '—' : `${compactNumber(rate)}/dia`}</strong></div>
-            <div class="rounded-xl bg-gray-50 p-2 text-center"><span class="block text-[8px] text-gray-400">Autonomia</span><strong class="text-xs text-gray-800">${autonomy == null ? '—' : `${compactNumber(autonomy)} dias`}</strong></div>
+          <span class="cora-diaper-current-stock">${Number(model.totalStock || 0).toLocaleString('pt-BR')}<small>fraldas no estoque</small></span>
+        </section>` : `
+        <section class="cora-diaper-current">
+          <div class="cora-diaper-current-head">
+            <span class="cora-diaper-kicker">Em uso</span>
+            <strong>${escapeHtml(current)}</strong>
+            <small>desde ${escapeHtml((model.currentSizeSince || context.birthDate || localTodayIso()).split('-').reverse().join('/'))}</small>
           </div>
-          <div class="mt-3 pt-3 border-t border-gray-100">
-            <label class="block text-[10px] font-bold text-gray-600">Trocar tamanho</label>
-            <div class="grid grid-cols-[1fr_auto] gap-2 mt-1.5">
-              <select id="diaperStockCurrentSize" class="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-lg"><option value="" selected disabled>Selecione o novo tamanho</option>${DIAPER_SIZE_KEYS.filter(size => size !== current).map(size => `<option value="${size}">${size}</option>`).join('')}</select>
-              <button id="diaperSizeSaveButton" onclick="saveDiaperCurrentSizeFromModal()" class="px-3 rounded-lg bg-violet-600 text-white text-[10px] font-bold">Registrar</button>
+
+          <div class="cora-diaper-metrics">
+            <div><span>Estoque</span><strong>${currentStock.toLocaleString('pt-BR')}</strong></div>
+            <div><span>Uso/dia</span><strong>${rate == null ? '—' : compactNumber(rate)}</strong></div>
+            <div><span>Autonomia</span><strong>${autonomy == null ? '—' : `${compactNumber(autonomy)} dias`}</strong></div>
+          </div>
+
+          <div class="cora-diaper-size-change">
+            <label>Trocar tamanho</label>
+            <div>
+              <select id="diaperStockCurrentSize">
+                <option value="" selected disabled>Novo tamanho</option>
+                ${DIAPER_SIZE_KEYS.filter(size => size !== current).map(size => `<option value="${size}">${size}</option>`).join('')}
+              </select>
+              <button id="diaperSizeSaveButton" onclick="saveDiaperCurrentSizeFromModal()">Registrar</button>
             </div>
-            <p class="text-[9px] text-gray-400 mt-1.5">A troca vale a partir de hoje.</p>
           </div>
-          ${historyRows ? `<details class="mt-2"><summary class="text-[9px] font-bold text-violet-700 cursor-pointer">Histórico</summary><div class="mt-1">${historyRows}</div></details>` : ''}
-        </div>`;
+
+          ${historyRows ? `<details class="cora-diaper-history"><summary>Histórico <i data-lucide="chevron-down"></i></summary><div>${historyRows}</div></details>` : ''}
+        </section>`;
 
       body.innerHTML = `
-        <div class="space-y-3">
+        <div class="cora-diaper-content">
           ${currentSection}
           ${hybridHtml}
 
-          <div class="rounded-2xl border border-gray-100 bg-white p-3.5">
-            <div class="flex items-center justify-between gap-3"><strong class="text-xs text-gray-900">Estoque por tamanho</strong><strong class="text-[10px] font-semibold text-gray-500 shrink-0">${Number(model.totalStock || 0).toLocaleString('pt-BR')} fraldas</strong></div>
-            <div class="grid grid-cols-3 gap-2 mt-3">${stockCards}</div>
-          </div>
-
-          <div class="rounded-2xl border border-emerald-100 bg-emerald-50/30 p-3.5">
-            <div class="flex items-center justify-between gap-3"><strong class="text-xs text-gray-900">Compras e presentes</strong><button onclick="openDiaperPurchaseFromStock()" class="shrink-0 px-3 py-2 rounded-xl bg-emerald-600 text-white text-[10px] font-bold">+ Registrar</button></div>
-            <div class="grid grid-cols-3 gap-2 text-center mt-3">
-              <div><span class="block text-[8px] text-gray-400">Fraldas</span><strong class="text-xs text-gray-800">${model.purchases.totalUnits.toLocaleString('pt-BR')}</strong></div>
-              <div><span class="block text-[8px] text-gray-400">Gasto</span><strong class="text-xs text-gray-800">${money(model.purchases.spentBRL)}</strong></div>
-              <div><span class="block text-[8px] text-gray-400">Preço médio</span><strong class="text-xs text-gray-800">${model.purchases.avgPaidPerDiaper == null ? '—' : `${money(model.purchases.avgPaidPerDiaper)}/un`}</strong></div>
+          <section class="cora-diaper-panel">
+            <div class="cora-diaper-panel-head">
+              <strong>Estoque por tamanho</strong>
+              <span>${Number(model.totalStock || 0).toLocaleString('pt-BR')} fraldas</span>
             </div>
-            ${model.purchases.legacyAcquisitionCount ? `<p class="text-[9px] text-amber-700 mt-2">${model.purchases.legacyAcquisitionCount} registro(s) antigo(s) sem quantidade por pacote. Ajuste o estoque pelo tamanho quando necessário.</p>` : ''}
-          </div>
+            <div class="cora-diaper-size-grid">${stockCards}</div>
+          </section>
+
+          <section class="cora-diaper-panel cora-diaper-purchases">
+            <div class="cora-diaper-panel-head">
+              <strong>Compras e presentes</strong>
+              <button onclick="openDiaperPurchaseFromStock()" class="cora-diaper-register">Registrar</button>
+            </div>
+            <div class="cora-diaper-purchase-metrics">
+              <div><span>Fraldas</span><strong>${model.purchases.totalUnits.toLocaleString('pt-BR')}</strong></div>
+              <div><span>Gasto</span><strong>${money(model.purchases.spentBRL)}</strong></div>
+              <div><span>Preço médio</span><strong>${model.purchases.avgPaidPerDiaper == null ? '—' : `${money(model.purchases.avgPaidPerDiaper)}/un`}</strong></div>
+            </div>
+            ${model.purchases.legacyAcquisitionCount ? `<p class="cora-diaper-legacy">${model.purchases.legacyAcquisitionCount} registro(s) antigo(s) sem quantidade por pacote.</p>` : ''}
+          </section>
         </div>`;
+
       lucide.createIcons();
     }
 
     async function openDiaperStock() {
       document.getElementById('modalDiaperStock')?.classList.remove('hidden');
+      document.body.classList.add('modal-open');
       syncDiaperStockViewport();
       const body = document.getElementById('diaperStockBody');
       if (body) body.innerHTML = '<p class="text-xs text-gray-400 text-center py-8">Carregando estoque...</p>';
@@ -6852,8 +6870,342 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       .cora-maternity-summary-card b { display:none; }
       .cora-maternity-summary-icon { width:32px; height:32px; }
     }
-    #modalDiaperStock > div { background:#FCFEFF; }
-    #modalDiaperStock > div > div:first-child { background:#F3FAFF; border-color:#E3F2FF !important; }
+    /* V4.9UI UI3.7 — Fraldas */
+    .cora-diaper-modal-panel { background:#F8FCFF; }
+    .cora-diaper-modal-header {
+      padding:16px 18px 14px;
+      background:linear-gradient(135deg,#F0F8FF,#F7FBFF);
+      border-bottom:1px solid #DDECF6;
+    }
+    .cora-diaper-modal-header h3 {
+      margin-top:2px;
+      font-size:19px;
+      line-height:1.1;
+      font-weight:700;
+      color:#3E4850;
+    }
+    .cora-diaper-kicker {
+      display:block;
+      font-size:8.5px;
+      line-height:1;
+      text-transform:uppercase;
+      letter-spacing:.09em;
+      font-weight:750;
+      color:#719CC0;
+    }
+    .cora-diaper-close {
+      width:36px;
+      height:36px;
+      border-radius:12px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:#8B9BA7;
+      background:rgba(255,255,255,.76);
+    }
+    .cora-diaper-close svg { width:18px; height:18px; }
+    .cora-diaper-modal-body { padding:14px; background:#F8FCFF; }
+    .cora-diaper-content { display:flex; flex-direction:column; gap:10px; }
+    .cora-diaper-empty { padding:32px 14px; text-align:center; font-size:10px; color:#8FA0AB; }
+
+    .cora-diaper-current,
+    .cora-diaper-panel {
+      border-radius:21px;
+      background:#fff;
+      border:1px solid #E2EEF5;
+      box-shadow:0 4px 16px rgba(70,101,122,.025);
+    }
+    .cora-diaper-current { padding:14px; }
+    .cora-diaper-current.is-expecting {
+      min-height:86px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      background:linear-gradient(135deg,#F3FAFF,#FFFFFF);
+    }
+    .cora-diaper-current.is-expecting > div > strong,
+    .cora-diaper-current-head > strong {
+      display:block;
+      margin-top:4px;
+      font-size:27px;
+      line-height:1;
+      color:#465762;
+    }
+    .cora-diaper-current-head > small {
+      display:block;
+      margin-top:4px;
+      font-size:8.5px;
+      color:#99A7B0;
+    }
+    .cora-diaper-current-stock {
+      text-align:right;
+      font-size:16px;
+      line-height:1;
+      font-weight:700;
+      color:#557E9C;
+    }
+    .cora-diaper-current-stock small {
+      display:block;
+      margin-top:5px;
+      font-size:8px;
+      line-height:1.2;
+      font-weight:600;
+      color:#97A8B3;
+    }
+
+    .cora-diaper-metrics,
+    .cora-diaper-purchase-metrics {
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:7px;
+      margin-top:12px;
+    }
+    .cora-diaper-metrics > div,
+    .cora-diaper-purchase-metrics > div {
+      min-width:0;
+      padding:8px 5px;
+      border-radius:13px;
+      text-align:center;
+      background:#F4F9FC;
+    }
+    .cora-diaper-metrics span,
+    .cora-diaper-purchase-metrics span {
+      display:block;
+      font-size:8px;
+      color:#8FA0AB;
+    }
+    .cora-diaper-metrics strong,
+    .cora-diaper-purchase-metrics strong {
+      display:block;
+      margin-top:3px;
+      font-size:10.5px;
+      line-height:1.2;
+      color:#52616A;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .cora-diaper-size-change {
+      margin-top:12px;
+      padding-top:12px;
+      border-top:1px solid #EDF3F6;
+    }
+    .cora-diaper-size-change label,
+    .cora-diaper-hybrid label {
+      display:block;
+      font-size:9px;
+      font-weight:700;
+      color:#6C7B84;
+    }
+    .cora-diaper-size-change > div {
+      display:grid;
+      grid-template-columns:minmax(0,1fr) auto;
+      gap:7px;
+      margin-top:6px;
+    }
+    .cora-diaper-size-change select,
+    .cora-diaper-hybrid select {
+      min-width:0;
+      height:37px;
+      padding:0 10px;
+      border-radius:11px;
+      border:1px solid #DDE8EE;
+      background:#FBFDFF;
+      color:#55646D;
+      font-size:10px;
+      outline:none;
+    }
+    .cora-diaper-size-change button,
+    .cora-diaper-register {
+      min-height:37px;
+      padding:0 12px;
+      border-radius:11px;
+      background:#78A9CC;
+      color:#fff;
+      font-size:9.5px;
+      font-weight:750;
+    }
+    .cora-diaper-hybrid select { width:100%; margin-top:7px; }
+
+    .cora-diaper-history { margin-top:8px; }
+    .cora-diaper-history summary {
+      display:flex;
+      align-items:center;
+      gap:3px;
+      width:max-content;
+      font-size:9px;
+      font-weight:700;
+      color:#738D9E;
+      cursor:pointer;
+      list-style:none;
+    }
+    .cora-diaper-history summary::-webkit-details-marker { display:none; }
+    .cora-diaper-history summary svg { width:13px; height:13px; }
+    .cora-diaper-history-row {
+      min-height:38px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      border-top:1px solid #EDF2F5;
+    }
+    .cora-diaper-history-row:first-child { margin-top:6px; }
+    .cora-diaper-history-row strong { font-size:9.5px; color:#58666E; }
+    .cora-diaper-history-row span { margin-left:5px; font-size:8.5px; color:#9AA6AD; }
+    .cora-diaper-history-row button {
+      width:28px;
+      height:28px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:9px;
+      color:#C47B86;
+      background:#FFF4F5;
+    }
+    .cora-diaper-history-row button svg { width:13px; height:13px; }
+
+    .cora-diaper-panel { padding:13px; }
+    .cora-diaper-panel-head {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .cora-diaper-panel-head > strong { font-size:11px; color:#4D5B64; }
+    .cora-diaper-panel-head > span {
+      flex:0 0 auto;
+      font-size:9px;
+      font-weight:650;
+      color:#8B9CA7;
+    }
+    .cora-diaper-size-grid {
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:7px;
+      margin-top:10px;
+    }
+    .cora-diaper-size-card {
+      min-width:0;
+      min-height:90px;
+      overflow:hidden;
+      border-radius:17px;
+      border:1px solid #E3EDF3;
+      background:#F7FBFD;
+      transition:border-color .16s ease, background .16s ease, transform .16s ease;
+    }
+    .cora-diaper-size-card.is-current {
+      border-color:#A7CCE4;
+      background:#EDF7FD;
+      box-shadow:0 0 0 1px rgba(120,169,204,.08);
+    }
+    .cora-diaper-size-view {
+      width:100%;
+      min-height:90px;
+      padding:11px 7px;
+      text-align:center;
+      transition:transform .12s ease;
+    }
+    .cora-diaper-size-view:active { transform:scale(.98); }
+    .cora-diaper-size-label {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:5px;
+      font-size:9px;
+      font-weight:750;
+      color:#788A96;
+    }
+    .cora-diaper-size-card.is-current .cora-diaper-size-label { color:#5A8FB4; }
+    .cora-diaper-size-label i {
+      width:5px;
+      height:5px;
+      border-radius:999px;
+      background:#78A9CC;
+    }
+    .cora-diaper-size-view > strong {
+      display:block;
+      margin-top:5px;
+      font-size:16px;
+      line-height:1;
+      color:#475761;
+    }
+    .cora-diaper-size-view > small {
+      display:block;
+      margin-top:4px;
+      font-size:8px;
+      color:#9AA8B0;
+    }
+    .cora-diaper-size-edit {
+      min-height:90px;
+      padding:9px 7px;
+      position:relative;
+      background:#F2F9FD;
+    }
+    .cora-diaper-size-edit-label {
+      padding-right:25px;
+      text-align:center;
+      font-size:9px;
+      font-weight:750;
+      color:#688BA3;
+    }
+    .cora-diaper-size-save {
+      position:absolute;
+      top:6px;
+      right:6px;
+      width:25px;
+      height:25px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:8px;
+      background:#78A9CC;
+      color:#fff;
+      box-shadow:0 3px 8px rgba(82,132,166,.16);
+    }
+    .cora-diaper-size-save svg { width:12px; height:12px; }
+    .cora-diaper-size-input {
+      width:100%;
+      min-width:0;
+      height:42px;
+      margin-top:8px;
+      padding:0 4px;
+      border-radius:11px;
+      border:1px solid #C9DDE9;
+      background:#fff;
+      text-align:center;
+      font-size:15px;
+      line-height:1;
+      font-weight:700;
+      color:#465761;
+      outline:none;
+    }
+    .cora-diaper-size-input:focus {
+      border-color:#8AB7D4;
+      box-shadow:0 0 0 2px rgba(120,169,204,.15);
+    }
+
+    .cora-diaper-purchases { background:#FCFEFF; }
+    .cora-diaper-register { min-height:32px; }
+    .cora-diaper-legacy {
+      margin-top:8px;
+      padding:7px 8px;
+      border-radius:10px;
+      background:#FFF8EA;
+      color:#9B762E;
+      font-size:8.5px;
+      line-height:1.35;
+    }
+
+    @media (max-width:355px) {
+      .cora-diaper-modal-body { padding:11px; }
+      .cora-diaper-size-grid { gap:5px; }
+      .cora-diaper-size-view,
+      .cora-diaper-size-edit { min-height:86px; }
+      .cora-diaper-metrics,
+      .cora-diaper-purchase-metrics { gap:5px; }
+    }
     #globalFab { background:var(--cora-primary) !important; box-shadow:0 8px 22px rgba(233,120,146,.30); }
 
     .cora-bottom-nav { background:rgba(255,253,254,.96); border-color:#F1E5E8; box-shadow:0 -8px 28px rgba(84,60,67,.04); }
@@ -7400,13 +7752,16 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
   </div>
 
   <!-- MODAL FRALDAS -->
-  <div id="modalDiaperStock" class="fixed inset-x-0 top-0 bg-black/50 backdrop-blur-xs z-[70] hidden flex items-end sm:items-center justify-center p-0 sm:p-4" style="height:100dvh;">
-    <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col min-h-0" style="max-height:92%;">
-      <div class="p-5 border-b border-gray-100 flex justify-between items-start gap-3">
-        <h3 class="font-bold text-gray-900 text-lg">Fraldas</h3>
-        <button onclick="closeModal('modalDiaperStock')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+  <div id="modalDiaperStock" class="fixed inset-x-0 top-0 bg-black/45 backdrop-blur-xs z-[70] hidden flex items-end sm:items-center justify-center p-0 sm:p-4" style="height:100dvh;">
+    <div class="cora-diaper-modal-panel w-full max-w-md rounded-t-[28px] sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col min-h-0" style="max-height:92%;">
+      <div class="cora-diaper-modal-header flex justify-between items-center gap-3">
+        <div>
+          <span class="cora-diaper-kicker">Estoque e consumo</span>
+          <h3>Fraldas</h3>
+        </div>
+        <button onclick="closeModal('modalDiaperStock')" class="cora-diaper-close" aria-label="Fechar"><i data-lucide="x"></i></button>
       </div>
-      <div id="diaperStockBody" class="p-5 min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-3"></div>
+      <div id="diaperStockBody" class="cora-diaper-modal-body min-h-0 flex-1 overflow-y-auto overscroll-contain"></div>
     </div>
   </div>
 
