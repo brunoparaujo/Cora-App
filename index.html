@@ -1050,7 +1050,7 @@
           saveDiaperCurrentSizeState({ currentSize: currentSize || null }), 'Atualizando...'
         );
         if (result?.skipped) return;
-        await renderDiaperStockModal();
+        await renderDiaperPage();
       } catch (error) {
         console.error('Erro ao salvar tamanho atual:', error);
         alert(error?.message || 'Não foi possível atualizar o tamanho atual.');
@@ -1081,7 +1081,7 @@
           current.updatedAt = now;
           return current;
         }), 'Corrigindo histórico...');
-        await renderDiaperStockModal();
+        await renderDiaperPage();
       } catch (error) {
         console.error('Erro ao corrigir histórico de tamanhos:', error);
         alert(error?.message || 'Não foi possível corrigir o histórico.');
@@ -1096,40 +1096,28 @@
     }
 
     function syncDiaperStockViewport() {
-      const modal = document.getElementById('modalDiaperStock');
-      if (!modal || modal.classList.contains('hidden')) return;
-
-      // Chrome/Android moderno respeita interactive-widget=resizes-content.
-      // O VisualViewport abaixo funciona como fallback (Samsung Internet e
-      // navegadores que mantêm o layout viewport atrás do teclado).
-      const viewport = window.visualViewport;
-      if (viewport) {
-        modal.style.top = `${Math.max(0, viewport.offsetTop)}px`;
-        modal.style.height = `${Math.max(1, viewport.height)}px`;
-        modal.style.bottom = 'auto';
-      } else {
-        modal.style.top = '0px';
-        modal.style.height = '100dvh';
-        modal.style.bottom = 'auto';
-      }
+      // Fraldas é uma página; não há viewport de modal para redimensionar.
     }
 
     function ensureDiaperStockCardVisible(size) {
       const card = document.getElementById(`diaperStockCard_${size}`);
-      const scroller = document.getElementById('diaperStockBody');
-      if (!card || !scroller) return;
+      const section = document.getElementById('sectionFraldas');
+      if (!card || !section || section.classList.contains('hidden')) return;
 
-      const scrollerRect = scroller.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();
+      const header = document.querySelector('.cora-shell-header');
+      const viewport = window.visualViewport;
       const padding = 14;
-      const visibleTop = scrollerRect.top + padding;
-      const visibleBottom = scrollerRect.bottom - padding;
+      const viewportTop = viewport ? Number(viewport.offsetTop || 0) : 0;
+      const viewportHeight = viewport ? Number(viewport.height || window.innerHeight) : window.innerHeight;
+      const headerBottom = header ? header.getBoundingClientRect().bottom : 0;
+      const visibleTop = Math.max(viewportTop + padding, headerBottom + padding);
+      const visibleBottom = viewportTop + viewportHeight - padding;
 
       let delta = 0;
       if (cardRect.bottom > visibleBottom) delta = cardRect.bottom - visibleBottom;
       else if (cardRect.top < visibleTop) delta = cardRect.top - visibleTop;
-
-      if (Math.abs(delta) > 1) scroller.scrollBy({ top: delta, behavior: 'auto' });
+      if (Math.abs(delta) > 1) window.scrollBy({ top: delta, behavior: 'auto' });
     }
 
     let diaperViewportSyncFrame = 0;
@@ -1239,7 +1227,7 @@
           saveDiaperInventoryState({ stockBySize: { [size]: quantity } }), 'Salvando...'
         );
         if (result?.skipped) return;
-        await renderDiaperStockModal();
+        await renderDiaperPage();
       } catch (error) {
         console.error('Erro ao salvar estoque de fraldas:', error);
         alert(error?.message || 'Não foi possível salvar o estoque de fraldas.');
@@ -1251,7 +1239,6 @@
       if (!item) return;
       const model = diaperStockModel();
       const context = diaperOperationalContext();
-      closeModal('modalDiaperStock');
       openAcquisitionModalForItem(item.id, context.lifeStage === 'expecting' ? 'RN' : (model?.currentSize || 'RN'));
     }
 
@@ -1267,7 +1254,7 @@
       }
     }
 
-    async function renderDiaperStockModal() {
+    async function renderDiaperPage() {
       const body = document.getElementById('diaperStockBody');
       if (!body) return;
       const model = diaperStockModel();
@@ -1283,6 +1270,35 @@
       const autonomy = model.autonomyDays == null ? null : Math.max(0, Number(model.autonomyDays));
       const currentStock = Number(model.stockBySize?.[current] || 0);
       const rate = model.currentRatePerDay == null ? null : Number(model.currentRatePerDay);
+      const diaperItem = getDisposableDiaperItem();
+      const diaperAcquisitions = diaperItem
+        ? getAcquisitions(diaperItem).sort((a, b) => String(b.id).localeCompare(String(a.id)))
+        : [];
+
+      const acquisitionRows = diaperAcquisitions.map(acq => {
+        const total = acquisitionPaidTotal(acq);
+        const packageBased = Number(acq.unitsPerPackage || 0) > 0;
+        const diaperUnits = Math.round(globalThis.CoraV48IntegrationCore?.diaperUnitsFromAcquisition?.(acq) || acq.quantity || 0);
+        const title = packageBased
+          ? `${acq.quantity} ${Number(acq.quantity) === 1 ? 'pacote' : 'pacotes'} · ${SIZE_LABELS[acq.size]} · ${diaperUnits} fraldas`
+          : `${diaperUnits} fraldas · ${SIZE_LABELS[acq.size]} · registro anterior`;
+        const detail = acq.type === 'gift'
+          ? 'Presente / doação'
+          : packageBased
+            ? `${money(total)} total · ${money(acq.unitPrice)}/pacote`
+            : `${money(total)} total`;
+
+        return `<div class="cora-diaper-acquisition-row">
+          <div class="min-w-0">
+            <strong>${escapeHtml(title)}</strong>
+            <span>${escapeHtml(detail)}${acq.brand ? ` · ${escapeHtml(acq.brand)}` : ''}</span>
+          </div>
+          <div class="cora-diaper-acquisition-actions">
+            <button type="button" onclick="editAcquisition('${diaperItem.id}', '${acq.id}')" aria-label="Editar aquisição"><i data-lucide="edit-3"></i></button>
+            <button type="button" class="is-danger" onclick="deleteAcquisition('${diaperItem.id}', '${acq.id}')" aria-label="Excluir aquisição"><i data-lucide="trash-2"></i></button>
+          </div>
+        </div>`;
+      }).join('');
 
       const stockCards = DIAPER_SIZE_KEYS.map(size => {
         const estimated = Number(model.stockBySize?.[size] || 0);
@@ -1377,6 +1393,7 @@
               <div><span>Gasto</span><strong>${money(model.purchases.spentBRL)}</strong></div>
               <div><span>Preço médio</span><strong>${model.purchases.avgPaidPerDiaper == null ? '—' : `${money(model.purchases.avgPaidPerDiaper)}/un`}</strong></div>
             </div>
+            ${acquisitionRows ? `<div class="cora-diaper-acquisition-list">${acquisitionRows}</div>` : ''}
             ${model.purchases.legacyAcquisitionCount ? `<p class="cora-diaper-legacy">${model.purchases.legacyAcquisitionCount} registro(s) antigo(s) sem quantidade por pacote.</p>` : ''}
           </section>
         </div>`;
@@ -1385,12 +1402,10 @@
     }
 
     async function openDiaperStock() {
-      document.getElementById('modalDiaperStock')?.classList.remove('hidden');
-      document.body.classList.add('modal-open');
-      syncDiaperStockViewport();
+      switchTab('fraldas');
       const body = document.getElementById('diaperStockBody');
-      if (body) body.innerHTML = '<p class="text-xs text-gray-400 text-center py-8">Carregando estoque...</p>';
-      await renderDiaperStockModal();
+      if (body) body.innerHTML = '<div class="cora-diaper-empty">Carregando...</div>';
+      await renderDiaperPage();
     }
 
     function renderDiaperStockCard() {
@@ -2332,7 +2347,7 @@
       });
 
       if (!result.committed && abortReason) throw createConcurrencyError(abortReason);
-      return { deleted: result.committed };
+      return { deleted: result.committed, item: result.snapshot?.val() || null };
     }
 
     async function toggleMaternidadeInFirebase(id) {
@@ -3396,6 +3411,7 @@
       renderItems();
       renderMaternidade();
       renderDiaperStockCard();
+      if (appState.activeTab === 'fraldas') void renderDiaperPage();
       renderResumoFinanceiro();
       renderShellUI();
       if (!document.getElementById('modalAction').classList.contains('hidden')) lucide.createIcons();
@@ -3485,7 +3501,7 @@
 
     function rootTabForView(view) {
       if (view === 'resumo') return 'resumo';
-      if (view === 'ferramentas' || view === 'enxoval' || view === 'maternidade') return 'ferramentas';
+      if (view === 'ferramentas' || view === 'enxoval' || view === 'maternidade' || view === 'fraldas') return 'ferramentas';
       return 'inicio';
     }
 
@@ -3719,7 +3735,7 @@
         if (appState.activeTab !== 'ferramentas') switchTab('ferramentas', { resetTools: true });
         return;
       }
-      const target = ['enxoval', 'maternidade'].includes(appState.lastToolsTab)
+      const target = ['enxoval', 'maternidade', 'fraldas'].includes(appState.lastToolsTab)
         ? appState.lastToolsTab
         : 'ferramentas';
       switchTab(target, { restoreTools: true });
@@ -3727,7 +3743,7 @@
 
     function switchTab(tab, options = {}) {
       if (appState.activeTab === 'maternidade' && tab !== 'maternidade') appState.maternityEditMode = false;
-      if (tab === 'enxoval' || tab === 'maternidade') appState.lastToolsTab = tab;
+      if (tab === 'enxoval' || tab === 'maternidade' || tab === 'fraldas') appState.lastToolsTab = tab;
       if (tab === 'ferramentas' && options.resetTools) appState.lastToolsTab = 'ferramentas';
       appState.activeTab = tab;
       const sections = {
@@ -3735,6 +3751,7 @@
         ferramentas: document.getElementById('sectionFerramentas'),
         enxoval: document.getElementById('sectionEnxoval'),
         maternidade: document.getElementById('sectionMaternidade'),
+        fraldas: document.getElementById('sectionFraldas'),
         resumo: document.getElementById('sectionResumo')
       };
       Object.entries(sections).forEach(([key, section]) => {
@@ -3744,6 +3761,7 @@
       if (fab) fab.classList.toggle('hidden', tab !== 'enxoval');
       updateRootNavigation(rootTabForView(tab));
       window.scrollTo({ top: 0, behavior: 'auto' });
+      if (tab === 'fraldas') void renderDiaperPage();
       lucide.createIcons();
     }
 
@@ -4978,9 +4996,12 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
               </div>
               <div class="text-right shrink-0">
                 <span class="text-xs font-bold ${acq.type === 'gift' ? 'text-emerald-600' : 'text-gray-900'}">${acq.type === 'gift' ? 'Presente' : money(total)}</span>
-                <div class="flex justify-end mt-2">
+                <div class="flex justify-end gap-1.5 mt-2">
                   <button onclick="editAcquisition('${item.id}', '${acq.id}')" class="p-2 rounded-lg text-gray-500 bg-white border border-gray-200 hover:bg-rose-50 hover:text-rose-600" aria-label="Editar aquisição" title="Editar aquisição">
                     <i data-lucide="edit-3" class="w-4 h-4"></i>
+                  </button>
+                  <button onclick="deleteAcquisition('${item.id}', '${acq.id}')" class="p-2 rounded-lg text-red-500 bg-white border border-red-100 hover:bg-red-50" aria-label="Excluir aquisição" title="Excluir aquisição">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </div>
               </div>
@@ -5029,6 +5050,8 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       toggleAcquisitionType();
       updateAcquisitionPreview();
       document.getElementById('modalAcquisition').classList.remove('hidden');
+      document.body.classList.add('modal-open');
+      lucide.createIcons();
     }
 
     async function saveAcquisition(e) {
@@ -5093,8 +5116,14 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           }
         );
         if (result?.skipped) return;
+        if (result) {
+          const normalized = normalizeItem(result);
+          const index = appState.items.findIndex(entry => entry.id === itemId);
+          if (index >= 0) appState.items[index] = normalized;
+        }
         appState.editingAcquisitionBase = null;
         closeModal('modalAcquisition');
+        if (diaperPurchase && appState.activeTab === 'fraldas') await renderDiaperPage();
       } catch (error) {
         console.error('Erro ao salvar aquisição:', error);
         if (isConcurrencyError(error)) {
@@ -5114,13 +5143,19 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         : `${acq.quantity} ${itemUnitLabel(item, acq.quantity)}`;
       if (!confirm(`Excluir esta aquisição de ${deleteLabel}?`)) return;
       try {
-        await runWriteOnce(
+        const result = await runWriteOnce(
           `delete-acquisition:${itemId}:${acquisitionId}`,
           null,
           () => deleteAcquisitionFromFirebase(itemId, acquisitionId, cloneData(acq)),
           'Excluindo...'
         );
-        openAcquisitionHistory(itemId);
+        if (result?.item) {
+          const normalized = normalizeItem(result.item);
+          const index = appState.items.findIndex(entry => entry.id === itemId);
+          if (index >= 0) appState.items[index] = normalized;
+        }
+        if (isDisposableDiaperItem(item) && appState.activeTab === 'fraldas') await renderDiaperPage();
+        else openAcquisitionHistory(itemId);
       } catch (error) {
         console.error('Erro ao excluir aquisição:', error);
         if (isConcurrencyError(error)) alert(error.message);
@@ -5141,15 +5176,21 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       if (!confirm(`Excluir esta aquisição (quantidade: ${expected.quantity})?`)) return;
 
       try {
-        await runWriteOnce(
+        const result = await runWriteOnce(
           `delete-acquisition:${itemId}:${acquisitionId}`,
           null,
           () => deleteAcquisitionFromFirebase(itemId, acquisitionId, expected),
           'Excluindo...'
         );
+        if (result?.item) {
+          const normalized = normalizeItem(result.item);
+          const index = appState.items.findIndex(entry => entry.id === itemId);
+          if (index >= 0) appState.items[index] = normalized;
+        }
         appState.editingAcquisitionBase = null;
         closeModal('modalAcquisition');
-        if (appState.items.some(i => i.id === itemId)) openAcquisitionHistory(itemId);
+        if (isDisposableDiaperItem(item) && appState.activeTab === 'fraldas') await renderDiaperPage();
+        else if (appState.items.some(i => i.id === itemId)) openAcquisitionHistory(itemId);
       } catch (error) {
         console.error('Erro ao excluir aquisição:', error);
         if (isConcurrencyError(error)) alert(error.message);
@@ -6871,19 +6912,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       .cora-maternity-summary-icon { width:32px; height:32px; }
     }
     /* V4.9UI UI3.7 — Fraldas */
-    .cora-diaper-modal-panel { background:#F8FCFF; }
-    .cora-diaper-modal-header {
-      padding:16px 18px 14px;
-      background:linear-gradient(135deg,#F0F8FF,#F7FBFF);
-      border-bottom:1px solid #DDECF6;
-    }
-    .cora-diaper-modal-header h3 {
-      margin-top:2px;
-      font-size:19px;
-      line-height:1.1;
-      font-weight:700;
-      color:#3E4850;
-    }
+    .cora-diaper-page-body { padding-bottom:10px; }
     .cora-diaper-kicker {
       display:block;
       font-size:8.5px;
@@ -6893,18 +6922,6 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       font-weight:750;
       color:#719CC0;
     }
-    .cora-diaper-close {
-      width:36px;
-      height:36px;
-      border-radius:12px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      color:#8B9BA7;
-      background:rgba(255,255,255,.76);
-    }
-    .cora-diaper-close svg { width:18px; height:18px; }
-    .cora-diaper-modal-body { padding:14px; background:#F8FCFF; }
     .cora-diaper-content { display:flex; flex-direction:column; gap:10px; }
     .cora-diaper-empty { padding:32px 14px; text-align:center; font-size:10px; color:#8FA0AB; }
 
@@ -7188,6 +7205,58 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
 
     .cora-diaper-purchases { background:#FCFEFF; }
     .cora-diaper-register { min-height:32px; }
+    .cora-diaper-acquisition-list {
+      margin-top:11px;
+      border-top:1px solid #EAF1F5;
+    }
+    .cora-diaper-acquisition-row {
+      min-height:54px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:9px 0;
+      border-bottom:1px solid #EEF3F6;
+    }
+    .cora-diaper-acquisition-row:last-child { border-bottom:0; padding-bottom:0; }
+    .cora-diaper-acquisition-row > div:first-child { min-width:0; flex:1; }
+    .cora-diaper-acquisition-row strong {
+      display:block;
+      font-size:9.5px;
+      line-height:1.3;
+      color:#52616A;
+    }
+    .cora-diaper-acquisition-row span {
+      display:block;
+      margin-top:3px;
+      font-size:8.5px;
+      line-height:1.3;
+      color:#91A0A9;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .cora-diaper-acquisition-actions {
+      display:flex;
+      gap:5px;
+      flex:0 0 auto;
+    }
+    .cora-diaper-acquisition-actions button {
+      width:31px;
+      height:31px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:10px;
+      border:1px solid #DDEAF1;
+      background:#fff;
+      color:#718D9F;
+    }
+    .cora-diaper-acquisition-actions button.is-danger {
+      border-color:#F3DADC;
+      color:#C77983;
+      background:#FFF9F9;
+    }
+    .cora-diaper-acquisition-actions svg { width:14px; height:14px; }
     .cora-diaper-legacy {
       margin-top:8px;
       padding:7px 8px;
@@ -7199,7 +7268,6 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     }
 
     @media (max-width:355px) {
-      .cora-diaper-modal-body { padding:11px; }
       .cora-diaper-size-grid { gap:5px; }
       .cora-diaper-size-view,
       .cora-diaper-size-edit { min-height:86px; }
@@ -7448,6 +7516,15 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
           <!-- Renderizado via JS -->
         </div>
       </section>
+    </div>
+
+    <!-- UI3.7A — FRALDAS COMO PÁGINA -->
+    <div id="sectionFraldas" class="hidden space-y-4">
+      <div class="cora-module-heading">
+        <button type="button" onclick="switchTab('ferramentas', { resetTools: true })" class="cora-back-button" aria-label="Voltar para Ferramentas"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+        <div><h2 class="text-[21px] font-semibold tracking-[-0.02em] text-[#302A2B]">Fraldas</h2></div>
+      </div>
+      <div id="diaperStockBody" class="cora-diaper-page-body"></div>
     </div>
 
     <!-- UI3.4 — FINANÇAS: resumo primeiro, detalhes por progressão -->
@@ -7751,20 +7828,6 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     </div>
   </div>
 
-  <!-- MODAL FRALDAS -->
-  <div id="modalDiaperStock" class="fixed inset-x-0 top-0 bg-black/45 backdrop-blur-xs z-[70] hidden flex items-end sm:items-center justify-center p-0 sm:p-4" style="height:100dvh;">
-    <div class="cora-diaper-modal-panel w-full max-w-md rounded-t-[28px] sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col min-h-0" style="max-height:92%;">
-      <div class="cora-diaper-modal-header flex justify-between items-center gap-3">
-        <div>
-          <span class="cora-diaper-kicker">Estoque e consumo</span>
-          <h3>Fraldas</h3>
-        </div>
-        <button onclick="closeModal('modalDiaperStock')" class="cora-diaper-close" aria-label="Fechar"><i data-lucide="x"></i></button>
-      </div>
-      <div id="diaperStockBody" class="cora-diaper-modal-body min-h-0 flex-1 overflow-y-auto overscroll-contain"></div>
-    </div>
-  </div>
-
   <!-- MODAL: NOVA AQUISIÇÃO -->
   <div id="modalAcquisition" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-5 space-y-4 shadow-xl">
@@ -7827,12 +7890,12 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         <div id="acquisitionPriceBox">
           <div class="grid grid-cols-2 gap-2">
             <div>
-              <label id="acquisitionUnitPriceLabel" class="block text-xs font-semibold text-gray-700 mb-1">Preço unitário (R$)</label>
-              <input type="number" id="acquisitionUnitPrice" min="0" step="0.01" inputmode="decimal" placeholder="0,00" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
-            </div>
-            <div>
               <label class="block text-xs font-semibold text-gray-700 mb-1">Preço total (R$)</label>
               <input type="number" id="acquisitionTotalPrice" min="0" step="0.01" inputmode="decimal" placeholder="0,00" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+            </div>
+            <div>
+              <label id="acquisitionUnitPriceLabel" class="block text-xs font-semibold text-gray-700 mb-1">Preço unitário (R$)</label>
+              <input type="number" id="acquisitionUnitPrice" min="0" step="0.01" inputmode="decimal" placeholder="0,00" class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
             </div>
           </div>
           <p id="acquisitionTotalPreview" class="text-[10px] text-gray-500 mt-1">Total desta aquisição: R$ 0,00</p>
@@ -7864,7 +7927,6 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
         <div>
           <h3 id="historyItemName" class="font-bold text-gray-900 text-base">Aquisições</h3>
           <p id="historySummary" class="text-[11px] text-gray-500 mt-0.5"></p>
-          <p class="text-[10px] text-gray-400 mt-1">Histórico completo. Toque no lápis para editar ou excluir uma aquisição.</p>
         </div>
         <button onclick="closeModal('modalAcquisitionHistory')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
