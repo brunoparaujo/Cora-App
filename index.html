@@ -3971,16 +3971,133 @@
         </div>`;
     }
 
+    function maternityGroupMeta(cat) {
+      if (cat === 'mamãe') {
+        return {
+          key: 'mamãe',
+          label: 'Mamãe e documentos',
+          shortLabel: 'Mamãe',
+          icon: 'heart-handshake',
+          className: 'is-mom'
+        };
+      }
+      return {
+        key: 'bebê',
+        label: 'Para o bebê',
+        shortLabel: 'Bebê',
+        icon: 'baby',
+        className: 'is-baby'
+      };
+    }
+
+    function maternityTimingCopy(phase, checked, total) {
+      if (total > 0 && checked === total) {
+        return {
+          title: 'Mala pronta',
+          text: phase.lifeStage === 'born'
+            ? 'Checklist concluído e preservado como referência.'
+            : 'Tudo marcado. Agora é só manter a mala fácil de pegar.'
+        };
+      }
+      if (phase.lifeStage === 'expecting') {
+        const week = Number(phase.week || 0);
+        if (week >= 37) return { title: 'Reta final', text: 'Vale deixar tudo pronto e fácil de pegar.' };
+        if (week >= 34) return { title: 'Hora de fechar a mala', text: 'A 34ª–36ª semana é uma boa janela para deixar tudo pronto.' };
+        if (week >= 28) return { title: 'Boa hora para começar', text: 'Separe aos poucos o que falta, sem precisar resolver tudo de uma vez.' };
+        return { title: 'Preparando com calma', text: 'Você pode adiantar o essencial aos poucos e revisar mais perto da chegada.' };
+      }
+      if (phase.lifeStage === 'born') {
+        return { title: 'Checklist da maternidade', text: 'A lista fica aqui como histórico do que foi preparado.' };
+      }
+      return { title: 'Preparando a mala', text: 'Marque os itens conforme forem ficando prontos.' };
+    }
+
     function renderMaternidade() {
       const container = document.getElementById('maternidadeChecklistContainer');
-      const total = appState.maternidade.length;
-      const checked = appState.maternidade.filter(i => i.checked).length;
-      document.getElementById('maternidadeProgress').innerText = `${checked}/${total} prontos`;
-      container.innerHTML = appState.maternidade.map(item => `
-        <label class="flex items-center space-x-3 p-2.5 rounded-xl border border-gray-100 hover:bg-rose-50/30 transition cursor-pointer">
-          <input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggleMaternidade('${item.id}')" class="w-4 h-4 text-rose-600 rounded border-gray-300 focus:ring-rose-400">
-          <span class="text-xs font-medium ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}">${escapeHtml(item.title)}</span>
-        </label>`).join('');
+      if (!container) return;
+
+      const items = [...appState.maternidade];
+      const total = items.length;
+      const checked = items.filter(item => item.checked).length;
+      const remaining = Math.max(0, total - checked);
+      const percent = total > 0 ? Math.round((checked / total) * 100) : 0;
+      const phase = shellChildPhase();
+      const timing = maternityTimingCopy(phase, checked, total);
+
+      const progress = document.getElementById('maternidadeProgress');
+      const percentEl = document.getElementById('maternidadePercent');
+      const progressBar = document.getElementById('maternidadeProgressBar');
+      const progressTrack = progressBar?.parentElement;
+      const heroTitle = document.getElementById('maternidadeHeroTitle');
+      const timingText = document.getElementById('maternidadeTimingText');
+      const remainingEl = document.getElementById('maternidadeRemaining');
+
+      if (progress) progress.textContent = `${checked}/${total}`;
+      if (percentEl) percentEl.textContent = `${percent}%`;
+      if (progressBar) progressBar.style.width = `${percent}%`;
+      if (progressTrack) progressTrack.setAttribute('aria-valuenow', String(percent));
+      if (heroTitle) heroTitle.textContent = timing.title;
+      if (timingText) timingText.textContent = timing.text;
+      if (remainingEl) remainingEl.textContent = remaining === 0 ? 'Tudo pronto' : `${remaining} ${remaining === 1 ? 'pendência' : 'pendências'}`;
+
+      const groups = ['bebê', 'mamãe'].map(cat => {
+        const meta = maternityGroupMeta(cat);
+        const groupItems = items.filter(item => (item.cat === 'mamãe' ? 'mamãe' : 'bebê') === cat);
+        const groupChecked = groupItems.filter(item => item.checked).length;
+        return { ...meta, items: groupItems, checked: groupChecked, total: groupItems.length };
+      }).filter(group => group.total > 0);
+
+      const summary = document.getElementById('maternidadeGroupSummary');
+      if (summary) {
+        summary.innerHTML = groups.map(group => {
+          const groupPercent = group.total ? Math.round((group.checked / group.total) * 100) : 0;
+          return `<div class="cora-maternity-summary-card ${group.className}">
+            <span class="cora-maternity-summary-icon"><i data-lucide="${group.icon}"></i></span>
+            <span class="min-w-0">
+              <strong>${group.shortLabel}</strong>
+              <small>${group.checked}/${group.total} prontos</small>
+            </span>
+            <b>${groupPercent}%</b>
+          </div>`;
+        }).join('');
+      }
+
+      if (!items.length) {
+        container.innerHTML = `<div class="cora-maternity-empty">
+          <span><i data-lucide="backpack"></i></span>
+          <strong>Nenhum item na lista</strong>
+          <small>O checklist aparecerá aqui quando houver itens cadastrados.</small>
+        </div>`;
+        lucide.createIcons();
+        return;
+      }
+
+      container.innerHTML = groups.map(group => `
+        <section class="cora-maternity-group ${group.className}">
+          <div class="cora-maternity-group-head">
+            <span class="cora-maternity-group-icon"><i data-lucide="${group.icon}"></i></span>
+            <div class="min-w-0">
+              <h4>${group.label}</h4>
+              <p>${group.checked} de ${group.total} prontos</p>
+            </div>
+          </div>
+          <div class="cora-maternity-items">
+            ${group.items.map(item => `
+              <label class="cora-maternity-item ${item.checked ? 'is-checked' : ''}">
+                <input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggleMaternidade('${item.id}')" class="sr-only">
+                <span class="cora-maternity-check" aria-hidden="true">
+                  <i data-lucide="check"></i>
+                </span>
+                <span class="cora-maternity-item-copy">
+                  <strong>${escapeHtml(item.title)}</strong>
+                  <small>${item.checked ? 'Pronto' : 'Ainda falta'}</small>
+                </span>
+              </label>`).join('')}
+          </div>
+        </section>
+      `).join('');
+
+      lucide.createIcons();
     }
 
     async function toggleMaternidade(id) {
@@ -6305,8 +6422,279 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
     .finance-category-label { display:inline-flex; align-items:center; gap:7px; }
     .finance-category-swatch { width:11px; height:11px; border-radius:4px; border:1px solid transparent; display:inline-block; }
 
-    #sectionMaternidade > .bg-white { border-color:#EDE4FF !important; background:#FFFCFF !important; box-shadow:0 5px 18px rgba(92,72,118,.035); }
-    #maternidadeProgress { background:#EDE4FF !important; color:#7F68AB !important; }
+    /* V4.9UI UI3.6 — Maternidade */
+    .cora-maternity-hero {
+      padding:16px;
+      border-radius:24px;
+      background:linear-gradient(145deg,#FBF8FF 0%,#F5EEFF 58%,#FFF9FC 100%);
+      border:1px solid #EDE4FF;
+      box-shadow:0 7px 24px rgba(96,77,123,.045);
+    }
+    .cora-maternity-hero-main {
+      display:grid;
+      grid-template-columns:62px minmax(0,1fr) auto;
+      align-items:center;
+      gap:12px;
+    }
+    .cora-maternity-art {
+      width:62px;
+      height:62px;
+      border-radius:19px;
+      overflow:hidden;
+      background:#EDE4FF;
+      box-shadow:0 5px 14px rgba(117,91,151,.08);
+    }
+    .cora-maternity-art img { width:100%; height:100%; object-fit:cover; display:block; }
+    .cora-maternity-kicker {
+      display:block;
+      font-size:9px;
+      line-height:1;
+      text-transform:uppercase;
+      letter-spacing:.09em;
+      font-weight:750;
+      color:#8A70B2;
+    }
+    .cora-maternity-hero h3 {
+      margin-top:5px;
+      font-size:15px;
+      line-height:1.15;
+      font-weight:700;
+      color:#4B414F;
+    }
+    .cora-maternity-hero p {
+      margin-top:4px;
+      font-size:10px;
+      line-height:1.4;
+      color:#817786;
+    }
+    .cora-maternity-progress-value { text-align:right; min-width:46px; }
+    .cora-maternity-progress-value strong {
+      display:block;
+      font-size:20px;
+      line-height:1;
+      letter-spacing:-.035em;
+      color:#896CB5;
+    }
+    .cora-maternity-progress-value span {
+      display:block;
+      margin-top:4px;
+      font-size:9px;
+      font-weight:700;
+      color:#A397A9;
+    }
+    .cora-maternity-progress-track {
+      height:7px;
+      margin-top:14px;
+      overflow:hidden;
+      border-radius:999px;
+      background:#E6DFF0;
+    }
+    .cora-maternity-progress-track span {
+      display:block;
+      width:0;
+      height:100%;
+      border-radius:999px;
+      background:linear-gradient(90deg,#B8A2DE,#9879C7);
+      transition:width .25s ease;
+    }
+
+    .cora-maternity-summary-grid {
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:9px;
+    }
+    .cora-maternity-summary-card {
+      min-width:0;
+      min-height:66px;
+      display:grid;
+      grid-template-columns:36px minmax(0,1fr) auto;
+      align-items:center;
+      gap:8px;
+      padding:10px;
+      border-radius:18px;
+      border:1px solid transparent;
+    }
+    .cora-maternity-summary-card.is-baby { background:#F3F8FF; border-color:#E3F2FF; }
+    .cora-maternity-summary-card.is-mom { background:#FFF4F6; border-color:#FFE4EA; }
+    .cora-maternity-summary-icon {
+      width:36px;
+      height:36px;
+      border-radius:13px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:rgba(255,255,255,.76);
+    }
+    .cora-maternity-summary-icon svg { width:18px; height:18px; }
+    .is-baby .cora-maternity-summary-icon { color:#719BC2; }
+    .is-mom .cora-maternity-summary-icon { color:#D1768B; }
+    .cora-maternity-summary-card strong {
+      display:block;
+      font-size:10.5px;
+      color:#554C56;
+    }
+    .cora-maternity-summary-card small {
+      display:block;
+      margin-top:2px;
+      font-size:8.5px;
+      color:#918794;
+    }
+    .cora-maternity-summary-card b {
+      font-size:11px;
+      color:#74677A;
+    }
+
+    .cora-maternity-checklist {
+      padding:15px;
+      border-radius:23px;
+      background:#FFFDFE;
+      border:1px solid #F0E9F3;
+      box-shadow:0 4px 18px rgba(81,65,91,.025);
+    }
+    .cora-maternity-section-head {
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:12px;
+    }
+    .cora-maternity-section-head h3 {
+      margin-top:3px;
+      font-size:15px;
+      line-height:1.1;
+      font-weight:700;
+      color:#443B46;
+    }
+    .cora-maternity-remaining {
+      flex:0 0 auto;
+      font-size:9.5px;
+      font-weight:700;
+      color:#8B7B93;
+      background:#F5F0FA;
+      padding:5px 8px;
+      border-radius:999px;
+    }
+
+    .cora-maternity-group {
+      overflow:hidden;
+      border-radius:18px;
+      border:1px solid #EFE8F1;
+      background:#fff;
+    }
+    .cora-maternity-group + .cora-maternity-group { margin-top:10px; }
+    .cora-maternity-group-head {
+      min-height:58px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 12px;
+    }
+    .cora-maternity-group.is-baby .cora-maternity-group-head { background:#F7FBFF; }
+    .cora-maternity-group.is-mom .cora-maternity-group-head { background:#FFF7F8; }
+    .cora-maternity-group-icon {
+      width:34px;
+      height:34px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:12px;
+      background:#fff;
+      flex:0 0 auto;
+    }
+    .cora-maternity-group-icon svg { width:17px; height:17px; }
+    .is-baby .cora-maternity-group-icon { color:#739FC6; }
+    .is-mom .cora-maternity-group-icon { color:#CF7188; }
+    .cora-maternity-group-head h4 {
+      font-size:11px;
+      line-height:1.15;
+      font-weight:700;
+      color:#53494F;
+    }
+    .cora-maternity-group-head p {
+      margin-top:2px;
+      font-size:8.5px;
+      color:#948A90;
+    }
+
+    .cora-maternity-items { padding:3px 10px 8px; }
+    .cora-maternity-item {
+      min-height:51px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:9px 3px;
+      cursor:pointer;
+      border-top:1px solid #F3EEF1;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .cora-maternity-item:first-child { border-top:0; }
+    .cora-maternity-check {
+      width:23px;
+      height:23px;
+      flex:0 0 23px;
+      border-radius:8px;
+      border:1.5px solid #DAD0DE;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:transparent;
+      background:#fff;
+      transition:.16s ease;
+    }
+    .cora-maternity-check svg { width:14px; height:14px; stroke-width:2.6; }
+    .cora-maternity-item.is-checked .cora-maternity-check {
+      background:#A68BCF;
+      border-color:#A68BCF;
+      color:#fff;
+    }
+    .cora-maternity-item-copy { min-width:0; flex:1; }
+    .cora-maternity-item-copy strong {
+      display:block;
+      font-size:11px;
+      line-height:1.35;
+      font-weight:600;
+      color:#50464C;
+      transition:.16s ease;
+    }
+    .cora-maternity-item-copy small {
+      display:block;
+      margin-top:2px;
+      font-size:8.5px;
+      color:#9A9096;
+    }
+    .cora-maternity-item.is-checked .cora-maternity-item-copy strong {
+      color:#948A91;
+    }
+    .cora-maternity-item.is-checked .cora-maternity-item-copy small {
+      color:#7F6D91;
+    }
+    .cora-maternity-empty {
+      padding:28px 14px;
+      text-align:center;
+      color:#92879A;
+    }
+    .cora-maternity-empty > span {
+      width:44px;
+      height:44px;
+      margin:0 auto 8px;
+      border-radius:15px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#F4EFFA;
+      color:#987FC0;
+    }
+    .cora-maternity-empty svg { width:21px; height:21px; }
+    .cora-maternity-empty strong { display:block; font-size:11px; color:#625668; }
+    .cora-maternity-empty small { display:block; margin-top:3px; font-size:9px; }
+
+    @media (max-width:355px) {
+      .cora-maternity-hero-main { grid-template-columns:54px minmax(0,1fr) auto; gap:9px; }
+      .cora-maternity-art { width:54px; height:54px; }
+      .cora-maternity-summary-card { grid-template-columns:32px minmax(0,1fr); }
+      .cora-maternity-summary-card b { display:none; }
+      .cora-maternity-summary-icon { width:32px; height:32px; }
+    }
     #modalDiaperStock > div { background:#FCFEFF; }
     #modalDiaperStock > div > div:first-child { background:#F3FAFF; border-color:#E3F2FF !important; }
     #globalFab { background:var(--cora-primary) !important; box-shadow:0 8px 22px rgba(233,120,146,.30); }
@@ -6510,26 +6898,47 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       </div>
     </div>
 
-    <!-- SEÇÃO: MALA DA MATERNIDADE -->
+    <!-- UI3.6 — MATERNIDADE -->
     <div id="sectionMaternidade" class="hidden space-y-4">
       <div class="cora-module-heading">
         <button type="button" onclick="switchTab('ferramentas', { resetTools: true })" class="cora-back-button" aria-label="Voltar para Ferramentas"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
         <div><h2 class="text-[21px] font-semibold tracking-[-0.02em] text-[#302A2B]">Maternidade</h2></div>
       </div>
-      <div class="bg-white rounded-2xl border border-rose-100 p-4 shadow-xs">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="font-bold text-gray-900 flex items-center gap-2">
-            <i data-lucide="backpack" class="w-5 h-5 text-violet-500"></i> Checklist da Maternidade
-          </h2>
-          <span id="maternidadeProgress" class="text-xs bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded-full">0/0</span>
-        </div>
-        <p class="text-xs text-gray-500 mb-4">Recomendado deixar a mala pronta até a 34ª-36ª semana de gestação.</p>
 
-        <!-- SUB-ABAS MATERNIDADE -->
-        <div class="space-y-4" id="maternidadeChecklistContainer">
+      <section class="cora-maternity-hero" aria-labelledby="maternidadeHeroTitle">
+        <div class="cora-maternity-hero-main">
+          <div class="cora-maternity-art" aria-hidden="true">
+            <img src="/icons/02_Maternidade.png" alt="">
+          </div>
+          <div class="min-w-0">
+            <span class="cora-maternity-kicker">Mala da maternidade</span>
+            <h3 id="maternidadeHeroTitle">Preparando com calma</h3>
+            <p id="maternidadeTimingText">Organize o essencial no seu ritmo.</p>
+          </div>
+          <div class="cora-maternity-progress-value" aria-live="polite">
+            <strong id="maternidadePercent">0%</strong>
+            <span id="maternidadeProgress">0/0</span>
+          </div>
+        </div>
+        <div class="cora-maternity-progress-track" role="progressbar" aria-label="Progresso da mala da maternidade" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span id="maternidadeProgressBar"></span>
+        </div>
+      </section>
+
+      <div id="maternidadeGroupSummary" class="cora-maternity-summary-grid" aria-label="Resumo por grupo"></div>
+
+      <section class="cora-maternity-checklist">
+        <div class="cora-maternity-section-head">
+          <div>
+            <span class="cora-maternity-kicker">Checklist</span>
+            <h3>O que levar</h3>
+          </div>
+          <span id="maternidadeRemaining" class="cora-maternity-remaining">—</span>
+        </div>
+        <div id="maternidadeChecklistContainer" class="space-y-3">
           <!-- Renderizado via JS -->
         </div>
-      </div>
+      </section>
     </div>
 
     <!-- UI3.4 — FINANÇAS: resumo primeiro, detalhes por progressão -->
