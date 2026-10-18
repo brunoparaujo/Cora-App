@@ -346,6 +346,7 @@
       editingAcquisitionBase: null,
       editingMaternityBase: null,
       maternityEditMode: false,
+      diaperRecountDraft: null,
       connected: false,
       authReady: false,
       user: null,
@@ -931,7 +932,8 @@
     function localDiaperInventory(item) {
       const core = globalThis.CoraV48IntegrationCore;
       return core?.normalizeDiaperInventory ? core.normalizeDiaperInventory(item?.diaperInventory) : {
-        schemaVersion: 2, currentSize: null, currentSizeSince: null, currentSizeSelectedAt: null, sizeHistory: {}, stockBaselines: {}, updatedAt: null
+        schemaVersion: 3, currentSize: null, currentSizeSince: null, currentSizeSelectedAt: null,
+        sizeHistory: {}, stockBaselines: {}, packageBaselines: {}, packageConsumptions: {}, updatedAt: null
       };
     }
 
@@ -986,6 +988,97 @@
         current.updatedAt = now;
         return current;
       });
+      if (!result.committed && abortReason) throw createConcurrencyError(abortReason);
+      return result.snapshot?.val();
+    }
+
+    async function saveDiaperPackageConsumptionState({ size, unitsPerPackage, quantity }) {
+      const item = getDisposableDiaperItem();
+      if (!item) throw new Error('Fraldas descartáveis não estão ativas neste planejamento.');
+      const cleanSize = DIAPER_SIZE_KEYS.includes(size) ? size : null;
+      const cleanUnits = Math.max(1, Math.round(Number(unitsPerPackage) || 0));
+      const cleanQuantity = Math.max(1, Math.round(Number(quantity) || 0));
+      if (!cleanSize || cleanUnits < 1) throw new Error('Escolha um pacote válido.');
+
+      const consumptionId = newStableId('diaper_cons', childPath(`enxoval/items/${item.id}/diaperInventory/packageConsumptions`));
+      const ref = db.ref(childPath(`enxoval/items/${item.id}`));
+      const now = Date.now();
+      let abortReason = null;
+
+      const result = await ref.transaction(currentRaw => {
+        abortReason = null;
+        if (!currentRaw) {
+          abortReason = 'O item de fraldas não está mais disponível.';
+          return;
+        }
+        const current = normalizeItem(currentRaw);
+        const core = globalThis.CoraV48IntegrationCore;
+        const model = core?.buildDiaperStockModel ? core.buildDiaperStockModel(current, diaperOperationalContext()) : null;
+        const lot = model?.packageLotsBySize?.[cleanSize]?.find(row => Number(row.unitsPerPackage) === cleanUnits);
+        if (!lot || Number(lot.packages || 0) < cleanQuantity) {
+          abortReason = 'Não há essa quantidade de pacotes disponível no estoque atual.';
+          return;
+        }
+
+        const inv = localDiaperInventory(current);
+        inv.packageConsumptions = { ...(inv.packageConsumptions || {}) };
+        inv.packageConsumptions[consumptionId] = {
+          id: consumptionId,
+          size: cleanSize,
+          unitsPerPackage: cleanUnits,
+          quantity: cleanQuantity,
+          diaperUnits: cleanUnits * cleanQuantity,
+          recordedAt: now,
+          createdAt: now
+        };
+        inv.schemaVersion = 3;
+        inv.updatedAt = now;
+        current.diaperInventory = inv;
+        current.revision = Math.max(0, Number(current.revision) || 0) + 1;
+        current.updatedAt = now;
+        return current;
+      });
+
+      if (!result.committed && abortReason) throw createConcurrencyError(abortReason);
+      return result.snapshot?.val();
+    }
+
+    async function saveDiaperPackageRecountState(recountBySize) {
+      const item = getDisposableDiaperItem();
+      if (!item) throw new Error('Fraldas descartáveis não estão ativas neste planejamento.');
+      const ref = db.ref(childPath(`enxoval/items/${item.id}`));
+      const now = Date.now();
+      let abortReason = null;
+
+      const result = await ref.transaction(currentRaw => {
+        abortReason = null;
+        if (!currentRaw) {
+          abortReason = 'O item de fraldas não está mais disponível.';
+          return;
+        }
+        const current = normalizeItem(currentRaw);
+        const inv = localDiaperInventory(current);
+        inv.packageBaselines = { ...(inv.packageBaselines || {}) };
+
+        DIAPER_SIZE_KEYS.forEach(size => {
+          const source = recountBySize?.[size] || {};
+          const packages = {};
+          Object.values(source.packages || {}).forEach(row => {
+            const unitsPerPackage = Math.max(1, Math.round(Number(row?.unitsPerPackage) || 0));
+            const quantity = Math.max(0, Math.round(Number(row?.quantity) || 0));
+            if (unitsPerPackage > 0) packages[String(unitsPerPackage)] = { unitsPerPackage, quantity };
+          });
+          inv.packageBaselines[size] = { at: now, looseUnits: 0, packages };
+        });
+
+        inv.schemaVersion = 3;
+        inv.updatedAt = now;
+        current.diaperInventory = inv;
+        current.revision = Math.max(0, Number(current.revision) || 0) + 1;
+        current.updatedAt = now;
+        return current;
+      });
+
       if (!result.committed && abortReason) throw createConcurrencyError(abortReason);
       return result.snapshot?.val();
     }
@@ -1254,6 +1347,196 @@
       }
     }
 
+    function diaperAvailablePackageSizes(model = diaperStockModel()) {
+      return DIAPER_SIZE_KEYS.filter(size =>
+        (model?.packageLotsBySize?.[size] || []).some(row => Number(row.packages || 0) > 0)
+      );
+    }
+
+    function syncDiaperConsumePackageOptions() {
+      const model = diaperStockModel();
+      const sizeSelect = document.getElementById('diaperConsumeSize');
+      const packageSelect = document.getElementById('diaperConsumePackage');
+      const empty = document.getElementById('diaperConsumeEmpty');
+      const save = document.getElementById('diaperConsumeSaveButton');
+      if (!model || !sizeSelect || !packageSelect) return;
+
+      const size = sizeSelect.value;
+      const rows = (model.packageLotsBySize?.[size] || []).filter(row => Number(row.packages || 0) > 0);
+      packageSelect.innerHTML = rows.map(row => {
+        const brands = Array.isArray(row.brands) && row.brands.length ? ` · ${escapeHtml(row.brands.join(' / '))}` : '';
+        return `<option value="${row.unitsPerPackage}" data-max="${row.packages}">${row.unitsPerPackage} un. · ${row.packages} ${row.packages === 1 ? 'pacote' : 'pacotes'}${brands}</option>`;
+      }).join('');
+      const hasRows = rows.length > 0;
+      packageSelect.disabled = !hasRows;
+      empty?.classList.toggle('hidden', hasRows);
+      if (save) save.disabled = !hasRows;
+      syncDiaperConsumeQuantityLimit();
+    }
+
+    function syncDiaperConsumeQuantityLimit() {
+      const select = document.getElementById('diaperConsumePackage');
+      const input = document.getElementById('diaperConsumeQuantity');
+      if (!select || !input) return;
+      const max = Math.max(1, Number(select.selectedOptions?.[0]?.dataset?.max) || 1);
+      input.max = String(max);
+      input.value = String(Math.min(max, Math.max(1, Number(input.value) || 1)));
+    }
+
+    function openDiaperConsumeModal() {
+      const model = diaperStockModel();
+      if (!model) return;
+      const availableSizes = diaperAvailablePackageSizes(model);
+      const sizeSelect = document.getElementById('diaperConsumeSize');
+      if (!sizeSelect) return;
+      const current = model.currentSize || 'RN';
+      const ordered = [...DIAPER_SIZE_KEYS].sort((a, b) => {
+        if (a === current) return -1;
+        if (b === current) return 1;
+        return DIAPER_SIZE_KEYS.indexOf(a) - DIAPER_SIZE_KEYS.indexOf(b);
+      });
+      sizeSelect.innerHTML = ordered.map(size =>
+        `<option value="${size}" ${size === current ? 'selected' : ''}>${size}</option>`
+      ).join('');
+      if (!availableSizes.includes(current) && availableSizes.length) sizeSelect.value = availableSizes[0];
+      document.getElementById('diaperConsumeQuantity').value = '1';
+      syncDiaperConsumePackageOptions();
+      document.getElementById('modalDiaperConsume').classList.remove('hidden');
+      document.body.classList.add('modal-open');
+      lucide.createIcons();
+    }
+
+    async function saveDiaperConsumptionFromModal(event) {
+      event?.preventDefault();
+      const size = document.getElementById('diaperConsumeSize')?.value || '';
+      const unitsPerPackage = Number(document.getElementById('diaperConsumePackage')?.value) || 0;
+      const quantity = Math.max(1, Math.round(Number(document.getElementById('diaperConsumeQuantity')?.value) || 1));
+      try {
+        const result = await runWriteOnce(
+          'diaper-package-consumption',
+          'diaperConsumeSaveButton',
+          () => saveDiaperPackageConsumptionState({ size, unitsPerPackage, quantity }),
+          'Salvando...'
+        );
+        if (result?.skipped) return;
+        if (result) {
+          const normalized = normalizeItem(result);
+          const index = appState.items.findIndex(entry => entry.id === normalized.id);
+          if (index >= 0) appState.items[index] = normalized;
+        }
+        closeModal('modalDiaperConsume');
+        await renderDiaperPage();
+        renderShellUI();
+      } catch (error) {
+        console.error('Erro ao registrar consumo de pacote:', error);
+        alert(error?.message || 'Não foi possível registrar o consumo.');
+      }
+    }
+
+    function diaperRecountKey(size, unitsPerPackage) {
+      return `${size}:${Math.max(1, Math.round(Number(unitsPerPackage) || 0))}`;
+    }
+
+    function renderDiaperRecountRows() {
+      const container = document.getElementById('diaperRecountRows');
+      if (!container) return;
+      const rows = Object.values(appState.diaperRecountDraft || {}).sort((a, b) =>
+        DIAPER_SIZE_KEYS.indexOf(a.size) - DIAPER_SIZE_KEYS.indexOf(b.size) ||
+        Number(a.unitsPerPackage) - Number(b.unitsPerPackage)
+      );
+      if (!rows.length) {
+        container.innerHTML = '<div class="text-[10px] text-gray-500 text-center py-4">Adicione os formatos de pacote encontrados na recontagem.</div>';
+        return;
+      }
+      container.innerHTML = DIAPER_SIZE_KEYS.map(size => {
+        const sizeRows = rows.filter(row => row.size === size);
+        if (!sizeRows.length) return '';
+        return `<section class="cora-diaper-recount-group">
+          <strong>${size}</strong>
+          <div>
+            ${sizeRows.map(row => {
+              const key = diaperRecountKey(row.size, row.unitsPerPackage);
+              return `<label class="cora-diaper-recount-row">
+                <span>${row.unitsPerPackage} fraldas/pacote</span>
+                <input type="number" inputmode="numeric" min="0" step="1" value="${row.quantity}" onchange="updateDiaperRecountQuantity('${key}', this.value)" aria-label="Pacotes ${size} com ${row.unitsPerPackage} fraldas">
+              </label>`;
+            }).join('')}
+          </div>
+        </section>`;
+      }).join('');
+    }
+
+    function updateDiaperRecountQuantity(key, value) {
+      if (!appState.diaperRecountDraft?.[key]) return;
+      appState.diaperRecountDraft[key].quantity = Math.max(0, Math.round(Number(value) || 0));
+    }
+
+    function addDiaperRecountFormat() {
+      const size = document.getElementById('diaperRecountNewSize')?.value || '';
+      const unitsPerPackage = Math.max(1, Math.round(Number(document.getElementById('diaperRecountNewUnits')?.value) || 0));
+      const quantity = Math.max(0, Math.round(Number(document.getElementById('diaperRecountNewQuantity')?.value) || 0));
+      if (!DIAPER_SIZE_KEYS.includes(size) || unitsPerPackage < 1) {
+        alert('Informe o tamanho e quantas fraldas existem no pacote.');
+        return;
+      }
+      const key = diaperRecountKey(size, unitsPerPackage);
+      appState.diaperRecountDraft = appState.diaperRecountDraft || {};
+      appState.diaperRecountDraft[key] = { size, unitsPerPackage, quantity };
+      document.getElementById('diaperRecountNewUnits').value = '';
+      document.getElementById('diaperRecountNewQuantity').value = '1';
+      renderDiaperRecountRows();
+    }
+
+    function openDiaperRecountModal() {
+      const model = diaperStockModel();
+      if (!model) return;
+      const draft = {};
+      DIAPER_SIZE_KEYS.forEach(size => {
+        (model.packageLotsBySize?.[size] || []).forEach(row => {
+          const key = diaperRecountKey(size, row.unitsPerPackage);
+          draft[key] = { size, unitsPerPackage: row.unitsPerPackage, quantity: Math.max(0, Number(row.packages) || 0) };
+        });
+      });
+      appState.diaperRecountDraft = draft;
+      renderDiaperRecountRows();
+      document.getElementById('modalDiaperRecount').classList.remove('hidden');
+      document.body.classList.add('modal-open');
+      lucide.createIcons();
+    }
+
+    async function saveDiaperRecountFromModal() {
+      const bySize = Object.fromEntries(DIAPER_SIZE_KEYS.map(size => [size, { packages: {} }]));
+      Object.values(appState.diaperRecountDraft || {}).forEach(row => {
+        if (!DIAPER_SIZE_KEYS.includes(row.size) || Number(row.unitsPerPackage) < 1) return;
+        bySize[row.size].packages[String(row.unitsPerPackage)] = {
+          unitsPerPackage: Math.max(1, Math.round(Number(row.unitsPerPackage))),
+          quantity: Math.max(0, Math.round(Number(row.quantity) || 0))
+        };
+      });
+
+      try {
+        const result = await runWriteOnce(
+          'diaper-package-recount',
+          'diaperRecountSaveButton',
+          () => saveDiaperPackageRecountState(bySize),
+          'Salvando...'
+        );
+        if (result?.skipped) return;
+        if (result) {
+          const normalized = normalizeItem(result);
+          const index = appState.items.findIndex(entry => entry.id === normalized.id);
+          if (index >= 0) appState.items[index] = normalized;
+        }
+        appState.diaperRecountDraft = null;
+        closeModal('modalDiaperRecount');
+        await renderDiaperPage();
+        renderShellUI();
+      } catch (error) {
+        console.error('Erro ao recontar estoque de fraldas:', error);
+        alert(error?.message || 'Não foi possível salvar a recontagem.');
+      }
+    }
+
     async function renderDiaperPage() {
       const body = document.getElementById('diaperStockBody');
       if (!body) return;
@@ -1301,21 +1584,19 @@
       }).join('');
 
       const stockCards = DIAPER_SIZE_KEYS.map(size => {
-        const estimated = Number(model.stockBySize?.[size] || 0);
-        const isCurrent = current === size && born;
-        return `<div id="diaperStockCard_${size}" class="cora-diaper-size-card ${isCurrent ? 'is-current' : ''}">
-          <button id="diaperStockView_${size}" type="button" onclick="editDiaperStockCard('${size}')" class="cora-diaper-size-view" aria-label="Editar estoque ${size}">
+        const units = Number(model.stockBySize?.[size] || 0);
+        const packages = Number(model.packagesBySize?.[size] || 0);
+        const loose = Number(model.looseUnitsBySize?.[size] || 0);
+        const hasLegacyLoose = loose > 0;
+        return `<div class="cora-diaper-size-card ${current === size && born ? 'is-current' : ''}">
+          <div class="cora-diaper-size-view">
             <div class="cora-diaper-size-label">
               <span>${size}</span>
-              ${isCurrent ? '<i aria-hidden="true"></i>' : ''}
+              ${current === size && born ? '<i aria-hidden="true"></i>' : ''}
             </div>
-            <strong>${estimated.toLocaleString('pt-BR')}</strong>
-            <small>fraldas</small>
-          </button>
-          <div id="diaperStockEdit_${size}" class="hidden cora-diaper-size-edit">
-            <div class="cora-diaper-size-edit-label"><span>${size}</span></div>
-            <button id="diaperStockSave_${size}" type="button" onclick="saveDiaperStockCard('${size}')" class="cora-diaper-size-save" aria-label="Salvar estoque ${size}"><i data-lucide="check"></i></button>
-            <input id="diaperStock_${size}" data-current="${estimated}" type="number" inputmode="numeric" min="0" step="1" value="${estimated}" aria-label="Estoque ${size}" onkeydown="if(event.key==='Enter'){event.preventDefault();saveDiaperStockCard('${size}')}else if(event.key==='Escape'){cancelDiaperStockCard('${size}')}" class="cora-diaper-size-input">
+            <strong>${packages}</strong>
+            <small>${packages === 1 ? 'pacote' : 'pacotes'}</small>
+            <span class="cora-diaper-size-units">${packages > 0 ? '≈ ' : ''}${units.toLocaleString('pt-BR')} fraldas${hasLegacyLoose && packages === 0 ? ' · legado' : ''}</span>
           </div>
         </div>`;
       }).join('');
@@ -1335,13 +1616,14 @@
           </select>
         </section>` : '';
 
+      const currentPackages = Number(model.packagesBySize?.[current] || 0);
       const currentSection = expecting ? `
         <section class="cora-diaper-current is-expecting">
           <div>
             <span class="cora-diaper-kicker">Tamanho inicial</span>
             <strong>RN</strong>
           </div>
-          <span class="cora-diaper-current-stock">${Number(model.totalStock || 0).toLocaleString('pt-BR')}<small>fraldas no estoque</small></span>
+          <span class="cora-diaper-current-stock">${Number(model.totalPackages || 0).toLocaleString('pt-BR')}<small>pacotes no estoque</small></span>
         </section>` : `
         <section class="cora-diaper-current">
           <div class="cora-diaper-current-head">
@@ -1351,10 +1633,16 @@
           </div>
 
           <div class="cora-diaper-metrics">
-            <div><span>Estoque</span><strong>${currentStock.toLocaleString('pt-BR')}</strong></div>
-            <div><span>Uso/dia</span><strong>${rate == null ? '—' : compactNumber(rate)}</strong></div>
-            <div><span>Autonomia</span><strong>${autonomy == null ? '—' : `${compactNumber(autonomy)} dias`}</strong></div>
+            <div><span>Pacotes</span><strong>${currentPackages}</strong></div>
+            <div><span>Fraldas</span><strong>${currentStock > 0 ? '≈ ' : ''}${currentStock.toLocaleString('pt-BR')}</strong></div>
+            <div><span>Autonomia</span><strong>${autonomy == null ? '—' : `≈ ${Math.max(1, Math.round(autonomy))} dias`}</strong></div>
           </div>
+
+          <div class="cora-diaper-primary-actions">
+            <button type="button" onclick="openDiaperConsumeModal()" class="is-primary"><i data-lucide="package-minus"></i><span>Consumir pacote</span></button>
+            <button type="button" onclick="openDiaperPurchaseFromStock()"><i data-lucide="plus"></i><span>Registrar aquisição</span></button>
+          </div>
+          <button type="button" onclick="openDiaperRecountModal()" class="cora-diaper-recount-link"><i data-lucide="scan-line"></i><span>Recontar estoque</span></button>
 
           <div class="cora-diaper-size-change">
             <label>Trocar tamanho</label>
@@ -1373,6 +1661,10 @@
       body.innerHTML = `
         <div class="cora-diaper-content">
           ${currentSection}
+          ${expecting ? `<div class="cora-diaper-expecting-actions">
+            <button type="button" onclick="openDiaperPurchaseFromStock()"><i data-lucide="plus"></i><span>Registrar aquisição</span></button>
+            <button type="button" onclick="openDiaperRecountModal()"><i data-lucide="scan-line"></i><span>Recontar estoque</span></button>
+          </div>` : ''}
           ${hybridHtml}
 
           <section class="cora-diaper-panel">
@@ -1383,10 +1675,22 @@
             <div class="cora-diaper-size-grid">${stockCards}</div>
           </section>
 
+          ${model.consumptions?.length ? `<section class="cora-diaper-panel">
+            <div class="cora-diaper-panel-head">
+              <strong>Consumo recente</strong>
+              <span>${model.totalConsumedPackages || 0} pacotes</span>
+            </div>
+            <div class="cora-diaper-consumption-list">
+              ${[...model.consumptions].sort((a,b)=>Number(b.recordedAt||0)-Number(a.recordedAt||0)).slice(0,5).map(row => `
+                <div><span>−${row.quantity} ${row.quantity === 1 ? 'pacote' : 'pacotes'} · ${row.size}</span><small>${row.unitsPerPackage} fraldas/pacote</small></div>
+              `).join('')}
+            </div>
+          </section>` : ''}
+
           <section class="cora-diaper-panel cora-diaper-purchases">
             <div class="cora-diaper-panel-head">
               <strong>Compras e presentes</strong>
-              <button onclick="openDiaperPurchaseFromStock()" class="cora-diaper-register">Registrar</button>
+              <span>${model.purchases.acquisitionCount} ${model.purchases.acquisitionCount === 1 ? 'registro' : 'registros'}</span>
             </div>
             <div class="cora-diaper-purchase-metrics">
               <div><span>Fraldas</span><strong>${model.purchases.totalUnits.toLocaleString('pt-BR')}</strong></div>
@@ -1421,9 +1725,12 @@
       card.classList.remove('hidden');
       const context = diaperOperationalContext();
       const current = model.currentSize || 'RN';
-      if (summary) summary.textContent = context.lifeStage === 'expecting'
-        ? `RN inicial • ${Number(model.totalStock || 0).toLocaleString('pt-BR')} fraldas`
-        : `${current} • ${Number(model.stockBySize?.[current] || 0).toLocaleString('pt-BR')} fraldas${model.autonomyDays == null ? '' : ` • ${compactNumber(model.autonomyDays)} dias`}`;
+      if (summary) {
+        const packages = Number(model.packagesBySize?.[current] || 0);
+        summary.textContent = context.lifeStage === 'expecting'
+          ? `RN inicial • ${Number(model.totalPackages || 0).toLocaleString('pt-BR')} pacotes`
+          : `${current} • ${packages} ${packages === 1 ? 'pacote' : 'pacotes'}${model.autonomyDays == null ? '' : ` • ≈ ${Math.max(1, Math.round(model.autonomyDays))} dias`}`;
+      }
       if (meta) meta.textContent = `${model.purchases.acquisitionCount} ${model.purchases.acquisitionCount === 1 ? 'entrada registrada' : 'entradas registradas'} • ${money(model.purchases.spentBRL)} gastos`;
     }
 
@@ -3672,9 +3979,10 @@
       let diaperText = 'Estoque e consumo';
       if (diaperModel) {
         const current = diaperModel.currentSize || 'RN';
+        const currentPackages = Number(diaperModel.packagesBySize?.[current] || 0);
         diaperText = diaperContext.lifeStage === 'expecting'
-          ? `${Number(diaperModel.totalStock || 0).toLocaleString('pt-BR')} fraldas no estoque`
-          : `${current} · ${Number(diaperModel.stockBySize?.[current] || 0).toLocaleString('pt-BR')} fraldas${diaperModel.autonomyDays == null ? '' : ` · ${compactNumber(diaperModel.autonomyDays)} dias`}`;
+          ? `${Number(diaperModel.totalPackages || 0).toLocaleString('pt-BR')} pacotes no estoque`
+          : `${current} · ${currentPackages} ${currentPackages === 1 ? 'pacote' : 'pacotes'}${diaperModel.autonomyDays == null ? '' : ` · ≈ ${Math.max(1, Math.round(diaperModel.autonomyDays))} dias`}`;
       }
       const toolDiaperMeta = document.getElementById('toolDiaperMeta');
       if (toolDiaperMeta) toolDiaperMeta.textContent = diaperText;
@@ -3694,12 +4002,13 @@
       if (homeQuickDiaperValue && homeQuickDiaperMeta) {
         if (diaperModel) {
           const current = diaperModel.currentSize || 'RN';
+          const currentPackages = Number(diaperModel.packagesBySize?.[current] || 0);
           homeQuickDiaperValue.textContent = diaperContext.lifeStage === 'expecting'
-            ? Number(diaperModel.totalStock || 0).toLocaleString('pt-BR')
-            : `${current} · ${Number(diaperModel.stockBySize?.[current] || 0).toLocaleString('pt-BR')}`;
+            ? `${Number(diaperModel.totalPackages || 0).toLocaleString('pt-BR')} pacotes`
+            : `${current} · ${currentPackages} ${currentPackages === 1 ? 'pacote' : 'pacotes'}`;
           homeQuickDiaperMeta.textContent = diaperContext.lifeStage === 'expecting'
             ? 'no estoque'
-            : (diaperModel.autonomyDays == null ? 'no estoque' : `${compactNumber(diaperModel.autonomyDays)} dias`);
+            : (diaperModel.autonomyDays == null ? 'no estoque' : `≈ ${Math.max(1, Math.round(diaperModel.autonomyDays))} dias`);
         } else {
           homeQuickDiaperValue.textContent = '—';
           homeQuickDiaperMeta.textContent = 'estoque';
@@ -3963,9 +4272,9 @@
     function renderOpenEndedRecurringItem(item) {
       if (isDisposableDiaperItem(item)) {
         const model = diaperStockModel();
-        const totalStock = Number(model?.totalStock || 0);
+        const totalPackages = Number(model?.totalPackages || 0);
         return `<div class="cora-item-decision">
-          <div class="min-w-0"><strong>Fraldas</strong><span>${model?.currentSize ? `${escapeHtml(model.currentSize)} • ` : ''}${totalStock.toLocaleString('pt-BR')} em estoque${model?.autonomyDays == null ? '' : ` • ${compactNumber(model.autonomyDays)} dias`}</span></div>
+          <div class="min-w-0"><strong>Fraldas</strong><span>${model?.currentSize ? `${escapeHtml(model.currentSize)} • ` : ''}${totalPackages.toLocaleString('pt-BR')} ${totalPackages === 1 ? 'pacote' : 'pacotes'} em estoque${model?.autonomyDays == null ? '' : ` • ≈ ${Math.max(1, Math.round(model.autonomyDays))} dias`}</span></div>
           <button type="button" onclick="openDiaperStock()" class="cora-item-compact-action">Abrir</button>
         </div>`;
       }
@@ -7203,6 +7512,105 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       box-shadow:0 0 0 2px rgba(120,169,204,.15);
     }
 
+    .cora-diaper-size-units {
+      display:block;
+      margin-top:4px;
+      font-size:7.5px;
+      color:#9AA8B0;
+      line-height:1.2;
+    }
+    .cora-diaper-primary-actions,
+    .cora-diaper-expecting-actions {
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:7px;
+      margin-top:12px;
+    }
+    .cora-diaper-primary-actions button,
+    .cora-diaper-expecting-actions button {
+      min-height:42px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      border-radius:13px;
+      border:1px solid #DCEAF2;
+      background:#F7FBFD;
+      color:#66879D;
+      font-size:9.5px;
+      font-weight:750;
+    }
+    .cora-diaper-primary-actions button.is-primary {
+      background:#78A9CC;
+      border-color:#78A9CC;
+      color:#fff;
+    }
+    .cora-diaper-primary-actions svg,
+    .cora-diaper-expecting-actions svg { width:15px; height:15px; }
+    .cora-diaper-recount-link {
+      min-height:34px;
+      margin:5px auto 0;
+      padding:0 8px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:5px;
+      color:#8A9AA5;
+      font-size:8.5px;
+      font-weight:650;
+    }
+    .cora-diaper-recount-link svg { width:13px; height:13px; }
+
+    .cora-diaper-consumption-list { margin-top:8px; }
+    .cora-diaper-consumption-list > div {
+      min-height:38px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      border-top:1px solid #EEF3F6;
+    }
+    .cora-diaper-consumption-list > div:first-child { border-top:0; }
+    .cora-diaper-consumption-list span { font-size:9px; font-weight:650; color:#596972; }
+    .cora-diaper-consumption-list small { font-size:8px; color:#98A5AD; }
+
+    .cora-diaper-recount-group {
+      overflow:hidden;
+      border:1px solid #E1EDF4;
+      border-radius:16px;
+      background:#FAFDFF;
+    }
+    .cora-diaper-recount-group > strong {
+      display:block;
+      padding:9px 11px;
+      background:#F2F8FC;
+      font-size:10px;
+      color:#63849A;
+    }
+    .cora-diaper-recount-row {
+      min-height:44px;
+      padding:6px 10px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      border-top:1px solid #EAF2F6;
+    }
+    .cora-diaper-recount-row span { font-size:9px; color:#667781; }
+    .cora-diaper-recount-row input {
+      width:76px;
+      height:32px;
+      padding:0 7px;
+      border-radius:10px;
+      border:1px solid #D9E6ED;
+      background:#fff;
+      text-align:center;
+      font-size:11px;
+      font-weight:700;
+      color:#52636D;
+      outline:none;
+    }
+
     .cora-diaper-purchases { background:#FCFEFF; }
     .cora-diaper-register { min-height:32px; }
     .cora-diaper-acquisition-list {
@@ -7825,6 +8233,71 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       </div>
       <input type="text" id="acquisitionItemSearch" oninput="renderAcquisitionItemChoices()" placeholder="Buscar item..." class="w-full text-sm p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
       <div id="acquisitionItemChoices" class="space-y-2"></div>
+    </div>
+  </div>
+
+  <!-- UI3.7B — CONSUMO DE PACOTE -->
+  <div id="modalDiaperConsume" class="fixed inset-0 bg-black/45 backdrop-blur-xs z-[70] hidden flex items-end sm:items-center justify-center p-0 sm:p-4" onclick="if(event.target===this) closeModal('modalDiaperConsume')">
+    <div class="bg-white rounded-t-[26px] sm:rounded-[24px] w-full max-w-md p-5 pb-7 shadow-2xl">
+      <div class="flex items-center justify-between gap-3 mb-5">
+        <div>
+          <span class="cora-diaper-kicker">Consumo</span>
+          <h3 class="text-[18px] font-semibold text-[#40363F] mt-1">Consumir pacote</h3>
+        </div>
+        <button type="button" onclick="closeModal('modalDiaperConsume')" class="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400" aria-label="Fechar"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <form onsubmit="saveDiaperConsumptionFromModal(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1" for="diaperConsumeSize">Tamanho</label>
+          <select id="diaperConsumeSize" onchange="syncDiaperConsumePackageOptions()" class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1" for="diaperConsumePackage">Pacote</label>
+          <select id="diaperConsumePackage" onchange="syncDiaperConsumeQuantityLimit()" class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none"></select>
+          <p id="diaperConsumeEmpty" class="hidden text-[10px] text-gray-500 mt-2">Nenhum pacote disponível neste tamanho.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1" for="diaperConsumeQuantity">Pacotes consumidos</label>
+          <input id="diaperConsumeQuantity" type="number" inputmode="numeric" min="1" step="1" value="1" required class="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+        </div>
+        <div class="pt-1 flex gap-2">
+          <button type="button" onclick="closeModal('modalDiaperConsume')" class="w-1/2 py-2.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl">Cancelar</button>
+          <button id="diaperConsumeSaveButton" type="submit" class="w-1/2 py-2.5 text-xs font-bold text-white bg-[#78A9CC] rounded-xl">Registrar consumo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- UI3.7B — RECONTAGEM DE ESTOQUE -->
+  <div id="modalDiaperRecount" class="fixed inset-0 bg-black/45 backdrop-blur-xs z-[70] hidden flex items-end sm:items-center justify-center p-0 sm:p-4" onclick="if(event.target===this) closeModal('modalDiaperRecount')">
+    <div class="bg-white rounded-t-[26px] sm:rounded-[24px] w-full max-w-md max-h-[90vh] overflow-y-auto p-5 pb-7 shadow-2xl">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <span class="cora-diaper-kicker">Ajuste excepcional</span>
+          <h3 class="text-[18px] font-semibold text-[#40363F] mt-1">Recontar estoque</h3>
+        </div>
+        <button type="button" onclick="closeModal('modalDiaperRecount')" class="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400" aria-label="Fechar"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div id="diaperRecountRows" class="space-y-3"></div>
+
+      <div class="mt-4 rounded-2xl border border-dashed border-sky-200 bg-sky-50/40 p-3">
+        <span class="block text-[10px] font-bold text-[#668BA4] mb-2">Adicionar formato de pacote</span>
+        <div class="grid grid-cols-3 gap-2">
+          <select id="diaperRecountNewSize" class="text-xs p-2.5 bg-white border border-sky-100 rounded-xl">
+            <option value="RN">RN</option><option value="P">P</option><option value="M">M</option><option value="G">G</option><option value="XG">XG</option><option value="XXG">XXG</option>
+          </select>
+          <input id="diaperRecountNewUnits" type="number" inputmode="numeric" min="1" step="1" placeholder="un/pacote" class="text-xs p-2.5 bg-white border border-sky-100 rounded-xl">
+          <input id="diaperRecountNewQuantity" type="number" inputmode="numeric" min="0" step="1" value="1" placeholder="pacotes" class="text-xs p-2.5 bg-white border border-sky-100 rounded-xl">
+        </div>
+        <button type="button" onclick="addDiaperRecountFormat()" class="mt-2 w-full py-2 text-[10px] font-bold text-[#668BA4] bg-white border border-sky-100 rounded-xl">Adicionar formato</button>
+      </div>
+
+      <div class="pt-4 flex gap-2">
+        <button type="button" onclick="closeModal('modalDiaperRecount')" class="w-1/2 py-2.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl">Cancelar</button>
+        <button id="diaperRecountSaveButton" type="button" onclick="saveDiaperRecountFromModal()" class="w-1/2 py-2.5 text-xs font-bold text-white bg-[#78A9CC] rounded-xl">Salvar recontagem</button>
+      </div>
     </div>
   </div>
 
