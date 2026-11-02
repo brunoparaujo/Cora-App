@@ -1854,7 +1854,7 @@
           <div class="cora-diaper-metrics">
             <div class="is-autonomy">
               <span>Autonomia estimada</span>
-              <strong>${autonomy == null ? '—' : `≈ ${formatDiaperAutonomy(autonomy)}`}</strong>
+              <strong>${autonomy == null ? '—' : `${formatDiaperAutonomy(autonomy)}`}</strong>
             </div>
             <div><span>Fraldas disponíveis</span><strong>${currentStock.toLocaleString('pt-BR')}</strong></div>
           </div>
@@ -1945,7 +1945,7 @@
         const units = Number(model.stockBySize?.[current] || 0);
         summary.textContent = context.lifeStage === 'expecting'
           ? `RN inicial • ${Number(model.totalStock || 0).toLocaleString('pt-BR')} fraldas`
-          : `${model.autonomyDays == null ? '—' : `≈ ${formatDiaperAutonomy(model.autonomyDays)}`} • ${current} • ${units.toLocaleString('pt-BR')} fraldas`;
+          : `${model.autonomyDays == null ? '—' : `${formatDiaperAutonomy(model.autonomyDays)}`} • ${current} • ${units.toLocaleString('pt-BR')} fraldas`;
       }
       if (meta) meta.textContent = `${model.purchases.acquisitionCount} ${model.purchases.acquisitionCount === 1 ? 'entrada registrada' : 'entradas registradas'} • ${money(model.purchases.spentBRL)} gastos`;
     }
@@ -4198,7 +4198,7 @@
         const units = Number(diaperModel.stockBySize?.[current] || 0);
         diaperText = diaperContext.lifeStage === 'expecting'
           ? `${Number(diaperModel.totalStock || 0).toLocaleString('pt-BR')} fraldas no estoque`
-          : `${diaperModel.autonomyDays == null ? '—' : `≈ ${formatDiaperAutonomy(diaperModel.autonomyDays)}`} · ${current} · ${units.toLocaleString('pt-BR')} fraldas`;
+          : `${diaperModel.autonomyDays == null ? '—' : `${formatDiaperAutonomy(diaperModel.autonomyDays)}`} · ${current} · ${units.toLocaleString('pt-BR')} fraldas`;
       }
       const toolDiaperMeta = document.getElementById('toolDiaperMeta');
       if (toolDiaperMeta) toolDiaperMeta.textContent = diaperText;
@@ -4221,7 +4221,7 @@
           const units = Number(diaperModel.stockBySize?.[current] || 0);
           homeQuickDiaperValue.textContent = diaperContext.lifeStage === 'expecting'
             ? `${Number(diaperModel.totalStock || 0).toLocaleString('pt-BR')} fraldas`
-            : (diaperModel.autonomyDays == null ? '—' : `≈ ${formatDiaperAutonomy(diaperModel.autonomyDays)}`);
+            : (diaperModel.autonomyDays == null ? '—' : `${formatDiaperAutonomy(diaperModel.autonomyDays)}`);
           homeQuickDiaperMeta.textContent = diaperContext.lifeStage === 'expecting'
             ? 'estoque inicial'
             : `${current} · ${units.toLocaleString('pt-BR')} fraldas`;
@@ -4496,7 +4496,7 @@
         const units = Number(model?.stockBySize?.[currentSize] || 0);
         const meta = model?.autonomyDays == null
           ? `${units.toLocaleString('pt-BR')} fraldas`
-          : `≈ ${formatDiaperAutonomy(model.autonomyDays)} · ${units.toLocaleString('pt-BR')} fraldas`;
+          : `${formatDiaperAutonomy(model.autonomyDays)} · ${units.toLocaleString('pt-BR')} fraldas`;
         return `<div class="cora-item-decision">
           <div class="min-w-0"><strong>Fraldas</strong><span>${escapeHtml(currentSize)} · ${meta}</span></div>
           <button type="button" onclick="openDiaperStock()" class="cora-item-compact-action">Abrir</button>
