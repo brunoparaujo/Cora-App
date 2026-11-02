@@ -5317,7 +5317,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
                 <span class="font-bold text-gray-800 text-xs">${escapeHtml(item.name)}</span>
                 <span class="text-[10px] text-gray-500 block mt-0.5">${isDisposableDiaperItem(item)
                   ? (Number(acq.unitsPerPackage || 0) > 0
-                    ? `${acq.quantity} ${Number(acq.quantity) === 1 ? 'pacote' : 'pacotes'} • ${SIZE_LABELS[acq.size]} • ${Math.round(globalThis.CoraV48IntegrationCore?.diaperUnitsFromAcquisition?.(acq) || 0)} fraldas${acq.brand ? ' • ' + escapeHtml(acq.brand) : ''}`
+                    ? `${Math.round(globalThis.CoraV48IntegrationCore?.diaperUnitsFromAcquisition?.(acq) || 0)} fraldas • ${SIZE_LABELS[acq.size]}${acq.brand ? ' • ' + escapeHtml(acq.brand) : ''}`
                     : `${Math.round(globalThis.CoraV48IntegrationCore?.diaperUnitsFromAcquisition?.(acq) || acq.quantity)} fraldas • ${SIZE_LABELS[acq.size]}${acq.brand ? ' • ' + escapeHtml(acq.brand) : ''}`)
                   : `${acq.quantity}× ${SIZE_LABELS[acq.size]}${acq.brand ? ' • ' + escapeHtml(acq.brand) : ''}`}</span>
               </div>
@@ -5520,7 +5520,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
               <div>
                 <span class="text-xs font-bold text-gray-800">${isDisposableDiaperItem(item)
                   ? (Number(acq.unitsPerPackage || 0) > 0
-                    ? `${acq.quantity} ${Number(acq.quantity) === 1 ? 'pacote' : 'pacotes'} • ${SIZE_LABELS[acq.size]} • ${Math.round(globalThis.CoraV48IntegrationCore?.diaperUnitsFromAcquisition?.(acq) || 0)} fraldas`
+                    ? `${Math.round(globalThis.CoraV48IntegrationCore?.diaperUnitsFromAcquisition?.(acq) || 0)} fraldas • ${SIZE_LABELS[acq.size]}`
                     : `${Math.round(globalThis.CoraV48IntegrationCore?.diaperUnitsFromAcquisition?.(acq) || acq.quantity)} fraldas • ${SIZE_LABELS[acq.size]} • registro anterior`)
                   : `${acq.quantity}× ${SIZE_LABELS[acq.size]}${acq.variant && !item?.operationalVariantKey ? ` • ${escapeHtml(variantLabel(acq.variant))}` : ''}`}</span>
                 ${item.legacyUnclassifiedVariant ? '<span class="block text-[9px] font-semibold text-amber-700 mt-0.5">Aquisição anterior preservada sem classificação de manga/modelo.</span>' : ''}
