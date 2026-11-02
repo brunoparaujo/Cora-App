@@ -1779,7 +1779,7 @@
           : packageBased
             ? `${money(total)} total · ${money(acq.unitPrice)}/pacote`
             : `${money(total)} total`;
-        const rowContent = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}${acq.brand ? ` · ${escapeHtml(acq.brand)}` : ''}</span>`;
+        const rowContent = `<span class="cora-diaper-row-copy"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}${acq.brand ? ` · ${escapeHtml(acq.brand)}` : ''}</small></span>`;
 
         return `<div class="cora-diaper-acquisition-row ${editMode ? 'is-editable' : ''}">
           ${editMode
@@ -1816,7 +1816,7 @@
         const units = Math.max(0, Number(row.quantity) || 0) * Math.max(0, Number(row.unitsPerPackage) || 0);
         const date = row.recordedAt ? new Date(Number(row.recordedAt)).toLocaleDateString('pt-BR') : 'Registro anterior';
         const title = `−${units.toLocaleString('pt-BR')} fraldas · ${row.size}`;
-        const content = `<strong>${escapeHtml(title)}</strong><span>${date}</span>`;
+        const content = `<span class="cora-diaper-row-copy"><strong>${escapeHtml(title)}</strong><small>${date}</small></span>`;
         return `<div class="cora-diaper-consumption-row ${editMode ? 'is-editable' : ''}">
           ${editMode
             ? `<button type="button" class="cora-diaper-row-edit" onclick="openDiaperConsumptionEditModal('${row.id}')" aria-label="Editar consumo: ${escapeHtml(title)}">${content}<i data-lucide="chevron-right"></i></button>`
@@ -8007,7 +8007,7 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       text-align:left;
       color:inherit;
     }
-    .cora-diaper-row-edit > div { min-width:0; flex:1; }
+    .cora-diaper-row-edit > .cora-diaper-row-copy { min-width:0; flex:1; }
     .cora-diaper-row-edit > i,
     .cora-diaper-row-edit > svg {
       width:14px;
@@ -8015,13 +8015,14 @@ A lista foi preservada. Aguarde a sincronização e tente novamente.`);
       flex:0 0 auto;
       color:#9BAAB4;
     }
-    .cora-diaper-row-edit strong {
+    .cora-diaper-row-copy { min-width:0; display:block; flex:1; }
+    .cora-diaper-row-copy strong {
       display:block;
       font-size:9.5px;
       line-height:1.3;
       color:#52616A;
     }
-    .cora-diaper-row-edit span {
+    .cora-diaper-row-copy small {
       display:block;
       margin-top:3px;
       font-size:8.5px;
